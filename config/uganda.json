@@ -1,0 +1,111 @@
+{
+  "country": {
+    "name": "Uganda",
+    "short": "Uganda",
+    "title": "UGANDA",
+    "adjective": "Uganda",
+    "possessive": "Uganda's",
+    "capital": "..."
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2025,
+    "title_line1": "KENYA- UGANDA TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_uganda.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to Uganda are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_uganda.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    [
+      "Official name",
+      "Uganda"
+    ],
+    [
+      "Head of state",
+      "..."
+    ],
+    [
+      "Head of government",
+      "..."
+    ],
+    [
+      "Capital",
+      "..."
+    ],
+    [
+      "Form of government",
+      "..."
+    ],
+    [
+      "Official language",
+      "..."
+    ],
+    [
+      "Total area (sq km)",
+      "..."
+    ],
+    [
+      "Population",
+      "..."
+    ],
+    [
+      "Population rank",
+      "..."
+    ],
+    [
+      "Population projection 2030",
+      "..."
+    ],
+    [
+      "Population density",
+      "..."
+    ],
+    [
+      "Urban / rural population",
+      "..."
+    ],
+    [
+      "Life expectancy at birth",
+      "..."
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "..."
+    ],
+    [
+      "Monetary unit",
+      "..."
+    ],
+    [
+      "Currency exchange rate",
+      "..."
+    ],
+    [
+      "GNI",
+      "..."
+    ],
+    [
+      "GNI per capita",
+      "..."
+    ]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
+    "WTO (member information, tariff and trade data)",
+    "National statistics office of the country, if applicable"
+  ]
+}

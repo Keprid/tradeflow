@@ -1,0 +1,112 @@
+{
+  "country": {
+    "name": "Saudi Arabia",
+    "short": "KSA",
+    "title": "SAUDI ARABIA",
+    "adjective": "Saudi",
+    "possessive": "Saudi Arabia's",
+    "capital": "Riyadh"
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2025,
+    "title_line1": "KENYA- SAUDI ARABIA TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_saudi_arabia.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to Saudi Arabia are Black tea, packings >3kg, Cut roses & buds, fresh and Coffee, not roasted, not decaffeinated.",
+      "Kenya has the highest supply capacity in Black tea, packings >3kg. Medicaments for retail sale, n.e.s. is the product that faces the strongest demand potential in Saudi Arabia."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_saudi_arabia.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    [
+      "Official name",
+      "Kingdom of Saudi Arabia (Al-Mamlaka al-Arabiya as-Suudiya)"
+    ],
+    [
+      "Head of state",
+      "King Salman bin Abdulaziz Al Saud (Custodian of the Two Holy Mosques)"
+    ],
+    [
+      "Head of government",
+      "Crown Prince Mohammed bin Salman bin Abdulaziz, Prime Minister (since September 2022)"
+    ],
+    [
+      "Capital",
+      "Riyadh"
+    ],
+    [
+      "Form of government",
+      "Absolute monarchy (unitary state; consultative Shura Council)"
+    ],
+    [
+      "Official language",
+      "Arabic"
+    ],
+    [
+      "Total area (sq km)",
+      "2,149,690 sq km"
+    ],
+    [
+      "Population",
+      "about 37.0 million (2025; World Bank: 36,973,555)"
+    ],
+    [
+      "Population rank",
+      "44th in the world (World Bank, 2025)"
+    ],
+    [
+      "Population projection 2030",
+      "about 37.4 million (UN World Population Prospects, medium variant)"
+    ],
+    [
+      "Population density",
+      "about 17 persons per sq km (about 44 per sq mile)"
+    ],
+    [
+      "Urban / rural population",
+      "about 85% urban / 15% rural (World Bank, 2024)"
+    ],
+    [
+      "Life expectancy at birth",
+      "about 79 years (2023-2024, World Bank)"
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "about 97.9% (2024, World Bank / UNESCO UIS)"
+    ],
+    [
+      "Monetary unit",
+      "Saudi riyal (SAR); 1 riyal = 100 halalas"
+    ],
+    [
+      "Currency exchange rate",
+      "US$1 = SAR 3.75 (fixed peg since 1986, Saudi Central Bank); approximately EUR1 = SAR 4.34 (August 2026, varies with the euro)"
+    ],
+    [
+      "GNI",
+      "about US$1.27 trillion (2024, World Bank)"
+    ],
+    [
+      "GNI per capita",
+      "about US$35,600 (2024, World Bank Atlas method)"
+    ]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook April 2026).",
+    "IMF (World Economic Outlook April 2026 and updates)",
+    "WTO (member information, tariff and trade data)",
+    "GASTAT (Saudi General Authority for Statistics)"
+  ]
+}

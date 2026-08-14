@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade Flow Report Generator</title>
+<style>
+  :root { --red:#a6192e; --dark:#1f2430; --line:#e3e6ec; --bg:#f5f6f8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--dark); }
+  header { background:var(--dark); color:#fff; padding:18px 28px; }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; font-size:13px; opacity:.8; }
+  main { max-width:760px; margin:28px auto; padding:0 20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px; margin-bottom:18px; }
+  label { display:block; font-weight:600; margin:14px 0 6px; font-size:14px; }
+  select, input[type=number] { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font-size:14px; background:#fff; }
+  input[type=file] { width:100%; padding:14px; border:2px dashed var(--line); border-radius:8px; background:#fafbfc; font-size:14px; }
+  button { width:100%; margin-top:20px; padding:13px; font-size:15px; font-weight:700; color:#fff; background:var(--red);
+           border:0; border-radius:8px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:14px; }
+  .row > div { flex:1; }
+  .hint { font-size:12px; color:#667; margin-top:6px; }
+  #log { background:#14171d; color:#cfd8e3; font-family: Consolas, Menlo, monospace; font-size:13px;
+         padding:14px; border-radius:8px; min-height:120px; max-height:320px; overflow:auto; white-space:pre-wrap; }
+  #log .ok { color:#7ee2a8; } #log .err { color:#ff8f9d; }
+  .result { border-top:1px solid var(--line); margin-top:18px; padding-top:14px; display:none; }
+  .result a { display:inline-block; margin:6px 10px 0 0; color:#fff; background:var(--red); text-decoration:none;
+              padding:9px 16px; border-radius:6px; font-size:14px; font-weight:600; }
+  .result .meta { font-size:13px; color:#556; margin-bottom:8px; }
+  .error { color:var(--red); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Trade Flow Report Generator</h1>
+  <p>Upload ITC files &rarr; one click &rarr; download the Word report (end to end).</p>
+</header>
+
+<main>
+  <div class="card">
+    <label for="cfg">Country / report configuration</label>
+    <select id="cfg"><option value="">Loading configs…</option></select>
+    <div class="hint">Pick a country, or "Auto-detect country from data" to create the
+      config automatically from the uploaded files.</div>
+
+    <div class="row">
+      <div>
+        <label for="top">Top N rows per table</label>
+        <input type="number" id="top" min="1" max="50" value="20">
+        <div class="hint">Product tables (2, 4, 5, 6) keep this many rows;
+          exporter tables (1, 3) always show 25.</div>
+      </div>
+      <div>
+        <label for="files">Files</label>
+        <div>
+          <input type="file" id="files" multiple accept=".xlsx,.xlsm,.zip">
+        </div>
+      </div>
+    </div>
+    <p class="hint">Upload the <b>six raw ITC downloads</b> (or one <b>.zip</b> containing them),
+      <i>or</i> the seven ready-made tables: <b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>.</p>
+
+    <button id="run" type="button">Generate report</button>
+  </div>
+
+  <div class="card">
+    <label>Progress</label>
+    <div id="log">Waiting for files…</div>
+    <div class="result" id="result">
+      <div class="meta" id="result-meta"></div>
+      <a id="dl-report" href="#">Download Word report (.docx)</a>
+      <a id="dl-tables" href="#">Download generated tables (.zip)</a>
+    </div>
+  </div>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const log = $('log');
+
+  function appendLog(text, cls) {
+    const line = document.createElement('div');
+    line.textContent = text;
+    if (cls) line.className = cls;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function loadConfigs() {
+    try {
+      const r = await fetch('/api/configs');
+      const cfgs = await r.json();
+      const sel = $('cfg');
+      sel.innerHTML = '';
+      for (const c of cfgs) {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.year ? `${c.name} (year ${c.year})` : c.name;
+        sel.appendChild(o);
+      }
+      if (!cfgs.length) appendLog('No country configs found in config/.', 'err');
+    } catch (e) {
+      appendLog('Could not load configs: ' + e, 'err');
+    }
+  }
+
+  $('run').addEventListener('click', async () => {
+    const files = $('files').files;
+    if (!files.length) { appendLog('Please choose files first.', 'err'); return; }
+
+    const fd = new FormData();
+    fd.append('config', $('cfg').value);
+    fd.append('top', $('top').value);
+    let zips = 0, others = 0;
+    for (const f of files) {
+      if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
+      else { others++; fd.append('files', f); }
+    }
+
+    const btn = $('run');
+    btn.disabled = true; btn.textContent = 'Generating…';
+    log.innerHTML = '';
+    appendLog(`Uploading ${others} file(s), ${zips} zip(s)…`);
+
+    try {
+      const r = await fetch('/api/run', { method: 'POST', body: fd });
+      let data;
+      try { data = await r.json(); }
+      catch (err) {
+        appendLog('ERROR: the server answered with a non-JSON response (' + r.status + ').'
+          + ' It probably restarted mid-job — reload this page and try again.', 'err');
+        return;
+      }
+      if (!r.ok) {
+        appendLog('ERROR: ' + (data.detail || r.status), 'err');
+        return;
+      }
+      for (const line of data.log) appendLog(line, 'ok');
+      appendLog('Done.', 'ok');
+      $('result-meta').textContent = `${data.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'}` +
+        ` &middot; job ${data.job_id}`;
+      $('dl-report').href = data.report_url;
+      $('dl-tables').href = data.tables_url;
+      $('result').style.display = 'block';
+    } catch (e) {
+      appendLog('ERROR: ' + e + ' — the server did not respond. Reload this page'
+        + ' and try again. If it keeps happening, restart the app (run tradeflow'
+        + ' / run_webapp.bat) and reload.', 'err');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Generate report';
+    }
+  });
+
+  loadConfigs();
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+{
+  "country": {
+    "name": "Country Name",
+    "short": "CN",
+    "title": "COUNTRY NAME",
+    "adjective": "Country adjective",
+    "possessive": "Country's",
+    "capital": "Capital city"
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2025,
+    "title_line1": "KENYA- COUNTRY NAME TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_<country>.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to <Country> are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_<country>.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    [
+      "Official name",
+      "..."
+    ],
+    [
+      "Head of state",
+      "..."
+    ],
+    [
+      "Head of government",
+      "..."
+    ],
+    [
+      "Capital",
+      "..."
+    ],
+    [
+      "Form of government",
+      "..."
+    ],
+    [
+      "Official language",
+      "..."
+    ],
+    [
+      "Total area (sq km)",
+      "..."
+    ],
+    [
+      "Population",
+      "..."
+    ],
+    [
+      "Population rank",
+      "..."
+    ],
+    [
+      "Population projection 2030",
+      "..."
+    ],
+    [
+      "Population density",
+      "..."
+    ],
+    [
+      "Urban / rural population",
+      "..."
+    ],
+    [
+      "Life expectancy at birth",
+      "..."
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "..."
+    ],
+    [
+      "Monetary unit",
+      "..."
+    ],
+    [
+      "Currency exchange rate",
+      "..."
+    ],
+    [
+      "GNI",
+      "..."
+    ],
+    [
+      "GNI per capita",
+      "..."
+    ]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (...), IMF (...) ...",
+    "WTO (member information, tariff and trade data)",
+    "National statistics office of the country, if applicable"
+  ]
+}

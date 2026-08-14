@@ -1,0 +1,57 @@
+{
+  "country": {
+    "name": "United Arab Emirates",
+    "short": "UAE",
+    "title": "UNITED ARAB EMIRATES",
+    "adjective": "Emirati",
+    "possessive": "United Arab Emirates'",
+    "capital": "Abu Dhabi"
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2024,
+    "title_line1": "KENYA- UNITED ARAB EMIRATES TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_uae.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to the United Arab Emirates are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_uae.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    ["Official name", "United Arab Emirates (Al-Imarat al-Arabiya al-Muttahida)"],
+    ["Head of state", "..."],
+    ["Head of government", "..."],
+    ["Capital", "Abu Dhabi"],
+    ["Form of government", "Federal presidential elective monarchy (federation of seven emirates)"],
+    ["Official language", "Arabic"],
+    ["Total area (sq km)", "about 83,600 sq km"],
+    ["Population", "..."],
+    ["Population rank", "..."],
+    ["Population projection 2030", "..."],
+    ["Population density", "..."],
+    ["Urban / rural population", "..."],
+    ["Life expectancy at birth", "..."],
+    ["Literacy (age 15 and over)", "..."],
+    ["Monetary unit", "UAE dirham (AED); 1 dirham = 100 fils"],
+    ["Currency exchange rate", "US$1 = AED 3.6725 (peg against the US dollar)"],
+    ["GNI", "..."],
+    ["GNI per capita", "..."]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
+    "WTO (member information, tariff and trade data)",
+    "National statistics office of the country, if applicable"
+  ]
+}

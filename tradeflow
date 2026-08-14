@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# ============================================================
+#  Trade Flow Report Generator - one-word launcher (Linux/macOS)
+#
+#  Usage:  tradeflow            (from anywhere, once on PATH)
+#
+#  Auto-installs any missing Python packages, opens your
+#  browser and starts the web app at http://127.0.0.1:8000.
+#  Stop the app with Ctrl+C.
+# ============================================================
+cd "$(dirname "$0")"
+
+# ---- locate Python -------------------------------------------------
+if command -v python3 >/dev/null 2>&1; then
+    PY=python3
+elif command -v python >/dev/null 2>&1; then
+    PY=python
+else
+    echo
+    echo "ERROR: Python was not found on this computer."
+    echo "Install it from https://www.python.org/ then run this again."
+    exit 1
+fi
+
+# ---- install any missing packages ----------------------------------
+echo "Checking dependencies..."
+if ! "$PY" -c "import openpyxl, docx, matplotlib, fastapi, uvicorn" >/dev/null 2>&1; then
+    echo "Installing Python dependencies (first run only)..."
+    "$PY" -m pip install -r requirements.txt || {
+        echo "ERROR: could not install the required Python packages."
+        exit 1
+    }
+fi
+
+# ---- open the browser, then start the web app ----------------------
+open_url() {
+    for opener in xdg-open open sensible-browser; do
+        if command -v "$opener" >/dev/null 2>&1; then
+            ( sleep 1; "$opener" "$1" >/dev/null 2>&1 ) &
+            return 0
+        fi
+    done
+    return 0
+}
+
+open_url http://127.0.0.1:8000
+echo
+echo "Starting the Trade Flow Report Generator web app..."
+echo "If your browser did not open, go to http://127.0.0.1:8000"
+echo "Press Ctrl+C to stop."
+echo
+
+trap 'echo; echo "Stopped."; exit 0' INT TERM
+
+while true; do
+    "$PY" -m uvicorn webapp.main:app --host 127.0.0.1 --port 8000
+    rc=$?
+    if [ "$rc" -eq 0 ] || [ "$rc" -eq 130 ]; then
+        echo "Server stopped."
+        break
+    fi
+    echo "Server stopped unexpectedly (code $rc) - restarting in 3 seconds..."
+    sleep 3
+done
