@@ -470,10 +470,17 @@ def build_narratives(a: Analysis, cfg):
     t = {}
     world = cfg.get("world_trade", {}) or {}
 
-    def usd(v, dec=1):
+    _NEXT_UNIT = {"thousand": "million", "million": "billion", "billion": "trillion"}
+
+    def usd_auto(v, dec=1, unit="billion"):
+        """Format v (expressed in `unit`) upgrading to the next unit at 1,000,
+        e.g. 2,200 billion -> "2.2 trillion", 1,500 million -> "1.5 billion".
+        The Excel files keep the raw unit; only the narrative upgrades."""
         if v is None:
             return ""
-        return f"{v:,.{dec}f}"
+        if v >= 1000 and unit in _NEXT_UNIT:
+            return f"{v / 1000:,.{dec}f} {_NEXT_UNIT[unit]}"
+        return f"{v:,.{dec}f} {unit}"
 
     n_years_words = {2: "two", 3: "three", 4: "four", 5: "five",
                      6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
@@ -529,8 +536,8 @@ def build_narratives(a: Analysis, cfg):
                       "projections, fiscal and public-debt position, policy priorities"), True),
         ],
         [  # 4) trade and policy
-            (f"On trade, {c['name']} exported goods worth USD {usd(exp_2025)} billion in {Y}{wex_s}, "
-             f"while imports were valued at USD {usd(imp_2025)} billion{wim_s}. ", False),
+            (f"On trade, {c['name']} exported goods worth USD {usd_auto(exp_2025)} in {Y}{wex_s}, "
+             f"while imports were valued at USD {usd_auto(imp_2025)}{wim_s}. ", False),
             (f"The leading import source markets were {mkt_summary(a.top(a.table1, 3))}, "
              f"and the principal export destinations were {mkt_summary(a.top(a.table3, 3))}. ", False),
             (f"The top import products were {top_prods(a.top(a.table2, 3))}, while the top export "
@@ -550,21 +557,21 @@ def build_narratives(a: Analysis, cfg):
     imp1 = a.top(a.table2, 1)[0]
 
     t["exports_bullets"] = [
-        f"{c['name']} exports in {Y} were valued at USD {usd(exp_2025)} billion{exp_world}.",
+        f"{c['name']} exports in {Y} were valued at USD {usd_auto(exp_2025)}{exp_world}.",
         f"The lead export destination market in {Y} was {dest1['name']} with exports valued at "
-        f"USD {usd(dest1['years'][a.iy])} Billion, accounting for {pct(dest1['share'])} of "
+        f"USD {usd_auto(dest1['years'][a.iy])}, accounting for {pct(dest1['share'])} of "
         f"{a.possessive} total exports.",
         f"The main export product was {clean_label(prod1['label']) or prod1['name']} valued at "
-        f"USD {usd(prod1['years'][a.iy])} billion and was ranked as the 1st world export product "
+        f"USD {usd_auto(prod1['years'][a.iy])} and was ranked as the 1st world export product "
         f"from {c['name']}.",
     ]
     t["imports_bullets"] = [
-        f"In {Y}, {c['name']} imports were valued at USD {usd(imp_2025)} billion{imp_world}.",
+        f"In {Y}, {c['name']} imports were valued at USD {usd_auto(imp_2025)}{imp_world}.",
         f"The main import product was {clean_label(imp1['label']) or imp1['name']} at "
-        f"USD {usd(imp1['years'][a.iy])} billion accounting for {pct(imp1['share'])} of "
+        f"USD {usd_auto(imp1['years'][a.iy])} accounting for {pct(imp1['share'])} of "
         f"the country's imports.",
         f"The leading import source market for {c['name']} was {src1['name']} exporting products "
-        f"worth USD {usd(src1['years'][a.iy])} billion, with {pct(src1['share'])} share of "
+        f"worth USD {usd_auto(src1['years'][a.iy])}, with {pct(src1['share'])} share of "
         f"{c['name']} imports.",
     ]
 
@@ -573,10 +580,10 @@ def build_narratives(a: Analysis, cfg):
     cagr = a.imports_cagr_2021_25()
     s21_mkts = top_phrase(
         a.top(a.table1, 3),
-        lambda d: f"{d['name']} (USD {usd(d['years'][a.iy])} billion; {pct(d['share'])})")
+        lambda d: f"{d['name']} (USD {usd_auto(d['years'][a.iy])}; {pct(d['share'])})")
     t["s21"] = [
-        f"In {Y}, {a.possessive} imports were valued at USD {usd(a.imports_2025())} billion, "
-        f"representing an increase of {pct(growth)} from {Y - 1}, which was USD {usd(a.imports_2024())} billion.",
+        f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}, "
+        f"representing an increase of {pct(growth)} from {Y - 1}, which was USD {usd_auto(a.imports_2024())}.",
         f"Between {a.years[0]} and {a.years[-1]}, imports had an average growth rate of {round(cagr * 100)}%." if cagr else "",
         f"The lead source markets in {Y} were: {s21_mkts}." if s21_mkts else "",
     ]
@@ -584,7 +591,7 @@ def build_narratives(a: Analysis, cfg):
     # ---- Section 2.2 ------------------------------------------------------
     s22_prods = top_phrase(
         a.top(a.table2, 4),
-        lambda d: f"{clean_label(d['label'])} (USD {usd(d['years'][a.iy])} billion, {pct(d['share'])})")
+        lambda d: f"{clean_label(d['label'])} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
     t["s22"] = [
         f"In {Y}, the leading import products were: {s22_prods}." if s22_prods else "",
     ]
@@ -593,18 +600,18 @@ def build_narratives(a: Analysis, cfg):
     eg = a.exports_growth_2024_25()
     s23_dsts = top_phrase(
         a.top(a.table3, 4),
-        lambda d: f"{d['name']} (USD {usd(d['years'][a.iy])} billion, {pct(d['share'])})")
+        lambda d: f"{d['name']} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
     t["s23"] = [
-        f"In {Y}, {a.possessive} exports were valued at USD {usd(a.exports_2025())} billion "
+        f"In {Y}, {a.possessive} exports were valued at USD {usd_auto(a.exports_2025())} "
         f"having an average growth rate of {round(eg * 100)}% from {Y - 1} which was "
-        f"USD {usd(a.exports_2024())} billion." if eg else "",
+        f"USD {usd_auto(a.exports_2024())}." if eg else "",
         f"The leading destination markets were; {s23_dsts}." if s23_dsts else "",
     ]
 
     # ---- Section 2.4 ------------------------------------------------------
     s24_prods = top_phrase(
         a.top(a.table4, 5),
-        lambda d: f"{clean_label(d['label'])} (USD {usd(d['years'][a.iy])} billion, {pct(d['share'])})")
+        lambda d: f"{clean_label(d['label'])} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
     t["s24"] = [
         f"In {Y}, {a.possessive} top export products were: {s24_prods}." if s24_prods else "",
     ]
@@ -614,18 +621,18 @@ def build_narratives(a: Analysis, cfg):
     avg = a.kenya_exports_average()
     mx, mxy = a.kenya_exports_max()
     t["s31"] = [
-        f"In {Y}, Kenya's exports to {c['name']} were valued at USD {usd(ke)} million.",
+        f"In {Y}, Kenya's exports to {c['name']} were valued at USD {usd_auto(ke, unit='million')}.",
         f"Kenya's exports to {c['name']} have been rising steadily over the last {wn} years "
         f"({a.years[0]}-{a.years[-1]}), but with significant fluctuations year-on-year, with an average value "
-        f"of USD {usd(avg)} million. The highest export value was USD {usd(mx)} million in {mxy}.",
+        f"of USD {usd_auto(avg, unit='million')}. The highest export value was USD {usd_auto(mx, unit='million')} in {mxy}.",
         f"In {Y}, Kenya's imports from {c['name']} were valued at "
-        f"USD {usd(a.kenya_imports_years()[a.iy])} million.",
+        f"USD {usd_auto(a.kenya_imports_years()[a.iy], unit='million')}.",
     ]
     fluct = a.balance_imports_fluct()
     if fluct:
         msg = (f"On the other hand, imports from {c['name']} have recorded significant fluctuations. "
-               f"The highest value was USD {usd(fluct['max'])} million in {fluct['max_year']}, "
-               f"while the lowest value was USD {usd(fluct['min'])} million in {fluct['min_year']}")
+               f"The highest value was USD {usd_auto(fluct['max'], unit='million')} in {fluct['max_year']}, "
+               f"while the lowest value was USD {usd_auto(fluct['min'], unit='million')} in {fluct['min_year']}")
         if fluct.get("next_growth") is not None:
             msg += f" before rising by {fluct['next_growth'] * 100:.1f}% in {fluct['next_year']}."
         else:

@@ -74,6 +74,10 @@ BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 FMT_VALUE = "0.0"
 FMT_SHARE = "0.0%"
 
+# Column widths for Figure 1 (label + up to ten year columns).
+BALANCE_WIDTHS = {"A": 16, "B": 30, "C": 12, "D": 12, "E": 12, "F": 12,
+                  "G": 12, "H": 12, "I": 12, "J": 12, "K": 12}
+
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -617,7 +621,7 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
             _put_formula(ws, cache, r, c,
                          f"={_cell_ref(r_world, c)}"
                          f"-SUM({_cell_ref(r_first, c)}:{_cell_ref(r_last, c)})",
-                         val)
+                         val, numfmt=FMT_VALUE)
         else:
             put_val(ws, r, c, val)
     ao_share = data["all_other"]["share"]
@@ -726,7 +730,7 @@ def write_product_table(ws, data, hdr, unit_row,
             _put_formula(ws, cache, r, c,
                          f"={_cell_ref(r_total, c)}"
                          f"-SUM({_cell_ref(r_first, c)}:{_cell_ref(r_last, c)})",
-                         val)
+                         val, numfmt=FMT_VALUE)
         else:
             put_val(ws, r, c, val)
     ao_share = data["all_other"]["share"]
@@ -797,11 +801,13 @@ def write_balance(ws, krep, kpartner, years, exports, imports, cache=None):
 
 
 def _add_balance_chart(ws, krep, kpartner, years):
-    """Embed a line chart of exports/imports/balance below the table."""
+    """Embed a clustered bar chart of exports/imports/balance below the table."""
     try:
-        from openpyxl.chart import LineChart, Reference
+        from openpyxl.chart import BarChart, Reference
         n = len(years)
-        chart = LineChart()
+        chart = BarChart()
+        chart.type = "col"
+        chart.style = 10
         chart.title = f"{krep}-{kpartner} Balance of Trade"
         chart.y_axis.title = "USD Million"
         chart.x_axis.title = "Year"
@@ -810,7 +816,7 @@ def _add_balance_chart(ws, krep, kpartner, years):
         cats = Reference(ws, min_col=2, max_col=1 + n, min_row=3)
         chart.add_data(Reference(ws, min_col=1, max_col=1 + n,
                                  min_row=4, max_row=6),
-                       titles_from_data=True)
+                       titles_from_data=True, from_rows=True)
         chart.set_categories(cats)
         ws.add_chart(chart, f"A{8 if len(years) <= 5 else 9}")
     except Exception:
@@ -885,38 +891,41 @@ def generate_tables(excel_dir, out_dir, top_n):
     for k in keys:
         _, _, ys, _ = parse_source(files[k])
         years_sets.append(set(ys))
-    common_years = _pick_years(sorted(set.intersection(*years_sets)))
+    full_years = _pick_years(sorted(set.intersection(*years_sets)))
+    # Tables 1-6 show only the last five years; Figure 1 (the trade balance)
+    # uses the full common year run so the analysis covers e.g. 2016-2025.
+    table_years = full_years[-5:] if len(full_years) > 5 else full_years
 
     # ---- Table 1: import source markets --------------------------------
-    rows, ycols, years, labels = parse_source(files["table1"], years=common_years)
+    rows, ycols, years, labels = parse_source(files["table1"], years=table_years)
     total, items = extract_markets(rows, ycols)
     rep = labels["reporter"]
     d1 = prepare({"total": total, "items": items}, years, TOP_MARKETS, 1e6, is_markets=True)
 
     # ---- Table 3: export destinations -----------------------------------
-    rows, ycols, years, labels = parse_source(files["table3"], years=common_years)
+    rows, ycols, years, labels = parse_source(files["table3"], years=table_years)
     total, items = extract_markets(rows, ycols)
     d3 = prepare({"total": total, "items": items}, years, TOP_MARKETS, 1e6, is_markets=True)
 
     # ---- Table 2: import products ---------------------------------------
-    rows, ycols, years, labels = parse_source(files["table2"], years=common_years)
+    rows, ycols, years, labels = parse_source(files["table2"], years=table_years)
     total, items = extract_products(rows, ycols)
     d2 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
 
     # ---- Table 4: export products ---------------------------------------
-    rows, ycols, years, labels = parse_source(files["table4"], years=common_years)
+    rows, ycols, years, labels = parse_source(files["table4"], years=table_years)
     total, items = extract_products(rows, ycols)
     d4 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
 
     # ---- Table 5: Kenya exports to partner ------------------------------
-    rows, ycols, years, labels = parse_source(files["table5"], years=common_years)
+    rows, ycols, years, labels = parse_source(files["table5"], years=table_years)
     total, items = extract_kenya(rows, ycols)
     krep = labels["reporter"] or "Kenya"
     kpartner = labels["partner"]
     d5 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
 
     # ---- Table 6: Kenya imports from partner ----------------------------
-    rows, ycols, years, labels = parse_source(files["table6"], years=common_years)
+    rows, ycols, years, labels = parse_source(files["table6"], years=table_years)
     total, items = extract_kenya(rows, ycols)
     d6 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
 
@@ -988,15 +997,22 @@ def generate_tables(excel_dir, out_dir, top_n):
     _finalize(ws, out["t6"], cache)
 
     # ---- Figure 1: trade balance derived from Table 5 / Table 6 ----------
+    # The balance uses the full common year run (up to 10 years) even though
+    # Tables 1-6 only show the last five years.
     bal_path = os.path.join(out_dir, "Figure 1 Trade Balance.xlsx")
+    rows5f, ycols5f, years5f, _ = parse_source(files["table5"], years=full_years)
+    rows6f, ycols6f, years6f, _ = parse_source(files["table6"], years=full_years)
+    tot5f, _ = extract_kenya(rows5f, ycols5f)
+    tot6f, _ = extract_kenya(rows6f, ycols6f)
+    exports_full = [v / 1e3 if v is not None else None for v in tot5f["vals"]]
+    imports_full = [v / 1e3 if v is not None else None for v in tot6f["vals"]]
     years_m, exports_m, imports_m = merge_balance_series(
         read_existing_balance(bal_path),
-        d5["years"], d5["total"]["vals"], d6["total"]["vals"])
+        years5f, exports_full, imports_full)
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Figure 1"
     cache = []
     write_balance(ws, krep, kpartner, years_m, exports_m, imports_m, cache=cache)
-    set_widths(ws, {"A": 16, "B": 30, "C": 12, "D": 12, "E": 12, "F": 12,
-                    "G": 12})
+    set_widths(ws, BALANCE_WIDTHS)
     out["balance"] = bal_path
     _finalize(ws, out["balance"], cache)
 
@@ -1046,8 +1062,7 @@ def generate_tables(excel_dir, out_dir, top_n):
     set_widths(ws, widths_prd); cache_all["Table 6"] = dict(c)
     ws = wb_all["Figure 1"]; c = []
     write_balance(ws, krep, kpartner, years_m, exports_m, imports_m, cache=c)
-    set_widths(ws, {"A": 16, "B": 30, "C": 12, "D": 12, "E": 12, "F": 12,
-                    "G": 12})
+    set_widths(ws, BALANCE_WIDTHS)
     cache_all["Figure 1"] = dict(c)
     out["all"] = os.path.join(out_dir, "All Tables.xlsx")
     _save_workbook(wb_all, out["all"], cache_all)

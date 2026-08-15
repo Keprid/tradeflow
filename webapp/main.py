@@ -17,6 +17,7 @@ Run (from the project root):
     python -m uvicorn webapp.main:app --host 127.0.0.1 --port 8000
 """
 
+import csv
 import io
 import json
 import logging
@@ -31,6 +32,7 @@ import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import openpyxl
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -51,7 +53,7 @@ JOBS_DIR = WEBAPP_DIR / "jobs"
 CONFIG_DIR = BASE_DIR / "config"
 JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 
-ALLOWED_EXT = (".xlsx", ".xlsm")
+ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
 RAW_KEYWORDS = ("imports-from-world", "exports-to-world",
                 "kenyas-imports-from", "kenyas-exports-to")
 
@@ -99,11 +101,11 @@ def _save_upload(uploads_dir, upload: UploadFile):
             i += 1
     with dst.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
-    return dst
+    return _convert_to_xlsx(dst)
 
 
 def _extract_zip(zpath, dest):
-    """Extract a zip safely (no path traversal), then flatten .xlsx files."""
+    """Extract a zip safely (no path traversal), then flatten spreadsheets."""
     try:
         with zipfile.ZipFile(zpath) as z:
             for member in z.namelist():
@@ -123,7 +125,7 @@ def _extract_zip(zpath, dest):
 
 
 def _flatten_xlsx(dest):
-    """Move every .xlsx/.xlsm from nested folders up to `dest` (zip case)."""
+    """Move every supported spreadsheet from nested folders up to `dest` (zip case)."""
     for root, _, files in os.walk(dest):
         for f in files:
             if not f.lower().endswith(ALLOWED_EXT):
@@ -143,6 +145,131 @@ def _flatten_xlsx(dest):
             p = os.path.join(root, d)
             if not os.listdir(p):
                 os.rmdir(p)
+    for f in list(dest.iterdir()):
+        if f.suffix.lower() not in (".xlsx", ".xlsm"):
+            _convert_to_xlsx(f)
+
+
+# ---------------------------------------------------------------------------
+# Spreadsheet normalisation: anything -> .xlsx (openpyxl can only read .xlsx)
+# ---------------------------------------------------------------------------
+_INVALID_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
+
+
+def _safe_sheet_name(name, fallback):
+    """A valid openpyxl sheet title (non-empty, <= 31 chars, no bad chars)."""
+    n = _INVALID_SHEET_CHARS.sub("_", (name or "").strip())
+    return n[:31] or fallback
+
+
+def _read_text_any(path):
+    """Read a text file, trying common encodings in turn."""
+    for enc in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            return path.read_text(encoding=enc)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="latin-1", errors="replace")
+
+
+def _write_xls_as_xlsx(src, out):
+    import xlrd
+    book = xlrd.open_workbook(str(src), formatting_info=False)
+    wb = openpyxl.Workbook()
+    for idx in range(book.nsheets):
+        sheet = book.sheet_by_index(idx)
+        if idx == 0:
+            ws = wb.active
+        else:
+            ws = wb.create_sheet()
+        ws.title = _safe_sheet_name(sheet.name, f"Sheet{idx + 1}")
+        for r in range(sheet.nrows):
+            for c in range(sheet.ncols):
+                cell = sheet.cell(r, c)
+                v = cell.value
+                if cell.ctype == xlrd.XL_CELL_DATE:
+                    try:
+                        v = xlrd.xldate_as_datetime(v, book.datemode)
+                    except (ValueError, OverflowError):
+                        pass
+                elif cell.ctype == xlrd.XL_CELL_NUMBER \
+                        and isinstance(v, float) and v.is_integer():
+                    v = int(v)
+                if v is not None:
+                    ws.cell(row=r + 1, column=c + 1, value=v)
+    wb.save(str(out))
+
+
+def _write_xlsb_as_xlsx(src, out):
+    from pyxlsb import open_workbook
+    wb = openpyxl.Workbook()
+    first = True
+    with open_workbook(str(src)) as book:
+        for name in book.sheets:
+            if first:
+                ws = wb.active
+                first = False
+            else:
+                ws = wb.create_sheet()
+            ws.title = _safe_sheet_name(name, f"Sheet{len(wb.sheetnames) + 1}")
+            with book.get_sheet(name) as sheet:
+                r = 1
+                for row in sheet.rows():
+                    for c, cell in enumerate(row):
+                        v = cell.v
+                        if isinstance(v, float) and v.is_integer():
+                            v = int(v)
+                        if v is not None:
+                            ws.cell(row=r, column=c + 1, value=v)
+                    r += 1
+    wb.save(str(out))
+
+
+def _write_csv_as_xlsx(src, out):
+    text = _read_text_any(src)
+    lines = text.splitlines()
+    first = lines[0] if lines else ""
+    delim = ";" if first.count(";") > first.count(",") else ","
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    for r, row in enumerate(csv.reader(io.StringIO(text), delimiter=delim), start=1):
+        for c, v in enumerate(row, start=1):
+            if v != "":
+                ws.cell(row=r, column=c, value=v)
+    wb.save(str(out))
+
+
+def _convert_to_xlsx(src):
+    """Convert an .xls/.xlsb/.csv upload into a .xlsx openpyxl can read.
+
+    Returns the new .xlsx path (the original file is deleted). Files that are
+    already .xlsx/.xlsm are returned untouched.
+    """
+    if src.suffix.lower() in (".xlsx", ".xlsm"):
+        return src
+    ext = src.suffix.lower()
+    if ext not in (".xls", ".xlsb", ".csv"):
+        return src
+    out = src.with_suffix(".xlsx")
+    i = 1
+    while out.exists():
+        out = src.with_name(f"{src.stem}__{i}.xlsx")
+        i += 1
+    try:
+        if ext == ".xls":
+            _write_xls_as_xlsx(src, out)
+        elif ext == ".xlsb":
+            _write_xlsb_as_xlsx(src, out)
+        else:
+            _write_csv_as_xlsx(src, out)
+    except Exception as e:
+        if out.exists():
+            out.unlink()
+        LOG.warning("Spreadsheet conversion failed for %s: %s", src.name, e)
+        raise HTTPException(400, f"Could not read spreadsheet file {src.name} ({ext})")
+    src.unlink()
+    return out
 
 
 # ---------------------------------------------------------------------------
