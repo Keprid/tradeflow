@@ -50,6 +50,7 @@ import matplotlib.pyplot as plt
 import openpyxl
 
 from docx import Document
+from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.oxml import OxmlElement
@@ -737,6 +738,14 @@ class ReportBuilder:
         self.c = cfg["country"]
         self.a = None
         self.doc = Document()
+        section = self.doc.sections[0]
+        section.orientation = WD_ORIENT.LANDSCAPE
+        section.page_width = Inches(11)
+        section.page_height = Inches(8.5)
+        section.top_margin = Inches(0.4)
+        section.bottom_margin = Inches(0.4)
+        section.left_margin = Inches(0.4)
+        section.right_margin = Inches(0.4)
         self._setup_styles()
 
     # -- styling ------------------------------------------------------------
@@ -933,10 +942,11 @@ class ReportBuilder:
                 cell.width = Emu(widths[ci] * 635)
 
     @staticmethod
-    def _cell_text(cell, text, bold=False, italic=False, color=None, size=10, align=None):
+    def _cell_text(cell, text, bold=False, italic=False, color=None, size=10, align=None, wrap=False):
         p = cell.paragraphs[0]
         p.paragraph_format.space_after = Pt(2)
         p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.word_wrap = wrap
         if align is not None:
             p.alignment = align
         parts = str(text).split("\n")
@@ -981,7 +991,7 @@ class ReportBuilder:
 
         # header row 0
         self._cell_text(table.cell(0, 0), f"Rank in {last}", bold=True)
-        self._cell_text(table.cell(0, 1), label_col, bold=True)
+        self._cell_text(table.cell(0, 1), label_col, bold=True, wrap=True)
         hdr = table.cell(0, 2)
         title = f"{verb} {c['name']}"
         if not unit_row:
@@ -1013,7 +1023,7 @@ class ReportBuilder:
             bold = is_kenya
             self._cell_text(table.cell(r, 0), str(d["rank"]) if d["rank"] is not None else "",
                             bold=bold, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 1), d["name"], bold=bold, color=red)
+            self._cell_text(table.cell(r, 1), d["name"], bold=bold, color=red, wrap=True)
             for k in range(n):
                 self._cell_text(table.cell(r, 2 + k), num(d["years"][k]),
                                 bold=bold, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
@@ -1039,7 +1049,7 @@ class ReportBuilder:
 
         self._cell_text(table.cell(0, 0), f"Rank in {last}", bold=True)
         self._cell_text(table.cell(0, 1), "Code", bold=True)
-        self._cell_text(table.cell(0, 2), "Product label", bold=True)
+        self._cell_text(table.cell(0, 2), "Product label", bold=True, wrap=True)
         hdr = table.cell(0, 3)
         title = flow_label if unit_row else f"{flow_label}  {unit}"
         self._cell_text(hdr, title, bold=True)
@@ -1067,7 +1077,7 @@ class ReportBuilder:
             self._cell_text(table.cell(r, 0), str(d["rank"]) if d["rank"] is not None else "",
                             bold=b, align=WD_ALIGN_PARAGRAPH.CENTER)
             self._cell_text(table.cell(r, 1), str(d["code"] or ""), bold=b)
-            self._cell_text(table.cell(r, 2), str(d["name"]), bold=b)
+            self._cell_text(table.cell(r, 2), str(d["name"]), bold=b, wrap=True)
             for k in range(n):
                 self._cell_text(table.cell(r, 3 + k), num(d["years"][k]),
                                 bold=b, align=WD_ALIGN_PARAGRAPH.CENTER)

@@ -420,6 +420,26 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs):
         raise HTTPException(400, str(e))
     logs.append(f"Report saved as {report_name}")
 
+    all_tables = tables / "All Tables.xlsx"
+    chart_png = charts / "chart_balance.png"
+    if all_tables.exists() and chart_png.exists():
+        try:
+            import openpyxl
+            from openpyxl.drawing.image import Image as XLImage
+            wb = openpyxl.load_workbook(str(all_tables))
+            if "Figure 1" in wb.sheetnames:
+                ws_fig = wb["Figure 1"]
+                ws_fig._charts = []
+                img = XLImage(str(chart_png))
+                year_cols = sum(1 for cell in ws_fig[3] if cell.value is not None) - 1
+                anchor_row = 8 if year_cols <= 5 else 9
+                img.anchor = f"A{anchor_row}"
+                ws_fig.add_image(img)
+                wb.save(str(all_tables))
+                logs.append("Replaced Figure 1 chart in All Tables.xlsx with correct PNG")
+        except Exception as exc:
+            logs.append(f"Warning: could not replace Figure 1 chart: {exc}")
+
     manifest = {
         "mode": mode,
         "report_name": report_name,

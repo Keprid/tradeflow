@@ -559,33 +559,33 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
     # optional title row (Table 1 only)
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11)
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
         title_rows = 1
     else:
         title_rows = 0
 
     h = 1 + title_rows
     share_col = 3 + n
-    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=11)
+    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=11, align="center")
     merge(ws, h, 1, h + 1, 1)
-    put_text(ws, h, 2, label_col, bold=True, size=8, fill=HDR_FILL)
+    put_text(ws, h, 2, label_col, bold=True, size=8, fill=HDR_FILL, align="center")
     merge(ws, h, 3, h, 2 + n)
     put_text(ws, h, 3, verb, bold=True, size=11 if unit_row else 8,
-             fill=None if unit_row else HDR_FILL, wrap=True)
+             fill=None if unit_row else HDR_FILL, wrap=True, align="center")
     merge(ws, h, share_col, h + 1, share_col)
-    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=11)
+    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=11, align="center")
 
     # years row
     for k, y in enumerate(years):
-        put_text(ws, h + 1, 3 + k, y, bold=True, size=8, fill=HDR_FILL)
+        put_text(ws, h + 1, 3 + k, y, bold=True, size=8, fill=HDR_FILL, align="center")
 
     if unit_row:
         merge(ws, h + 2, 3, h + 2, 2 + n)
         put_text(ws, h + 2, 3, "Value in USD Billion", bold=True, size=8,
-                 fill=HDR_FILL)
-        put_text(ws, h + 2, 2, "", bold=True, size=8, fill=HDR_FILL)
+                 fill=HDR_FILL, align="center")
+        put_text(ws, h + 2, 2, "", bold=True, size=8, fill=HDR_FILL, align="center")
         row0 = h + 3
     else:
         row0 = h + 2
@@ -600,7 +600,7 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
         is_kenya = kenya_highlight and str(it["label"]).strip().lower() == "kenya"
         fill = KENYA_FILL if is_kenya else None
         put_text(ws, r, 1, it["rank"], size=11, fill=fill)
-        put_text(ws, r, 2, it["label"], size=8, fill=fill)
+        put_text(ws, r, 2, it["label"], size=8, fill=fill, wrap=True)
         for k in range(n):
             put_val(ws, r, 3 + k, it["vals"][k], fill=fill)
         if it["share"] is not None and total and total["vals"][-1] is not None:
@@ -612,7 +612,7 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
 
     # all other row
     r = r_ao
-    put_text(ws, r, 2, "All other countries", size=11)
+    put_text(ws, r, 2, "All other countries", size=11, wrap=True)
     for k in range(n):
         c = 3 + k
         val = data["all_other"]["vals"][k]
@@ -667,32 +667,32 @@ def write_product_table(ws, data, hdr, unit_row,
     # optional title row (Tables 2, 4, 6)
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11)
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
         title_rows = 1
     else:
         title_rows = 0
 
     h = 1 + title_rows
-    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=11)
+    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=11, align="center")
     merge(ws, h, 2, h + 1, 2)
-    put_text(ws, h, 2, "Code", bold=True, size=11)
+    put_text(ws, h, 2, "Code", bold=True, size=11, align="center")
     merge(ws, h, 3, h + 1, 3)
-    put_text(ws, h, 3, "Product label", bold=True, size=11)
+    put_text(ws, h, 3, "Product label", bold=True, size=11, align="center")
     merge(ws, h, 4, h, 3 + n)
-    put_text(ws, h, 4, hdr, bold=True, size=11, wrap=True)
+    put_text(ws, h, 4, hdr, bold=True, size=11, wrap=True, align="center")
     merge(ws, h, 4 + n, h + 1, 4 + n)
-    put_text(ws, h, 4 + n, f"Share in {latest} %", bold=True, size=11)
+    put_text(ws, h, 4 + n, f"Share in {latest} %", bold=True, size=11, align="center")
 
     # years row
     for k, y in enumerate(years):
-        put_text(ws, h + 1, 4 + k, y, bold=True, size=11)
+        put_text(ws, h + 1, 4 + k, y, bold=True, size=11, align="center")
 
     if unit_row:
         merge(ws, h + 2, 4, h + 2, 3 + n)
         put_text(ws, h + 2, 4, "Value in USD Billion", bold=True, size=11,
-                 fill=HDR_FILL)
+                 fill=HDR_FILL, align="center")
         row0 = h + 3
     else:
         row0 = h + 2
@@ -721,7 +721,7 @@ def write_product_table(ws, data, hdr, unit_row,
 
     # all other row
     r = r_ao
-    put_text(ws, r, 3, "All other products", size=11)
+    put_text(ws, r, 3, "All other products", size=11, wrap=True)
     for k in range(n):
         c = 4 + k
         val = data["all_other"]["vals"][k]
@@ -745,8 +745,8 @@ def write_product_table(ws, data, hdr, unit_row,
     r = r_total
     if total and total.get("code"):
         put_text(ws, r, 2, ("'" if prefix_apostrophe else "") + str(total["code"]),
-                 bold=True, size=11, fill=BAND_FILL)
-    put_text(ws, r, 3, "All products", bold=True, size=11, fill=BAND_FILL)
+                 bold=True, size=11, fill=BAND_FILL, wrap=True)
+    put_text(ws, r, 3, "All products", bold=True, size=11, fill=BAND_FILL, wrap=True)
     for k in range(n):
         c = 4 + k
         val = total["vals"][k] if total else None
@@ -761,7 +761,7 @@ def write_product_table(ws, data, hdr, unit_row,
     _set_table_filter(ws, h, r_total, 4 + n)
 
 
-def write_balance(ws, krep, kpartner, years, exports, imports, cache=None):
+def write_balance(ws, krep, kpartner, years, exports, imports, cache=None, skip_chart=False):
     """Figure 1: bilateral trade balance derived from the Table 5/6 totals.
 
     exports = Kenya's exports to the partner (Table 5 total, USD Million)
@@ -770,16 +770,16 @@ def write_balance(ws, krep, kpartner, years, exports, imports, cache=None):
     """
     cache = [] if cache is None else cache
     hdr = HDR_FILL
-    put_text(ws, 1, 1, "Figure 1", bold=True, size=11)
-    put_text(ws, 1, 2, f"BOT Kenya- {kpartner}", bold=True, size=11)
-    put_text(ws, 2, 2, f"Kenya's exports to {kpartner}", size=11, fill=hdr)
+    put_text(ws, 1, 1, "Figure 1", bold=True, size=11, align="center")
+    put_text(ws, 1, 2, f"BOT Kenya- {kpartner}", bold=True, size=11, align="center")
+    put_text(ws, 2, 2, f"Kenya's exports to {kpartner}", size=11, fill=hdr, align="center")
 
-    put_text(ws, 3, 2, "", bold=True, size=11, fill=hdr)
+    put_text(ws, 3, 2, "", bold=True, size=11, fill=hdr, align="center")
     for k, y in enumerate(years):
-        put_text(ws, 3, 2 + k, y, bold=True, size=11, fill=hdr)
+        put_text(ws, 3, 2 + k, y, bold=True, size=11, fill=hdr, align="center")
 
     def row(label, values):
-        put_text(ws, r, 1, label, bold=True, size=11, fill=hdr)
+        put_text(ws, r, 1, label, bold=True, size=11, fill=hdr, align="center")
         for k, v in enumerate(values):
             put_val(ws, r, 2 + k, v)
 
@@ -788,7 +788,7 @@ def write_balance(ws, krep, kpartner, years, exports, imports, cache=None):
     r += 1
     row("Imports", imports)
     r += 1
-    put_text(ws, r, 1, "Balance of Trade", bold=True, size=11, fill=hdr)
+    put_text(ws, r, 1, "Balance of Trade", bold=True, size=11, fill=hdr, align="center")
     for k, (e, i) in enumerate(zip(exports, imports)):
         c = 2 + k
         if e is not None and i is not None:
@@ -797,7 +797,8 @@ def write_balance(ws, krep, kpartner, years, exports, imports, cache=None):
         else:
             put_val(ws, r, c, (e - i) if (e is not None and i is not None) else None)
     _set_table_filter(ws, 3, 6, 2 + len(years))
-    _add_balance_chart(ws, krep, kpartner, years)
+    if not skip_chart:
+        _add_balance_chart(ws, krep, kpartner, years)
 
 
 def _add_balance_chart(ws, krep, kpartner, years):
@@ -811,6 +812,7 @@ def _add_balance_chart(ws, krep, kpartner, years):
         chart.title = f"{krep}-{kpartner} Balance of Trade"
         chart.y_axis.title = "USD Million"
         chart.x_axis.title = "Year"
+        chart.y_axis.crosses = "autoZero"
         chart.height = 9
         chart.width = 20
         cats = Reference(ws, min_col=2, max_col=1 + n, min_row=3)
@@ -1061,7 +1063,7 @@ def generate_tables(excel_dir, out_dir, top_n):
         row1_title=f"{krep}'s Top imports from {kpartner}")
     set_widths(ws, widths_prd); cache_all["Table 6"] = dict(c)
     ws = wb_all["Figure 1"]; c = []
-    write_balance(ws, krep, kpartner, years_m, exports_m, imports_m, cache=c)
+    write_balance(ws, krep, kpartner, years_m, exports_m, imports_m, cache=c, skip_chart=True)
     set_widths(ws, BALANCE_WIDTHS)
     cache_all["Figure 1"] = dict(c)
     out["all"] = os.path.join(out_dir, "All Tables.xlsx")
