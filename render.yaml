@@ -3,10 +3,12 @@ services:
     name: tradeflow
     runtime: python
     plan: free
-    buildCommand: bash build.sh
-    startCommand: uvicorn webapp.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn webapp.main:app --host 0.0.0.0 --port ${PORT:-10000}
     healthCheckPath: /
     autoDeploy: true
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: PORT
+        value: "10000"
