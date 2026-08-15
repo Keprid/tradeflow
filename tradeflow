@@ -8,7 +8,8 @@
 #  browser and starts the web app at http://127.0.0.1:8000.
 #  Stop the app with Ctrl+C.
 # ============================================================
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # ---- locate Python -------------------------------------------------
 if command -v python3 >/dev/null 2>&1; then
