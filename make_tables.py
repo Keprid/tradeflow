@@ -638,12 +638,7 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
     for k in range(n):
         c = 3 + k
         val = total["vals"][k] if total else None
-        if len(shown) and val is not None:
-            _put_formula(ws, cache, r, c,
-                         f"=SUM({_cell_ref(r_first, c)}:{_cell_ref(r_ao, c)})",
-                         val, bold=True, fill=BAND_FILL, numfmt=FMT_VALUE)
-        else:
-            put_val(ws, r, c, val, bold=True, fill=BAND_FILL)
+        put_val(ws, r, c, val, bold=True, fill=BAND_FILL)
     put_share(ws, r, share_col, total["share"] if total else None, bold=True)
     ws.freeze_panes = f"A{row0}"
     _set_table_filter(ws, h, r_world, share_col)
@@ -750,12 +745,7 @@ def write_product_table(ws, data, hdr, unit_row,
     for k in range(n):
         c = 4 + k
         val = total["vals"][k] if total else None
-        if len(shown) and val is not None:
-            _put_formula(ws, cache, r, c,
-                         f"=SUM({_cell_ref(r_first, c)}:{_cell_ref(r_ao, c)})",
-                         val, bold=True, fill=BAND_FILL, numfmt=FMT_VALUE)
-        else:
-            put_val(ws, r, c, val, bold=True, fill=BAND_FILL)
+        put_val(ws, r, c, val, bold=True, fill=BAND_FILL)
     put_share(ws, r, 4 + n, total["share"] if total else None, bold=True)
     ws.freeze_panes = f"A{row0}"
     _set_table_filter(ws, h, r_total, 4 + n)

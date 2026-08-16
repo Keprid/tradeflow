@@ -50,7 +50,6 @@ import matplotlib.pyplot as plt
 import openpyxl
 
 from docx import Document
-from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.oxml import OxmlElement
@@ -739,13 +738,10 @@ class ReportBuilder:
         self.a = None
         self.doc = Document()
         section = self.doc.sections[0]
-        section.orientation = WD_ORIENT.LANDSCAPE
-        section.page_width = Inches(11)
-        section.page_height = Inches(8.5)
-        section.top_margin = Inches(0.4)
-        section.bottom_margin = Inches(0.4)
-        section.left_margin = Inches(0.4)
-        section.right_margin = Inches(0.4)
+        section.top_margin = Inches(1)
+        section.bottom_margin = Inches(1)
+        section.left_margin = Inches(1)
+        section.right_margin = Inches(1)
         self._setup_styles()
 
     # -- styling ------------------------------------------------------------
@@ -962,6 +958,160 @@ class ReportBuilder:
             if color is not None:
                 r.font.color.rgb = color
 
+    # -- page fitting -------------------------------------------------------
+    # Vertical budget, in inches, reserved on the table's page for the
+    # section heading, the italic caption and the "Source:" line so the whole
+    # table always fits on a single page with those lines.
+    FIT_HEADING_IN = 0.45
+    FIT_CAPTION_IN = 0.35
+    FIT_SOURCE_IN = 0.32
+    FIT_SLACK_IN = 0.18
+    LINE_FACTOR = 1.4          # line box height in units of font size (1.16 line spacing)
+    ROW_EXTRA_PT = 5.0         # para spacing + cell margins + borders per row
+    SIDE_MARGIN_IN = 0.14      # total horizontal cell padding subtracted
+    MIN_FONT_PT = 6.0
+    MAX_FONT_PT = 10.0
+    MAX_LABEL_LINES = 2        # long product labels wrap at most this much
+
+    def _usable_height_in(self):
+        s = self.doc.sections[0]
+        return s.page_height.inches - s.top_margin.inches - s.bottom_margin.inches
+
+    def _cell_snapshot(self, table):
+        """List (text, width_inches) per row, de-duplicating merged cells."""
+        rows = []
+        for row in table.rows:
+            cells = []
+            seen = set()
+            for cell in row.cells:
+                if id(cell._tc) in seen:
+                    continue
+                seen.add(id(cell._tc))
+                txt = "\n".join(p.text for p in cell.paragraphs)
+                w = cell.width.inches if cell.width else 1.0
+                cells.append((txt, w))
+            rows.append(cells)
+        return rows
+
+    def _lines_needed(self, text, width_in, size_pt):
+        eff = max(0.4, width_in - self.SIDE_MARGIN_IN)
+        cpl = max(1, int(eff * 144.0 / size_pt))
+        total = 0
+        for part in text.split("\n"):
+            total += max(1, (len(part) + cpl - 1) // cpl)
+        return max(1, total)
+
+    def _row_height_in(self, cells, size_pt):
+        lines = 1
+        for txt, w in cells:
+            lines = max(lines, self._lines_needed(txt, w, size_pt))
+        return (lines * size_pt * self.LINE_FACTOR + self.ROW_EXTRA_PT) / 72.0
+
+    def _table_height_in(self, rows, size_pt):
+        return sum(self._row_height_in(cells, size_pt) for cells in rows)
+
+    def _fit_font_size(self, rows, available_in):
+        size = self.MAX_FONT_PT
+        while size >= self.MIN_FONT_PT - 1e-9:
+            if self._table_height_in(rows, size) <= available_in:
+                return size
+            size -= 0.5
+        return self.MIN_FONT_PT
+
+    def _truncate_overlong_cells(self, table, size_pt):
+        """Shorten long product labels so no cell wraps past MAX_LABEL_LINES.
+
+        Only invoked when a table cannot fit even at the minimum font; keeps
+        the first run's formatting and appends an ellipsis.
+        """
+        for row in table.rows:
+            seen = set()
+            for cell in row.cells:
+                if id(cell._tc) in seen:
+                    continue
+                seen.add(id(cell._tc))
+                w = cell.width.inches if cell.width else 1.0
+                p = cell.paragraphs[0]
+                text = "".join(r.text for r in p.runs)
+                if not text.strip():
+                    continue
+                if self._lines_needed(text, w, size_pt) <= self.MAX_LABEL_LINES:
+                    continue
+                eff = max(0.4, w - self.SIDE_MARGIN_IN)
+                cpl = max(1, int(eff * 144.0 / size_pt))
+                keep = max(1, cpl * self.MAX_LABEL_LINES - 3)
+                cut = text[:keep]
+                sp = cut.rfind(" ")
+                if sp > int(keep * 0.6):
+                    cut = cut[:sp]
+                cut = cut.rstrip(" ,;") + "..."
+                first = p.runs[0] if p.runs else None
+                for r in list(p.runs):
+                    r._r.getparent().remove(r._r)
+                r = p.add_run(cut)
+                if first is not None:
+                    r.font.name = first.font.name or "Times New Roman"
+                    r.font.bold = first.font.bold
+                    r.font.italic = first.font.italic
+                    if first.font.color is not None and first.font.color.rgb is not None:
+                        r.font.color.rgb = first.font.color.rgb
+                r.font.size = Pt(size_pt)
+
+    def _apply_fit(self, table, rows, size_pt):
+        """Write the chosen row heights, font sizes and cell margins."""
+        for row, cells in zip(table.rows, rows):
+            h_in = self._row_height_in(cells, size_pt)
+            tr = row._tr
+            trPr = tr.get_or_add_trPr()
+            for tag in ("w:trHeight", "w:cantSplit"):
+                for el in trPr.findall(qn(tag)):
+                    trPr.remove(el)
+            trPr.append(OxmlElement("w:cantSplit"))
+            trH = OxmlElement("w:trHeight")
+            trH.set(qn("w:val"), str(int(round(h_in * 1440))))
+            trH.set(qn("w:hRule"), "atLeast")
+            trPr.append(trH)
+
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    p.paragraph_format.space_before = Pt(1)
+                    p.paragraph_format.space_after = Pt(1)
+                    for r in p.runs:
+                        r.font.size = Pt(size_pt)
+
+        tblPr = table._tbl.tblPr
+        for el in tblPr.findall(qn("w:tblCellMar")):
+            tblPr.remove(el)
+        mar = OxmlElement("w:tblCellMar")
+        for tag, val in (("w:top", 12), ("w:bottom", 12),
+                         ("w:left", 56), ("w:right", 56)):
+            el = OxmlElement(tag)
+            el.set(qn("w:w"), str(val))
+            el.set(qn("w:type"), "dxa")
+            mar.append(el)
+        look = tblPr.find(qn("w:tblLook"))
+        if look is not None:
+            look.addprevious(mar)
+        else:
+            tblPr.append(mar)
+
+    def _fit_table_on_page(self, table):
+        """Shrink the font (and, if unavoidable, long labels) so the table
+        fits one page, leaving room for the heading, caption and source line.
+        Each row is prevented from splitting across pages.
+        """
+        rows = self._cell_snapshot(table)
+        available = (self._usable_height_in()
+                     - self.FIT_HEADING_IN - self.FIT_CAPTION_IN
+                     - self.FIT_SOURCE_IN - self.FIT_SLACK_IN)
+        size = self._fit_font_size(rows, available)
+        if self._table_height_in(rows, size) > available:
+            self._truncate_overlong_cells(table, self.MIN_FONT_PT)
+            rows = self._cell_snapshot(table)
+            size = self._fit_font_size(rows, available)
+        self._apply_fit(table, rows, size)
+
     def add_market_table(self, a: Analysis, parsed, importer=True, n_title=None, unit_row=False):
         """Table 1 (import source markets) / Table 3 (export destinations)."""
         c = self.c
@@ -1029,6 +1179,7 @@ class ReportBuilder:
                                 bold=bold, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
             self._cell_text(table.cell(r, 2 + n), pct(d["share"]), bold=bold, color=red,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
         return table
 
     def add_product_table(self, a: Analysis, parsed, flow_label, unit="Value in USD Billion",
@@ -1083,6 +1234,7 @@ class ReportBuilder:
                                 bold=b, align=WD_ALIGN_PARAGRAPH.CENTER)
             self._cell_text(table.cell(r, 3 + n), pct(d["share"]), bold=b,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
         return table
 
     def add_quick_facts(self, facts):

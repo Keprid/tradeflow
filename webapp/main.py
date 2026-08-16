@@ -18,6 +18,8 @@ Run (from the project root):
 """
 
 import csv
+import html
+import html.parser
 import io
 import json
 import logging
@@ -172,8 +174,95 @@ def _read_text_any(path):
     return path.read_text(encoding="latin-1", errors="replace")
 
 
+def _sniff_spreadsheet_kind(path):
+    """Classify a non-.xlsx upload: 'xls' | 'html' | 'csv'.
+
+    ITC / Trade Map downloads are often HTML tables (or comma/tab-delimited
+    text) saved with a ``.xls`` extension. xlrd only understands the real
+    binary format, so sniff the first bytes to pick the right parser.
+    """
+    with path.open("rb") as f:
+        head = f.read(8192)
+    low = head.lower()
+    if b"<html" in low or b"<table" in low or b"<!doctype" in low \
+            or b"<head" in low or b"<meta" in low:
+        return "html"
+    if b"\x00" in head:
+        return "xls"
+    try:
+        text = head.decode("utf-8", "ignore")
+    except Exception:
+        return "xls"
+    if any(ch in text for ch in ("\t", ",", ";", "|")):
+        return "csv"
+    return "xls"
+
+
+class _HTMLTableParser(html.parser.HTMLParser):
+    """Extract the largest <table> in an HTML file as a list of row lists."""
+
+    def __init__(self):
+        super().__init__()
+        self.tables = []
+        self._cur = None
+        self._row = None
+        self._data = []
+        self._in_cell = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table":
+            self._cur = []
+        elif tag == "tr" and self._cur is not None:
+            self._row = []
+        elif tag in ("td", "th") and self._row is not None:
+            self._data = []
+            self._in_cell = True
+
+    def handle_endtag(self, tag):
+        if tag == "table" and self._cur is not None:
+            if self._cur:
+                self.tables.append(self._cur)
+            self._cur = None
+        elif tag == "tr" and self._row is not None:
+            if self._row:
+                self._cur.append(self._row)
+            self._row = None
+        elif tag in ("td", "th") and self._in_cell:
+            self._row.append("".join(self._data).replace("\xa0", " ").strip())
+            self._data = []
+            self._in_cell = False
+
+    def handle_data(self, data):
+        if self._in_cell:
+            self._data.append(data)
+
+
+def _write_html_as_xlsx(src, out):
+    """Parse an HTML file (often a .xls download) into the first .xlsx sheet."""
+    parser = _HTMLTableParser()
+    parser.feed(_read_text_any(src))
+    if not parser.tables:
+        raise ValueError("No HTML table found in file")
+    table = max(parser.tables, key=len)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    for r, row in enumerate(table, start=1):
+        for c, v in enumerate(row, start=1):
+            if v != "":
+                ws.cell(row=r, column=c, value=v)
+    wb.save(str(out))
+
+
 def _write_xls_as_xlsx(src, out):
     import xlrd
+    kind = _sniff_spreadsheet_kind(src)
+    if kind == "html":
+        _write_html_as_xlsx(src, out)
+        return
+    if kind == "csv":
+        _write_csv_as_xlsx(src, out)
+        return
     book = xlrd.open_workbook(str(src), formatting_info=False)
     wb = openpyxl.Workbook()
     for idx in range(book.nsheets):
@@ -229,7 +318,8 @@ def _write_csv_as_xlsx(src, out):
     text = _read_text_any(src)
     lines = text.splitlines()
     first = lines[0] if lines else ""
-    delim = ";" if first.count(";") > first.count(",") else ","
+    counts = {d: first.count(d) for d in ("\t", ";", ",", "|")}
+    delim = max(counts, key=counts.get) if any(counts.values()) else ","
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sheet1"
