@@ -1,0 +1,75 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title></title><META http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body><table align="center"><tr><td colspan="6"><center><b>List of imported services for the selected service </b></center></td></tr><tr><td colspan="6"><center>   Service: S - All services</center></td></tr></table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLegendTable" class="table_legend" border="0">
+	<tr>
+		<td>Source: ITC, UNCTAD, WTO trade in services database based on <a target="_blank" href="https://ec.europa.eu/eurostat">Eurostat</a>, <a target="_blank" href="https://www.imf.org">International Monetary Fund</a>, <a target="_blank" href="http://www.oecd.org">Organisation for Economic Co-operation and Development (OECD)</a> and relevant national statistical authorities statistics.</td>
+	</tr><tr>
+		<td>The world value is shown in red when at least one country has not reported trade data for the selected service</td>
+	</tr><tr>
+		<td></td>
+	</tr>
+</table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLabelUnitTable" border="0">
+	<tr>
+		<td><span id="ctl00_PageContent_Label_Unit" class="Comment">Unit : US Dollar thousand</span></td>
+	</tr>
+</table><table><tr><td> </td></tr></table><div>
+	<table cellspacing="0" cellpadding="4" rules="all" border="1" id="ctl00_PageContent_MyGridView1" style="color:#002B54;border-color:#002B54;width:100%;border-collapse:collapse;">
+		<tr style="color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;">
+			<th scope="col">Service code</th><th scope="col">Service label</th><th scope="col">Imported value in 2020</th><th scope="col">Imported value in 2021</th><th scope="col">Imported value in 2022</th><th scope="col">Imported value in 2023</th><th scope="col">Imported value in 2024</th>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            S
+                                </td><td align="left" style="width:50%;">All services</td><td>5041001795</td><td>5835028291</td><td>6721134771</td><td>7461652542</td><td>7995389626</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            10
+                                </td><td align="left" style="width:50%;">Other business services</td><td>1533198501</td><td>1630112222</td><td>1674520240</td><td>1853655465</td><td>1935712538</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            3
+                                </td><td align="left" style="width:50%;">Transport</td><td>1013395650</td><td>1342161605</td><td>1657082038</td><td>1649312233</td><td>1679831581</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            4
+                                </td><td align="left" style="width:50%;">Travel</td><td>565427892</td><td>633028023</td><td>1067143255</td><td>1453309121</td><td>1620558764</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            9
+                                </td><td align="left" style="width:50%;">Telecommunications, computer, and information services</td><td>472746172</td><td>552023974</td><td>566159976</td><td>629924136</td><td>675713813</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            8
+                                </td><td align="left" style="width:50%;">Charges for the use of intellectual property n.i.e.</td><td>479167402</td><td>562469599</td><td>583406977</td><td>599477534</td><td>663033137</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            7
+                                </td><td align="left" style="width:50%;">Financial services</td><td>293510091</td><td>348603975</td><td>336511965</td><td>361123799</td><td>372985611</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            6
+                                </td><td align="left" style="width:50%;">Insurance and pension services</td><td>226106694</td><td>259748634</td><td>279192801</td><td>313762175</td><td>343202193</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            11
+                                </td><td align="left" style="width:50%;">Personal, cultural, and recreational services</td><td>87415378</td><td>107102385</td><td>105509404</td><td>123494479</td><td>128286653</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            1
+                                </td><td align="left" style="width:50%;">Manufacturing services on physical inputs owned by others</td><td>83617960</td><td>98087891</td><td>93852074</td><td>105819748</td><td>105672521</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            5
+                                </td><td align="left" style="width:50%;">Construction</td><td>70438282</td><td>80656511</td><td>80263228</td><td>83047323</td><td>97334559</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            2
+                                </td><td align="left" style="width:50%;">Maintenance and repair services n.i.e.</td><td>66611494</td><td>69191303</td><td>70341112</td><td>86330083</td><td>94882189</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:#F7F6F3;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            12
+                                </td><td align="left" style="width:50%;">Government goods and services n.i.e.</td><td>93760311</td><td>85347245</td><td>92219980</td><td>86822459</td><td>83323548</td>
+		</tr><tr align="right" style="color:OrangeRed;background-color:White;border-color:#002B54;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            SN
+                                </td><td align="left" style="width:50%;">Services not allocated</td><td>21937990</td><td>20706412</td><td>16943026</td><td>21678896</td><td>27895575</td>
+		</tr>
+	</table>
+</div></body></html>

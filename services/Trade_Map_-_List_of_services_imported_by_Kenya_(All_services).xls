@@ -1,0 +1,65 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title></title><META http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body><table align="center"><tr><td colspan="6"><center><b>List of services imported by Kenya </b></center></td></tr><tr><td colspan="6"><center>   Service: S - All services</center></td></tr></table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLegendTable" class="table_legend" border="0">
+	<tr>
+		<td>Sources: IMF, UNSD, Eurostat, UNCTAD and WTO statistics since January, 2021.<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ITC, UNCTAD, WTO trade in services database statistics until January, 2021.<br /></td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td>The values shown in light green are estimated by UNCTAD and WTO.</td>
+	</tr>
+</table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLabelUnitTable" border="0">
+	<tr>
+		<td><span id="ctl00_PageContent_Label_Unit" class="Comment">Unit : US Dollar thousand</span></td>
+	</tr>
+</table><table><tr><td> </td></tr></table><div>
+	<table cellspacing="0" cellpadding="4" rules="all" border="1" id="ctl00_PageContent_MyGridView1" style="color:#002B54;border-color:#002B54;width:100%;border-collapse:collapse;">
+		<tr style="color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;">
+			<th scope="col">Code</th><th scope="col">Service label</th><th scope="col">Imported Value in 2020</th><th scope="col">Imported Value in 2021</th><th scope="col">Imported Value in 2022</th><th scope="col">Imported Value in 2023</th><th scope="col">Imported Value in 2024</th>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            S
+                                </td><td align="left" style="width:50%;">All services</td><td>3321562</td><td>4059699</td><td>5262803</td><td>4803416</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;border-color:#002B54;">4922928</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            2
+                                </td><td align="left" style="width:50%;">Maintenance and repair services n.i.e.</td><td>42428</td><td>88659</td><td>61112</td><td>81145</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            3
+                                </td><td align="left" style="width:50%;">Transport</td><td>1118220</td><td>1574593</td><td>2148960</td><td>1710512</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            4
+                                </td><td align="left" style="width:50%;">Travel</td><td>106759</td><td>132828</td><td>154002</td><td>138184</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            6
+                                </td><td align="left" style="width:50%;">Insurance and pension services</td><td>107730</td><td>156918</td><td>271504</td><td>420688</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            7
+                                </td><td align="left" style="width:50%;">Financial services</td><td>242072</td><td>268430</td><td>362310</td><td>400946</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            8
+                                </td><td align="left" style="width:50%;">Charges for the use of intellectual property n.i.e.</td><td>76192</td><td>42251</td><td>39864</td><td>44089</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            9
+                                </td><td align="left" style="width:50%;">Telecommunications, computer, and information services</td><td>61282</td><td>68168</td><td>90722</td><td>101023</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            10
+                                </td><td align="left" style="width:50%;">Other business services</td><td>1019249</td><td>1197315</td><td>1631292</td><td>1525565</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            11
+                                </td><td align="left" style="width:50%;">Personal, cultural, and recreational services</td><td>713</td><td>758</td><td>1230</td><td>1536</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            12
+                                </td><td align="left" style="width:50%;">Government goods and services n.i.e.</td><td>146587</td><td>199530</td><td>178255</td><td>97820</td><td></td>
+		</tr>
+	</table>
+</div></body></html>

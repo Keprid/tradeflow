@@ -1,0 +1,841 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title></title><META http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body><table align="center"><tr><td colspan="6"><center><b>List of exporters for the selected service </b></center></td></tr><tr><td colspan="6"><center>   Service: S - All services</center></td></tr></table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLegendTable" class="table_legend" border="0">
+	<tr>
+		<td>Source: ITC, UNCTAD, WTO trade in services database based on <a target="_blank" href="https://ec.europa.eu/eurostat">Eurostat</a>, <a target="_blank" href="https://www.imf.org">International Monetary Fund</a>, <a target="_blank" href="http://www.oecd.org">Organisation for Economic Co-operation and Development (OECD)</a> and relevant national statistical authorities statistics.</td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td>The values shown in light green are estimated by UNCTAD and WTO.</td>
+	</tr>
+</table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLabelUnitTable" border="0">
+	<tr>
+		<td><span id="ctl00_PageContent_Label_Unit" class="Comment">Unit : US Dollar thousand</span></td>
+	</tr>
+</table><table><tr><td> </td></tr></table><div>
+	<table cellspacing="0" cellpadding="4" rules="all" border="1" id="ctl00_PageContent_MyGridView1" style="color:#002B54;border-color:#002B54;width:100%;border-collapse:collapse;">
+		<tr style="color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;">
+			<th scope="col">Exporters</th><th scope="col">Exported value in 2020</th><th scope="col">Exported value in 2021</th><th scope="col">Exported value in 2022</th><th scope="col">Exported value in 2023</th><th scope="col">Exported value in 2024</th>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            United States of America
+                                </td><td>738994000</td><td>818215000</td><td>962869000</td><td>1045079000</td><td>1152747000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            United Kingdom
+                                </td><td>397884831</td><td>460414166</td><td>510202298</td><td>586199121</td><td>649043375</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ireland
+                                </td><td>332484150</td><td>391502418</td><td>391363420</td><td>431441320</td><td>519543707</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Germany
+                                </td><td>333528117</td><td>408692366</td><td>433205255</td><td>442886549</td><td>471817223</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            China
+                                </td><td>280628773</td><td>394272573</td><td>424056426</td><td>381120576</td><td>445891924</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            France
+                                </td><td>245661255</td><td>316398409</td><td>360979808</td><td>369930110</td><td>400099776</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Singapore
+                                </td><td>217435339</td><td>284702002</td><td>339596590</td><td>358222472</td><td>395565869</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            India
+                                </td><td>203145152</td><td>240655458</td><td>309371096</td><td>337539689</td><td>374879314</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Netherlands
+                                </td><td>228664577</td><td>262296437</td><td>295602336</td><td>317888435</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">335957590</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Japan
+                                </td><td>163953900</td><td>170818300</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">170359182</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">209021179</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">228538549</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Spain
+                                </td><td>88999921</td><td>117372783</td><td>165085382</td><td>196914155</td><td>211642181</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Switzerland
+                                </td><td>120382631</td><td>140669180</td><td>152215780</td><td>165188855</td><td>179829470</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            United Arab Emirates
+                                </td><td>78121171</td><td>102958000</td><td>154415000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">166150450</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">176782818</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Luxembourg
+                                </td><td>125664416</td><td>158224633</td><td>144870007</td><td>149479981</td><td>171293203</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Canada
+                                </td><td>98417600</td><td>121191300</td><td>141369400</td><td>154441500</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">159106585</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Italy
+                                </td><td>85610682</td><td>105217761</td><td>129433999</td><td>148385197</td><td>155198206</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Belgium
+                                </td><td>117844941</td><td>136050618</td><td>139345714</td><td>152592954</td><td>148225511</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Korea, Republic of
+                                </td><td>89595700</td><td>119948500</td><td>131636800</td><td>125665900</td><td>138952700</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Denmark
+                                </td><td>76422915</td><td>99144416</td><td>134325530</td><td>116059861</td><td>127093421</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Poland
+                                </td><td>66411528</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">81289147</td><td>95619598</td><td>108639446</td><td>118728649</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sweden
+                                </td><td>72292946</td><td>91154292</td><td>97223322</td><td>104872985</td><td>116860116</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Türkiye
+                                </td><td>39260000</td><td>62863000</td><td>93250000</td><td>106589000</td><td>115249000</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Hong Kong, China
+                                </td><td>66931580</td><td>79126363</td><td>83069134</td><td>97345155</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">109220420</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Austria
+                                </td><td>65044642</td><td>71160753</td><td>83032885</td><td>90323775</td><td>94311057</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Israel
+                                </td><td>55270000</td><td>73982200</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">86522565</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">82527943</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">84406740</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Australia
+                                </td><td>50603705</td><td>45856376</td><td>53330060</td><td>76639841</td><td>83403451</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Thailand
+                                </td><td>30997169</td><td>25407369</td><td>38900970</td><td>56678337</td><td>72142163</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Portugal
+                                </td><td>26289928</td><td>33130922</td><td>47345067</td><td>56979613</td><td>62242289</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            European Union Nes
+                                </td><td>41210000</td><td>51995000</td><td>57157000</td><td>53916000</td><td>58750000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mexico
+                                </td><td>26252300</td><td>37945100</td><td>48074700</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">51538816</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">57232150</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Norway
+                                </td><td>34048681</td><td>40845226</td><td>51462471</td><td>50363576</td><td>56853338</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Greece
+                                </td><td>25940530</td><td>41462736</td><td>50295604</td><td>53026279</td><td>55701464</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saudi Arabia
+                                </td><td>8983985</td><td>10303209</td><td>34667568</td><td>48510805</td><td>55277135</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Malaysia
+                                </td><td>22155193</td><td>21245983</td><td>31942077</td><td>42671311</td><td>53402362</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Philippines
+                                </td><td>31822200</td><td>33570008</td><td>41121888</td><td>48331841</td><td>51978000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Brazil
+                                </td><td>27513932</td><td>31481823</td><td>40291246</td><td>45372858</td><td>48476771</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Romania
+                                </td><td>27143263</td><td>32992541</td><td>38029008</td><td>42925513</td><td>42931906</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Czech Republic
+                                </td><td>26368660</td><td>30679648</td><td>34683948</td><td>39735024</td><td>42551532</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Russian Federation
+                                </td><td>47960347</td><td>55684565</td><td>48802000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">40473000</td><td>42186000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Finland
+                                </td><td>30437242</td><td>34388175</td><td>36143788</td><td>35903525</td><td>41238696</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Macao, China
+                                </td><td>11339627</td><td>18682084</td><td>13249170</td><td>36184364</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">40114024</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Indonesia
+                                </td><td>15015986</td><td>14035210</td><td>23207563</td><td>33606817</td><td>39029764</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Hungary
+                                </td><td>22648001</td><td>26947706</td><td>31078078</td><td>36026267</td><td>38280527</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cyprus
+                                </td><td>16962983</td><td>23136884</td><td>26372971</td><td>28183591</td><td>31059232</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Qatar
+                                </td><td>19429396</td><td>18346154</td><td>30728297</td><td>30974451</td><td>30172253</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Egypt
+                                </td><td>15052700</td><td>21897142</td><td>31573639</td><td>33649000</td><td>29550500</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Morocco
+                                </td><td>13826002</td><td>15427962</td><td>22158599</td><td>25435312</td><td>28149755</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Malta
+                                </td><td>1556813</td><td>10703918</td><td>13534308</td><td>22310923</td><td>24663237</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Croatia
+                                </td><td>10197527</td><td>16934476</td><td>20752430</td><td>24229067</td><td>24592767</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lithuania
+                                </td><td>12453593</td><td>16052270</td><td>18335472</td><td>21436367</td><td>24204192</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Viet Nam
+                                </td><td>26309317</td><td>25480027</td><td>34304792</td><td>36741000</td><td>23851000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            New Zealand
+                                </td><td>11959800</td><td>9865600</td><td>10972400</td><td>16999600</td><td>18522600</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Panama
+                                </td><td>8196633</td><td>10674058</td><td>15274201</td><td>17771571</td><td>18267678</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Colombia
+                                </td><td>5914665</td><td>8171472</td><td>13518219</td><td>15643889</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">17779943</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ukraine
+                                </td><td>11521174</td><td>12785587</td><td>16618000</td><td>16602000</td><td>17226000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Argentina
+                                </td><td>9491738</td><td>9588736</td><td>14413679</td><td>16110565</td><td>17122407</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bahrain
+                                </td><td>11614628</td><td>13283511</td><td>14385638</td><td>15530319</td><td>17025000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bulgaria
+                                </td><td>8730336</td><td>11496914</td><td>13765575</td><td>16294201</td><td>16604119</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Costa Rica
+                                </td><td>7928700</td><td>9163700</td><td>12745654</td><td>14796620</td><td>16113785</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            South Africa
+                                </td><td>8656535</td><td>9128994</td><td>12628036</td><td>14251435</td><td>15939060</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Serbia
+                                </td><td>7056033</td><td>9226451</td><td>11650978</td><td>14154174</td><td>15633313</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Dominican Republic
+                                </td><td>4587500</td><td>8114300</td><td>11418600</td><td>12840100</td><td>14691100</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Slovakia
+                                </td><td>10334933</td><td>11330416</td><td>13147733</td><td>13360371</td><td>13562768</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Slovenia
+                                </td><td>7978811</td><td>10021240</td><td>11814258</td><td>12873044</td><td>13519365</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Estonia
+                                </td><td>6520683</td><td>10174760</td><td>11608492</td><td>12671495</td><td>13517308</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Iran, Islamic Republic of
+                                </td><td>3824000</td><td>6518000</td><td>9902000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">11186874</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">13002615</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kuwait
+                                </td><td>7168192</td><td>8705612</td><td>10608569</td><td>11301693</td><td>12218418</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kazakhstan
+                                </td><td>5208279</td><td>5935022</td><td>7967942</td><td>10674497</td><td>11828322</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Chile
+                                </td><td>5554500</td><td>5972900</td><td>8529400</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">10136087</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">11743835</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tunisia
+                                </td><td>5550299</td><td>6953642</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">8613882</td><td></td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">11107398</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Belarus
+                                </td><td>8787600</td><td>10313077</td><td>9479504</td><td>8676112</td><td>9889470</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Jordan
+                                </td><td>2501127</td><td>4512113</td><td>7963380</td><td>9633944</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">9400888</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ghana
+                                </td><td>7605546</td><td>9141817</td><td>8297184</td><td>8745365</td><td>9270170</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Iraq
+                                </td><td>3802700</td><td>5176700</td><td>9034000</td><td>8702700</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">8517500</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Latvia
+                                </td><td>5548789</td><td>6324112</td><td>7641974</td><td>8120327</td><td>8364636</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Azerbaijan
+                                </td><td>2625997</td><td>3801583</td><td>5067393</td><td>6285240</td><td>8120879</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Pakistan
+                                </td><td>5392295</td><td>6544117</td><td>7359298</td><td>7405548</td><td>8096795</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Albania
+                                </td><td>2531902</td><td>4118356</td><td>5038893</td><td>7041380</td><td>8013145</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Georgia
+                                </td><td>1580101</td><td>2546837</td><td>5703281</td><td>7053762</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">7664444</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Peru
+                                </td><td>2726024</td><td>2946950</td><td>5051244</td><td>5862322</td><td>7152907</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Uruguay
+                                </td><td>3724836</td><td>3712896</td><td>5429758</td><td>6881674</td><td>6948323</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tanzania, United Republic of
+                                </td><td>2183760</td><td>3117744</td><td>4762010</td><td>6283717</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6938808</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sri Lanka
+                                </td><td>3035373</td><td>2474955</td><td>3062323</td><td>5416282</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6910061</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Iceland
+                                </td><td>2485144</td><td>3505542</td><td>5615582</td><td>6805951</td><td>6889506</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lebanon
+                                </td><td>4954189</td><td>5836750</td><td>8249999</td><td>7921518</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6812188</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bangladesh
+                                </td><td>6019825</td><td>7474532</td><td>8234093</td><td>6378269</td><td>6652037</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Uzbekistan
+                                </td><td>2005014</td><td>2581725</td><td>4316615</td><td>5432965</td><td>6547114</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mauritius
+                                </td><td>2217501</td><td>2251841</td><td>3750233</td><td>4085660</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6146720</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            El Salvador
+                                </td><td>2197221</td><td>3103810</td><td>4322282</td><td>5108560</td><td>5999511</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Oman
+                                </td><td>2242954</td><td>2232738</td><td>3418970</td><td>5734947</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">5973310</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bahamas
+                                </td><td>1257057</td><td>2989499</td><td>4611012</td><td>5148415</td><td>5896984</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Armenia
+                                </td><td>1138261</td><td>1763283</td><td>4406480</td><td>5690483</td><td>5682936</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kenya
+                                </td><td>3653582</td><td>5025595</td><td>6534673</td><td>5405317</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">5531137</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Jamaica
+                                </td><td>1998848</td><td>2919910</td><td>4522118</td><td>5273024</td><td>5256029</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Maldives
+                                </td><td>1528882</td><td>3699420</td><td>4695880</td><td>4458321</td><td>5029804</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cambodia
+                                </td><td>1767433</td><td>657297</td><td>2317934</td><td>4188153</td><td>4960591</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Algeria
+                                </td><td>2986921</td><td>3217634</td><td>3536449</td><td>3876702</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4811928</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guatemala
+                                </td><td>2586341</td><td>2884546</td><td>3886307</td><td>4294028</td><td>4667670</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nigeria
+                                </td><td>3993013</td><td>3996165</td><td>4864000</td><td>4440605</td><td>4565221</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ecuador
+                                </td><td>2031238</td><td>2316416</td><td>3554269</td><td>4203318</td><td>3769130</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bosnia and Herzegovina
+                                </td><td>1512382</td><td>2450993</td><td>3052261</td><td>3551427</td><td>3736053</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Honduras
+                                </td><td>1977260</td><td>2838428</td><td>3360111</td><td>3819369</td><td>3678945</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kyrgyzstan
+                                </td><td>428240</td><td>521810</td><td>1374791</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2133574</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3440158</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Aruba
+                                </td><td>1356624</td><td>2077973</td><td>2647506</td><td>2988846</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3334700</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Macedonia, North
+                                </td><td>1646095</td><td>2065371</td><td>2437164</td><td>2864918</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3160798</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Montenegro
+                                </td><td>775551</td><td>1888836</td><td>2410428</td><td>2987545</td><td>2902944</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Moldova, Republic of
+                                </td><td>1278000</td><td>1635000</td><td>2279000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2551471</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2705267</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Paraguay
+                                </td><td>1383891</td><td>1597678</td><td>2155373</td><td>2455369</td><td>2654147</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Uganda
+                                </td><td>1160340</td><td>1737490</td><td>1840260</td><td>2081380</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2394613</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cameroon
+                                </td><td>1697063</td><td>1582750</td><td>1711892</td><td>2010348</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1989059</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Fiji
+                                </td><td>410900</td><td>283764</td><td>1328652</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1942075</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1976247</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bermuda
+                                </td><td>1016585</td><td>1126423</td><td>1407278</td><td>1586991</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1887671</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Curaçao
+                                </td><td>743479</td><td>1019446</td><td>1493246</td><td>1546440</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1882560</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nepal
+                                </td><td>881233</td><td>797891</td><td>607821</td><td>894367</td><td>1842069</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Seychelles
+                                </td><td>766630</td><td>1235450</td><td>1684206</td><td>1833105</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1800421</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Turks and Caicos Islands
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">384551</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">818346</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1323562</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1567856</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1777205</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lao People's Democratic Republic
+                                </td><td>346562</td><td>125330</td><td>406097</td><td>1327343</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1731787</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Barbados
+                                </td><td>800300</td><td>843400</td><td>1187350</td><td>1428600</td><td>1663200</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Somalia
+                                </td><td>417000</td><td>619000</td><td>764000</td><td>1391000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1604166</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Senegal
+                                </td><td>874242</td><td>1288980</td><td>1436043</td><td>1480427</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1590647</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mongolia
+                                </td><td>654920</td><td>814473</td><td>1135118</td><td>1586970</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1566185</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saint Lucia
+                                </td><td>390339</td><td>624572</td><td>1153920</td><td>1275117</td><td>1463166</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Madagascar
+                                </td><td>640899</td><td>654219</td><td>1141938</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1246491</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1398796</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sint Maarten (Dutch part)
+                                </td><td>392907</td><td>646686</td><td>1165447</td><td>1272912</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1337780</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nicaragua
+                                </td><td>946300</td><td>1043621</td><td>1559800</td><td>1559200</td><td>1298118</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Namibia
+                                </td><td>406255</td><td>411931</td><td>969191</td><td>1069988</td><td>1287847</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Côte d'Ivoire
+                                </td><td>731741</td><td>910216</td><td>912961</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">996037</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1272306</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Trinidad and Tobago
+                                </td><td>436820</td><td>460140</td><td>896750</td><td>1165937</td><td>1259366</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Antigua and Barbuda
+                                </td><td>556784</td><td>655142</td><td>1028598</td><td>1099600</td><td>1241419</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Zambia
+                                </td><td>555625</td><td>525542</td><td>938916</td><td>932799</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1211895</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Djibouti
+                                </td><td>910236</td><td>1013313</td><td>1072909</td><td>1105065</td><td>1173078</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Belize
+                                </td><td>425870</td><td>620867</td><td>851316</td><td>1048001</td><td>1158162</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mozambique
+                                </td><td>781383</td><td>821876</td><td>1128311</td><td>1128262</td><td>1146960</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bolivia, Plurinational State of
+                                </td><td>424590</td><td>448624</td><td>923543</td><td>1111451</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1123892</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Rwanda
+                                </td><td>521444</td><td>576347</td><td>881201</td><td>1044739</td><td>1081012</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Togo
+                                </td><td>514116</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">671369</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">716964</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">814239</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">850658</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Botswana
+                                </td><td>362067</td><td>429422</td><td>586176</td><td>641006</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">844749</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cabo Verde
+                                </td><td>294574</td><td>287259</td><td>569158</td><td>712626</td><td>830215</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Grenada
+                                </td><td>400068</td><td>493626</td><td>645051</td><td>755313</td><td>788534</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Burkina Faso
+                                </td><td>508664</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">558307</td><td>503548</td><td>621299</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">658303</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sudan
+                                </td><td>1262865</td><td>1636953</td><td>1550711</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">458733</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">570825</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Chad
+                                </td><td>341800</td><td>355510</td><td>323885</td><td>511964</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">541909</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Palestine, State of
+                                </td><td>670102</td><td>851731</td><td>922363</td><td>890320</td><td>514284</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mali
+                                </td><td>401503</td><td>523149</td><td>478624</td><td>474869</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">500777</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Benin
+                                </td><td>510372</td><td>511584</td><td>552141</td><td>461101</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">494914</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            South Sudan
+                                </td><td>153570</td><td>410610</td><td>842415</td><td>484473</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">484473</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Malawi
+                                </td><td>441709</td><td>462146</td><td>464048</td><td>474617</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">483161</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Gambia
+                                </td><td>105626</td><td>109799</td><td>215760</td><td>391875</td><td>475091</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saint Kitts and Nevis
+                                </td><td>326546</td><td>358842</td><td>508037</td><td>550844</td><td>470693</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Zimbabwe
+                                </td><td>331436</td><td>215735</td><td>453290</td><td>399205</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">469457</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Anguilla
+                                </td><td>67299</td><td>80669</td><td>268594</td><td>411288</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">421380</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Brunei Darussalam
+                                </td><td>351043</td><td>200317</td><td>281081</td><td>339973</td><td>409656</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saint Vincent and the Grenadines
+                                </td><td>126421</td><td>102294</td><td>226588</td><td>295648</td><td>365989</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Samoa
+                                </td><td>209022</td><td>175890</td><td>354725</td><td>833432</td><td>327496</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Liberia
+                                </td><td>124253</td><td>159607</td><td>191577</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">230167</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">303066</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bhutan
+                                </td><td>134740</td><td>20154</td><td>21910</td><td>127158</td><td>288136</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Niger
+                                </td><td>222476</td><td>278877</td><td>329845</td><td>231237</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">258857</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mauritania
+                                </td><td>193179</td><td>266687</td><td>307226</td><td>295489</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">250511</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Eswatini
+                                </td><td>68490</td><td>71968</td><td>64908</td><td>145404</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">221395</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Suriname
+                                </td><td>102621</td><td>95942</td><td>142977</td><td>173468</td><td>211424</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tajikistan
+                                </td><td>138533</td><td>146817</td><td>137358</td><td>243521</td><td>194651</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Dominica
+                                </td><td>83134</td><td>96366</td><td>148899</td><td>162877</td><td>190714</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Vanuatu
+                                </td><td>86782</td><td>28194</td><td>78475</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">203955</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">156792</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Solomon Islands
+                                </td><td>50121</td><td>42420</td><td>70490</td><td>115255</td><td>132633</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Comoros
+                                </td><td>46875</td><td>92579</td><td>110529</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">115704</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">129166</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Angola
+                                </td><td>67008</td><td>93510</td><td>82208</td><td>75846</td><td>128874</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Burundi
+                                </td><td>86073</td><td>109216</td><td>89097</td><td>121520</td><td>121405</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tonga
+                                </td><td>81839</td><td>41357</td><td>44723</td><td>82365</td><td>108679</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Palau
+                                </td><td>55741</td><td>14257</td><td>35759</td><td>65070</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">92399</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sao Tome and Principe
+                                </td><td>35406</td><td>54466</td><td>75116</td><td>76451</td><td>88227</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Timor-Leste
+                                </td><td>39711</td><td>28124</td><td>60359</td><td>69412</td><td>82067</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Papua New Guinea
+                                </td><td>98055</td><td>189673</td><td>247451</td><td>307403</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">54754</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sierra Leone
+                                </td><td>53008</td><td>67689</td><td>23414</td><td>42538</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">50897</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guinea-Bissau
+                                </td><td>18738</td><td>35038</td><td>34918</td><td>44750</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">49211</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Gabon
+                                </td><td>134919</td><td>199095</td><td>128211</td><td>218694</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">38040</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nauru
+                                </td><td>48366</td><td>37603</td><td>37331</td><td>33120</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">34567</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Montserrat
+                                </td><td>13518</td><td>7051</td><td>14823</td><td>18560</td><td>22262</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lesotho
+                                </td><td>13326</td><td>21619</td><td>17687</td><td>17161</td><td>15406</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kiribati
+                                </td><td>11555</td><td>1213</td><td>11929</td><td>9031</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">11678</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tuvalu
+                                </td><td>2917</td><td>2226</td><td>2048</td><td>10222</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">10689</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Turkmenistan
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2248028</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2251275</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Yemen
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">338581</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">397917</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Venezuela, Bolivarian Republic of
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">323996</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">449967</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Syrian Arab Republic
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">222410</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">298887</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            French Polynesia
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">668830</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">737747</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1335100</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1646743</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Faroe Islands
+                                </td><td>266564</td><td>321769</td><td>422588</td><td>379233</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Equatorial Guinea
+                                </td><td>197442</td><td>195163</td><td>108908</td><td>133187</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ethiopia
+                                </td><td>4461774</td><td>5565858</td><td>7000872</td><td>7395866</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Eritrea
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">258558</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">359681</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cuba
+                                </td><td>6985265</td><td>5884178</td><td>7062225</td><td>6827352</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Congo
+                                </td><td>234469</td><td>239976</td><td>212373</td><td>302813</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Congo, Democratic Republic of the
+                                </td><td>143626</td><td>168693</td><td>69723</td><td>49356</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cook Islands
+                                </td><td>61615</td><td>61682</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Afghanistan
+                                </td><td>699571</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">799543</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">434151</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">567607</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Andorra
+                                </td><td>1674864</td><td>2237310</td><td>2533758</td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Myanmar
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4229598</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2215809</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2381114</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1872464</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cayman Islands
+                                </td><td>3339388</td><td>3440219</td><td>4091212</td><td>4450428</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Central African Republic
+                                </td><td>291538</td><td>270648</td><td>204045</td><td>180637</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Libya, State of
+                                </td><td>225600</td><td>82800</td><td>84200</td><td>642200</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guinea
+                                </td><td>64830</td><td>27020</td><td>145682</td><td>143010</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guyana
+                                </td><td>182983</td><td>237744</td><td>237066</td><td>528907</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Haiti
+                                </td><td>132749</td><td>141578</td><td>101452</td><td>139013</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Chinese Taipei
+                                </td><td>41210000</td><td>51995000</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            New Caledonia
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">396927</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">390046</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">559023</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">688272</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Marshall Islands
+                                </td><td>8223</td><td>9444</td><td>13750</td><td>19708</td><td></td>
+		</tr>
+	</table>
+</div></body></html>

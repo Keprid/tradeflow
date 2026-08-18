@@ -48,6 +48,8 @@ sys.path.insert(0, str(BASE_DIR))
 import make_tables                       # noqa: E402
 import generate_report as gr             # noqa: E402
 import make_config                       # noqa: E402
+import make_services_tables              # noqa: E402
+import generate_services_report as gsr   # noqa: E402
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
@@ -58,6 +60,10 @@ JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
 RAW_KEYWORDS = ("imports-from-world", "exports-to-world",
                 "kenyas-imports-from", "kenyas-exports-to")
+SERVICE_RAW_KEYWORDS = ("exported_services_for", "imported_services_for",
+                        "services_exported_by", "services_imported_by",
+                        "services_commercialized", "list_of_exporters_for",
+                        "list_of_importers_for")
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -402,10 +408,15 @@ def api_configs():
     return out
 
 
-def _detect_mode(uploads_dir):
+def _detect_mode(uploads_dir, report_type="goods"):
     names = [f.lower() for f in os.listdir(uploads_dir) if f.lower().endswith(ALLOWED_EXT)]
     if not names:
         return None, "No Excel files were uploaded."
+    if report_type == "services":
+        if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
+            return "services_raw", ""
+        return None, ("Could not recognise the services upload set. Upload the seven "
+                      "raw ITC services files (or a zip of them).")
     if any(any(k in n for k in RAW_KEYWORDS) for n in names):
         return "raw", ""
     if sum(1 for n in names if re.search(r"table\s*\d", n)) >= 6:
@@ -541,8 +552,72 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs):
     return report_path, manifest
 
 
+def _run_services_pipeline(job_dir, cfg_id, top_n, logs):
+    uploads = job_dir / "uploads"
+    tables = job_dir / "tables"
+    charts = job_dir / "charts"
+
+    logs.append("Mode: raw ITC services downloads -> building service tables ...")
+    try:
+        make_services_tables.generate_service_tables(
+            str(uploads), str(tables), top_n)
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    excel_dir = str(tables)
+    logs.append(f"Service tables written to {tables}")
+
+    if not cfg_id or cfg_id == "__auto__":
+        # Auto-select services_world config when report_type is services
+        cfg_id = "services_world"
+
+    cfg_path = CONFIG_DIR / f"{cfg_id}.json"
+    if not cfg_path.exists():
+        raise HTTPException(404, f"Config '{cfg_id}' not found")
+    gr.cfg_path = os.path.abspath(str(cfg_path))
+    cfg = gr.load_config(gr.cfg_path)
+
+    os.makedirs(charts, exist_ok=True)
+    report_name = f"KENYA-{cfg['country']['title']} SERVICES TRADE FLOW.docx"
+    report_path = job_dir / report_name
+    logs.append(f"Building services report for {cfg['country']['name']} (charts -> {charts})")
+    try:
+        gsr.build_services_report(cfg, excel_dir, str(report_path), str(charts))
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    logs.append(f"Report saved as {report_name}")
+
+    all_tables = tables / "All Service Tables.xlsx"
+    chart_png = charts / "chart_balance.png"
+    if all_tables.exists() and chart_png.exists():
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            wb = openpyxl.load_workbook(str(all_tables))
+            if "Figure 1" in wb.sheetnames:
+                ws_fig = wb["Figure 1"]
+                ws_fig._charts = []
+                img = XLImage(str(chart_png))
+                img.anchor = "A8"
+                ws_fig.add_image(img)
+                wb.save(str(all_tables))
+                logs.append("Replaced Figure 1 chart in All Service Tables.xlsx with correct PNG")
+        except Exception as exc:
+            logs.append(f"Warning: could not replace Figure 1 chart: {exc}")
+
+    manifest = {
+        "mode": "services_raw",
+        "report_type": "services",
+        "report_name": report_name,
+        "excel_dir": os.path.relpath(excel_dir, job_dir),
+        "config": cfg_id,
+    }
+    (job_dir / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    return report_path, manifest
+
+
 @app.post("/api/run")
 async def api_run(config: str = Form("__auto__"), top: int = Form(20),
+                  report_type: str = Form("goods"),
                   files: list[UploadFile] = File(default=None),
                   zipfile: UploadFile | None = File(default=None)):
     files = files or []
@@ -550,6 +625,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         raise HTTPException(400, "Please select files (or a zip) to upload.")
     if top < 1:
         raise HTTPException(400, "top must be >= 1")
+    if report_type not in ("goods", "services"):
+        raise HTTPException(400, "report_type must be 'goods' or 'services'")
 
     job_dir = _new_job_dir()
     try:
@@ -562,15 +639,20 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                 shutil.copyfileobj(zipfile.file, f)
             _extract_zip(zpath, job_dir / "uploads")
 
-        mode, err = _detect_mode(job_dir / "uploads")
+        mode, err = _detect_mode(job_dir / "uploads", report_type)
         if mode is None:
             raise HTTPException(400, err)
 
-        LOG.info("POST /api/run config=%s top=%s mode=%s job=%s",
-                 config, top, mode, job_dir.name)
+        LOG.info("POST /api/run config=%s top=%s mode=%s report_type=%s job=%s",
+                 config, top, mode, report_type, job_dir.name)
 
         logs = []
-        report_path, manifest = _run_pipeline(job_dir, config, top, mode, logs)
+        if report_type == "services":
+            report_path, manifest = _run_services_pipeline(
+                job_dir, config, top, logs)
+        else:
+            report_path, manifest = _run_pipeline(
+                job_dir, config, top, mode, logs)
         return {
             "job_id": job_dir.name,
             "report_name": manifest["report_name"],

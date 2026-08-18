@@ -1,0 +1,49 @@
+{
+  "country": {
+    "name": "the World",
+    "short": "WORLD",
+    "title": "WORLD",
+    "adjective": "global",
+    "possessive": "the world's",
+    "capital": ""
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2024,
+    "title_line1": "KENYA- WORLD SERVICES TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 7200,
+    "world_imports_usd_billion": 7000
+  },
+  "export_potential": {
+    "image": "",
+    "paragraphs": []
+  },
+  "map": {
+    "image": "",
+    "source": ""
+  },
+  "quick_facts": [
+    ["Global services trade value", "USD 7.2 trillion in exports (2024, WTO)"],
+    ["Services share of world trade", "About 25% of total world trade in goods and services"],
+    ["Fastest growing service sector", "Telecommunications, computer and information services (+9% in 2023)"],
+    ["Largest services exporter", "United States of America (USD 1,153 billion in 2024)"],
+    ["Largest services importer", "United States of America (USD 841 billion in 2024)"],
+    ["Kenya's services exports", "USD 5,443 million (2023, UNCTAD)"],
+    ["Kenya's services imports", "USD 4,774 million (2023, UNCTAD)"],
+    ["Kenya's services trade balance", "Positive (surplus) since 2005"],
+    ["Kenya's services sector GDP share", "About 55% of GDP (2023)"],
+    ["Kenya's top service export", "Travel/tourism services"],
+    ["Key services sub-sectors in Kenya", "Tourism, ICT, Financial services, Transport, BPO"],
+    ["Source data", "ITC Trade Map, UNCTAD, WTO"]
+  ],
+  "references": [
+    "ITC Trade Map (International Trade Centre trade database)",
+    "UNCTAD (United Nations Conference on Trade and Development)",
+    "WTO (World Trade Organization) - Trade in Services Statistics",
+    "World Bank (World Development Indicators)",
+    "IMF (World Economic Outlook)"
+  ]
+}

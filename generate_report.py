@@ -1251,6 +1251,30 @@ class ReportBuilder:
             row.cells[1].width = Inches(4.2)
         return table
 
+    def add_table_from_excel(self, excel_path, sheet_name=None):
+        """Add a table from an Excel file to the document."""
+        import openpyxl as xl
+        wb = xl.load_workbook(excel_path, data_only=True)
+        if sheet_name and sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
+        rows = []
+        for row in ws.iter_rows(values_only=True):
+            rows.append([str(c) if c is not None else "" for c in row])
+        wb.close()
+        if not rows:
+            return
+        n_rows = len(rows)
+        n_cols = max(len(r) for r in rows)
+        table = self.doc.add_table(rows=n_rows, cols=n_cols)
+        table.style = "Table Grid"
+        for ri, row in enumerate(rows):
+            for ci, val in enumerate(row):
+                if ci < n_cols:
+                    self._cell_text(table.cell(ri, ci), val)
+        return table
+
 
 # ---------------------------------------------------------------------------
 # Main report assembly

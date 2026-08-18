@@ -1,0 +1,65 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title></title><META http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body><table align="center"><tr><td colspan="6"><center><b>List of services commercialized by Kenya </b></center></td></tr><tr><td colspan="6"><center>   Service: S - All services</center></td></tr></table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLegendTable" class="table_legend" border="0">
+	<tr>
+		<td>Sources: IMF, UNSD, Eurostat, UNCTAD and WTO statistics since January, 2021.<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ITC, UNCTAD, WTO trade in services database statistics until January, 2021.<br /></td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td>The values shown in light green are estimated by UNCTAD and WTO.</td>
+	</tr>
+</table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLabelUnitTable" border="0">
+	<tr>
+		<td><span id="ctl00_PageContent_Label_Unit" class="Comment">Unit : US Dollar thousand</span></td>
+	</tr>
+</table><table><tr><td> </td></tr></table><div>
+	<table cellspacing="0" cellpadding="4" rules="all" border="1" id="ctl00_PageContent_MyGridView1" style="color:#002B54;border-color:#002B54;width:100%;border-collapse:collapse;">
+		<tr style="color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;">
+			<th scope="col">Code</th><th scope="col">Service label</th><th scope="col">Balance in value in 2020,US Dollar thousand</th><th scope="col">Balance in value in 2021,US Dollar thousand</th><th scope="col">Balance in value in 2022,US Dollar thousand</th><th scope="col">Balance in value in 2023,US Dollar thousand</th><th scope="col">Balance in value in 2024,US Dollar thousand</th><th scope="col">Exported Value in 2024,US Dollar thousand</th><th scope="col">Imported Value in 2024,US Dollar thousand</th>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            S
+                                </td><td align="left" style="width:50%;">All services</td><td>332020</td><td>965896</td><td>1271870</td><td>601901</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;border-color:#002B54;">608209</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;border-color:#002B54;">5531137</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;border-color:#002B54;">4922928</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            2
+                                </td><td align="left" style="width:50%;">Maintenance and repair services n.i.e.</td><td>-26220</td><td>-68181</td><td>-38699</td><td>-62194</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            3
+                                </td><td align="left" style="width:50%;">Transport</td><td>-39763</td><td>65327</td><td>275227</td><td>294602</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            4
+                                </td><td align="left" style="width:50%;">Travel</td><td>434494</td><td>711077</td><td>955593</td><td>867157</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            6
+                                </td><td align="left" style="width:50%;">Insurance and pension services</td><td>26582</td><td>-43844</td><td>-138361</td><td>-293119</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            7
+                                </td><td align="left" style="width:50%;">Financial services</td><td>182594</td><td>282259</td><td>366569</td><td>400356</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            8
+                                </td><td align="left" style="width:50%;">Charges for the use of intellectual property n.i.e.</td><td>-33175</td><td>13228</td><td>33798</td><td>-12829</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            9
+                                </td><td align="left" style="width:50%;">Telecommunications, computer, and information services</td><td>505848</td><td>905161</td><td>950396</td><td>658278</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            10
+                                </td><td align="left" style="width:50%;">Other business services</td><td>-967295</td><td>-1143635</td><td>-1575604</td><td>-1477437</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            11
+                                </td><td align="left" style="width:50%;">Personal, cultural, and recreational services</td><td>7140</td><td>7272</td><td>4943</td><td>3759</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:6%;">
+                            12
+                                </td><td align="left" style="width:50%;">Government goods and services n.i.e.</td><td>639801</td><td>564102</td><td>757932</td><td>501853</td><td></td><td></td><td></td>
+		</tr>
+	</table>
+</div></body></html>

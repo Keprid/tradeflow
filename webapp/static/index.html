@@ -434,9 +434,32 @@ input[type=file]:hover {
   <div class="card">
     <div class="card-title"><i class="fas fa-sliders-h"></i> Report Configuration</div>
 
-    <label for="cfg">Country / Report Configuration</label>
-    <select id="cfg"><option value="">Loading configs...</option></select>
-    <div class="hint">Select a country configuration, or choose "Auto-detect country from data" to automatically create the config from your uploaded files.</div>
+    <label>Report Type</label>
+    <div style="display:flex;gap:24px;margin:8px 0 16px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">
+        <input type="radio" name="report_type" value="goods" checked
+               style="width:auto;height:auto;accent-color:var(--green);">
+        <i class="fas fa-box" style="color:var(--dark-blue);font-size:13px;"></i>
+        Goods Trade Flow
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">
+        <input type="radio" name="report_type" value="services"
+               style="width:auto;height:auto;accent-color:var(--green);">
+        <i class="fas fa-concierge-bell" style="color:var(--dark-blue);font-size:13px;"></i>
+        Services Trade Flow
+      </label>
+    </div>
+
+    <div id="cfg-wrapper">
+      <label for="cfg">Country / Report Configuration</label>
+      <select id="cfg"><option value="">Loading configs...</option></select>
+      <div class="hint" id="cfg-hint">Select a country configuration, or choose "Auto-detect country from data" to automatically create the config from your uploaded files.</div>
+    </div>
+
+    <div id="services-info" style="display:none; margin-top:14px; padding:12px; background:var(--bg-light); border-radius:3px; border-left:3px solid var(--dark-blue);">
+      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
+      <b>Services Mode:</b> Config is automatically set to <b>services_world</b> (global services trade). No manual config selection needed.
+    </div>
 
     <div class="row">
       <div>
@@ -450,7 +473,7 @@ input[type=file]:hover {
       </div>
     </div>
 
-    <div class="hint" style="margin-top:14px;">
+    <div class="hint" id="upload-hint" style="margin-top:14px;">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       &nbsp;
       Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: <b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. <b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.
@@ -527,6 +550,7 @@ input[type=file]:hover {
     const fd = new FormData();
     fd.append('config', $('cfg').value);
     fd.append('top', $('top').value);
+    fd.append('report_type', document.querySelector('input[name="report_type"]:checked').value);
     let zips = 0, others = 0;
     for (const f of files) {
       if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
@@ -572,6 +596,31 @@ input[type=file]:hover {
   });
 
   loadConfigs();
+
+  document.querySelectorAll('input[name="report_type"]').forEach(r => {
+    r.addEventListener('change', () => {
+      const hint = document.getElementById('upload-hint');
+      const cfgSelect = document.getElementById('cfg');
+      const cfgWrapper = document.getElementById('cfg-wrapper');
+      const servicesInfo = document.getElementById('services-info');
+      if (r.value === 'services') {
+        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
+          'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them). ' +
+          'Expected files contain keywords like "exported_services", "importers_for", "services_exported_by_Kenya", etc. ' +
+          '<b>.xls</b> files are converted automatically.';
+        cfgSelect.value = 'services_world';
+        cfgWrapper.style.display = 'none';
+        servicesInfo.style.display = 'block';
+      } else {
+        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
+          'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
+          '<b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. ' +
+          '<b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.';
+        cfgWrapper.style.display = 'block';
+        servicesInfo.style.display = 'none';
+      }
+    });
+  });
 </script>
 </body>
 </html>
