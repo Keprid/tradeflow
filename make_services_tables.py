@@ -96,6 +96,47 @@ LDC_GRADUATED = {
     "equatorial guinea", "vanuatu", "bhutan", "sao tome and principe",
 }
 
+# ITC name -> HDI / World Bank name aliases (for mismatches between data sources)
+NAME_ALIASES = {
+    "czech republic": "czechia",
+    "hong kong, china": "hong kong",
+    "macao, china": "macao sar, china",
+    "iran, islamic republic of": "iran",
+    "tanzania, united republic of": "tanzania",
+    "macedonia, north": "north macedonia",
+    "moldova, republic of": "moldova",
+    "bolivia, plurinational state of": "bolivia",
+    "palestine, state of": "palestine",
+    "venezuela, bolivarian republic of": "venezuela",
+    "libya, state of": "libya",
+    "congo, democratic republic of the": "dr congo",
+    "congo": "republic of the congo",
+    "korea, republic of": "south korea",
+    "russian federation": "russia",
+    "türkiye": "turkey",
+    "viet nam": "vietnam",
+    "lao people's democratic republic": "lao pdr",
+    "anguilla": None,
+    "montserrat": None,
+    "cook islands": None,
+    "turks and caicos islands": None,
+    "sint maarten (dutch part)": None,
+    "cayman islands": None,
+    "bermuda": None,
+    "curaçao": None,
+    "aruba": None,
+    "french polynesia": None,
+    "new caledonia": None,
+    "faroe islands": None,
+    "marshall islands": None,
+}
+
+# Non-country aggregation entries to exclude from dev-status ranking
+NON_COUNTRY_ENTRIES = {
+    "european union nes",
+    "chinese taipei",
+}
+
 # ITC Regional classifications (based on intracen.org)
 ITC_REGIONS = {
     "Africa": {
@@ -244,14 +285,16 @@ def get_development_status(name, classification, hdi_data=None):
     - HDI < 0.550 -> LDC (very low development)
     """
     name_lower = name.strip().lower()
+    # Resolve ITC name -> HDI / World Bank name
+    lookup = NAME_ALIASES.get(name_lower, name_lower)
 
     # Check LDC first (overrides other classifications)
     if name_lower in LDC_COUNTRIES and name_lower not in LDC_GRADUATED:
         return "LDC"
 
     # Try HDI data first (most accurate)
-    if hdi_data and name_lower in hdi_data:
-        hdi = hdi_data[name_lower]
+    if hdi_data and lookup in hdi_data:
+        hdi = hdi_data[lookup]
         if hdi >= HDI_DEVELOPED_THRESHOLD:
             return "Developed"
         elif hdi < 0.550:
@@ -260,7 +303,7 @@ def get_development_status(name, classification, hdi_data=None):
             return "Developing"
 
     # Fallback to World Bank income group
-    ig = classification.get(name_lower, "")
+    ig = classification.get(lookup, "")
     if ig == "High income":
         return "Developed"
     return "Developing"
@@ -274,8 +317,9 @@ def get_region(name):
     Latin America and the Caribbean, or 'Other'.
     """
     name_lower = name.strip().lower()
+    lookup = NAME_ALIASES.get(name_lower, name_lower)
     for region, countries in ITC_REGIONS.items():
-        if name_lower in countries:
+        if lookup in countries or name_lower in countries:
             return region
     return "Other"
 
@@ -702,6 +746,9 @@ def rank_by_dev_status(items, years, classification, top_n=10):
     Returns (dev_items, devel_items, ldc_items) where each is a list sorted by latest-year value.
     """
     hdi_data = load_hdi_data()
+    # Filter out non-country aggregation entries
+    items = [it for it in items if it.get("label", "").strip().lower()
+             not in NON_COUNTRY_ENTRIES]
     for it in items:
         it["dev_status"] = get_development_status(it.get("label", ""), classification, hdi_data)
         it["region"] = get_region(it.get("label", ""))
@@ -1072,6 +1119,8 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
     """Write a table split by development status.
 
     Columns: Dev Status | Rank | Country | Region | Value (latest year) | Growth %
+    The Development Status label is written once per group and merged across
+    all rows in that group.
     """
     latest = years[-1] if years else ""
     n = len(years)
@@ -1094,13 +1143,15 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
 
     row0 = h + 1
     r = row0
-    for status, items in [("Developed", dev_items), ("Developing", devel_items),
-                          ("LDC", ldc_items)]:
+    for status, items in [("Developed Economies", dev_items),
+                          ("Developing Economies", devel_items),
+                          ("Least Developed Countries (LDCs)", ldc_items)]:
         if not items:
             continue
+        group_start = r
+        fill = _dev_fill(status.split()[0] if status.startswith("Developed") else
+                         ("LDC" if "LDC" in status else "Developing"))
         for it in items:
-            fill = _dev_fill(status)
-            put_text(ws, r, 1, status, size=11, fill=fill, wrap=True, align="left")
             put_text(ws, r, 2, it.get("dev_rank", ""), size=11, fill=fill)
             put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True,
                      align="left")
@@ -1114,6 +1165,11 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
             else:
                 put_share(ws, r, 6, None, fill=fill)
             r += 1
+        # Write status label in first row and merge down for the group
+        put_text(ws, group_start, 1, status, bold=True, size=11, fill=fill,
+                 wrap=True, align="center")
+        if r - group_start > 1:
+            merge(ws, group_start, 1, r - 1, 1)
 
     set_widths(ws, {"A": 18, "B": 14, "C": 32, "D": 28, "E": 22, "F": 18})
     ws.freeze_panes = f"A{row0}"
