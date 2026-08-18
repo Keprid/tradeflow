@@ -137,7 +137,7 @@ NON_COUNTRY_ENTRIES = {
     "chinese taipei",
 }
 
-# ITC Regional classifications (based on intracen.org)
+# ITC Regional classifications (based on tradebriefs.intracen.org)
 ITC_REGIONS = {
     "Africa": {
         "algeria", "angola", "benin", "botswana", "burkina faso", "burundi",
@@ -152,40 +152,44 @@ ITC_REGIONS = {
         "south sudan", "sudan", "tanzania", "togo", "tunisia", "uganda",
         "zambia", "zimbabwe",
     },
-    "Eastern Europe and Central Asia": {
-        "albania", "armenia", "azerbaijan", "belarus", "bosnia and herzegovina",
-        "bulgaria", "croatia", "cyprus", "czech republic", "estonia",
-        "georgia", "greece", "hungary", "kazakhstan", "kyrgyzstan",
-        "latvia", "lithuania", "montenegro", "north macedonia", "poland",
-        "romania", "russia", "serbia", "slovakia", "slovenia",
-        "tajikistan", "turkmenistan", "turkey", "türkiye", "ukraine",
-        "uzbekistan",
+    "Asia": {
+        "afghanistan", "armenia", "azerbaijan", "bahrain", "bangladesh",
+        "bhutan", "brunei", "cambodia", "china", "cyprus", "georgia",
+        "hong kong", "india", "indonesia", "iran", "iraq", "israel",
+        "japan", "jordan", "kazakhstan", "korea", "kuwait", "kyrgyzstan",
+        "lao people's democratic republic", "lebanon", "macao",
+        "malaysia", "maldives", "mongolia", "myanmar", "nepal",
+        "oman", "pakistan", "palestine", "philippines", "qatar",
+        "russia", "saudi arabia", "singapore", "sri lanka", "syria",
+        "taiwan", "tajikistan", "thailand", "timor-leste", "turkey",
+        "türkiye", "turkmenistan", "united arab emirates", "uzbekistan",
+        "viet nam", "vietnam", "yemen",
     },
-    "Middle East and North Africa": {
-        "bahrain", "iran", "iraq", "israel", "jordan", "kuwait",
-        "lebanon", "oman", "palestine", "qatar", "saudi arabia",
-        "syria", "united arab emirates", "yemen",
-    },
-    "Asia and the Pacific": {
-        "afghanistan", "australia", "bangladesh", "bhutan", "brunei",
-        "cambodia", "china", "fiji", "hong kong", "india", "indonesia",
-        "japan", "kiribati", "korea", "lao people's democratic republic",
-        "macao", "malaysia", "maldives", "marshall islands",
-        "micronesia", "mongolia", "myanmar", "nauru", "nepal",
-        "new zealand", "pakistan", "papua new guinea", "philippines",
-        "samoa", "singapore", "solomon islands", "sri lanka",
-        "taiwan", "tajikistan", "thailand", "timor-leste", "tonga",
-        "tuvalu", "vanuatu", "viet nam", "vietnam",
-    },
-    "Latin America and the Caribbean": {
+    "Americas": {
         "antigua and barbuda", "argentina", "bahamas", "barbados",
-        "belize", "bolivia", "brazil", "chile", "colombia",
+        "belize", "bolivia", "brazil", "canada", "chile", "colombia",
         "costa rica", "cuba", "dominica", "dominican republic",
         "ecuador", "el salvador", "grenada", "guatemala", "guyana",
         "haiti", "honduras", "jamaica", "mexico", "nicaragua",
         "panama", "paraguay", "peru", "saint kitts and nevis",
         "saint lucia", "saint vincent and the grenadines",
-        "suriname", "trinidad and tobago", "uruguay", "venezuela",
+        "suriname", "trinidad and tobago", "united states",
+        "united states of america", "uruguay", "venezuela",
+    },
+    "Pacific": {
+        "australia", "fiji", "kiribati", "marshall islands",
+        "micronesia", "nauru", "new zealand", "papua new guinea",
+        "samoa", "solomon islands", "tonga", "tuvalu", "vanuatu",
+    },
+    "Europe": {
+        "albania", "belarus", "belgium", "bosnia and herzegovina",
+        "bulgaria", "croatia", "czech republic", "czechia", "denmark",
+        "estonia", "finland", "france", "germany", "greece", "hungary",
+        "iceland", "ireland", "italy", "latvia", "lithuania",
+        "luxembourg", "malta", "montenegro", "netherlands",
+        "north macedonia", "norway", "poland", "portugal", "romania",
+        "serbia", "slovakia", "slovenia", "spain", "sweden",
+        "switzerland", "ukraine", "united kingdom",
     },
 }
 
@@ -312,9 +316,7 @@ def get_development_status(name, classification, hdi_data=None):
 def get_region(name):
     """Return ITC region for a country name.
 
-    Returns one of: Africa, Eastern Europe and Central Asia,
-    Middle East and North Africa, Asia and the Pacific,
-    Latin America and the Caribbean, or 'Other'.
+    Returns one of: Africa, Asia, Americas, Pacific, Europe, or 'Other'.
     """
     name_lower = name.strip().lower()
     lookup = NAME_ALIASES.get(name_lower, name_lower)
@@ -1203,14 +1205,13 @@ def write_region_table(ws, by_region, years, verb, unit_label,
     r = row0
     region_fills = {
         "Africa": PatternFill(fill_type="solid", fgColor="D6E4F0"),
-        "Asia and the Pacific": PatternFill(fill_type="solid", fgColor="E2EFDA"),
-        "Eastern Europe and Central Asia": PatternFill(fill_type="solid", fgColor="FCE4D6"),
-        "Latin America and the Caribbean": PatternFill(fill_type="solid", fgColor="FFF2CC"),
-        "Middle East and North Africa": PatternFill(fill_type="solid", fgColor="E4DFEC"),
+        "Asia": PatternFill(fill_type="solid", fgColor="E2EFDA"),
+        "Americas": PatternFill(fill_type="solid", fgColor="FFF2CC"),
+        "Pacific": PatternFill(fill_type="solid", fgColor="BDD7EE"),
+        "Europe": PatternFill(fill_type="solid", fgColor="FCE4D6"),
         "Other": PatternFill(fill_type="solid", fgColor="F2F2F2"),
     }
-    for region in ["Africa", "Asia and the Pacific", "Eastern Europe and Central Asia",
-                   "Latin America and the Caribbean", "Middle East and North Africa", "Other"]:
+    for region in ["Africa", "Asia", "Americas", "Pacific", "Europe", "Other"]:
         items = by_region.get(region, [])
         if not items:
             continue
@@ -1371,6 +1372,531 @@ def write_rca_table(ws, rca_items, years, row1_label=None, row1_title=None):
     put(ws, r, 1, "RCA < 1.0: Comparative disadvantage", size=9)
 
     set_widths(ws, {"A": 8, "B": 8, "C": 48, "D": 18, "E": 18, "F": 14, "G": 22})
+    ws.freeze_panes = f"A{row0}"
+
+
+# ---------------------------------------------------------------------------
+# Export Concentration Index (HHI) analysis
+# ---------------------------------------------------------------------------
+def compute_concentration_index(kenya_items, kenya_total, world_items, world_total, years):
+    """Compute HHI and concentration ratios for Kenya and World service exports.
+
+    HHI = sum of squared shares across categories.
+    Lower HHI = more diversified.
+    """
+    latest_idx = -1
+
+    def _shares(items, total):
+        vals = []
+        for it in items:
+            v = it["vals"][latest_idx] if it.get("vals") and len(it["vals"]) > abs(latest_idx) else None
+            if v is not None:
+                vals.append(v)
+        t = total["vals"][latest_idx] if total and total.get("vals") and len(total["vals"]) > abs(latest_idx) else None
+        if t is None or t == 0:
+            return []
+        return [v / t for v in vals]
+
+    ke_shares = _shares(kenya_items, kenya_total)
+    w_shares = _shares(world_items, world_total)
+
+    def _metrics(shares):
+        if not shares:
+            return {"hhi": 0, "top3": 0, "top5": 0, "eff_cats": 0}
+        sorted_s = sorted(shares, reverse=True)
+        hhi = sum(s * s for s in sorted_s)
+        top3 = sum(sorted_s[:3])
+        top5 = sum(sorted_s[:5])
+        eff = 1.0 / hhi if hhi > 0 else 0
+        return {"hhi": hhi, "top3": top3, "top5": top5, "eff_cats": eff}
+
+    ke_m = _metrics(ke_shares)
+    w_m = _metrics(w_shares)
+
+    return {
+        "kenya": ke_m,
+        "world": w_m,
+        "kenya_n_categories": len(ke_shares),
+        "world_n_categories": len(w_shares),
+    }
+
+
+def write_concentration_table(ws, concentration, row1_label=None, row1_title=None):
+    """Write export concentration index comparison table."""
+    if row1_label or row1_title:
+        if row1_label:
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+        merge(ws, 1, 2, 1, 4)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        title_rows = 1
+    else:
+        title_rows = 0
+
+    h = 1 + title_rows
+    cols = ["Metric", "Kenya", "World", "Assessment"]
+    for c, hdr in enumerate(cols, 1):
+        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+
+    ke = concentration["kenya"]
+    w = concentration["world"]
+
+    def _assess(ke_val, w_val, lower_is_better=True):
+        if lower_is_better:
+            if ke_val < w_val * 0.8:
+                return "More diversified"
+            elif ke_val > w_val * 1.2:
+                return "More concentrated"
+        else:
+            if ke_val > w_val * 1.2:
+                return "More diversified"
+            elif ke_val < w_val * 0.8:
+                return "More concentrated"
+        return "Similar"
+
+    rows = [
+        ("Herfindahl-Hirschman Index (HHI)", ke["hhi"], w["hhi"],
+         _assess(ke["hhi"], w["hhi"]), "0.000"),
+        ("Top-3 Category Share", ke["top3"], w["top3"],
+         _assess(ke["top3"], w["top3"]), "0.0%"),
+        ("Top-5 Category Share", ke["top5"], w["top5"],
+         _assess(ke["top5"], w["top5"]), "0.0%"),
+        ("Effective No. of Categories (1/HHI)", ke["eff_cats"], w["eff_cats"],
+         _assess(ke["eff_cats"], w["eff_cats"], lower_is_better=False), "0.0"),
+        ("Number of Service Categories", concentration["kenya_n_categories"],
+         concentration["world_n_categories"], "", "0"),
+    ]
+
+    row0 = h + 1
+    for i, (label, ke_val, w_val, assess, fmt) in enumerate(rows):
+        r = row0 + i
+        fill = BAND_FILL if i % 2 == 0 else None
+        put_text(ws, r, 1, label, size=11, fill=fill, align="left")
+        if fmt == "0.0%":
+            put_share(ws, r, 2, ke_val, fill=fill)
+            put_share(ws, r, 3, w_val, fill=fill)
+        elif fmt == "0.000":
+            put(ws, r, 2, ke_val, fill=fill, numfmt="0.000")
+            put(ws, r, 3, w_val, fill=fill, numfmt="0.000")
+        else:
+            put(ws, r, 2, ke_val, fill=fill, numfmt=fmt)
+            put(ws, r, 3, w_val, fill=fill, numfmt=fmt)
+        put_text(ws, r, 4, assess, size=11, fill=fill, align="center")
+
+    r = row0 + len(rows) + 1
+    put(ws, r, 1, "HHI < 0.15: Low concentration (diversified)", size=9)
+    r += 1
+    put(ws, r, 1, "HHI 0.15-0.25: Moderate concentration", size=9)
+    r += 1
+    put(ws, r, 1, "HHI > 0.25: High concentration", size=9)
+
+    set_widths(ws, {"A": 42, "B": 18, "C": 18, "D": 24})
+    ws.freeze_panes = f"A{row0}"
+
+
+def make_concentration_chart(concentration, out_path):
+    """Bar chart comparing Kenya vs World concentration metrics."""
+    metrics = ["HHI", "Top-3 Share", "Top-5 Share"]
+    ke_vals = [concentration["kenya"]["hhi"], concentration["kenya"]["top3"],
+               concentration["kenya"]["top5"]]
+    w_vals = [concentration["world"]["hhi"], concentration["world"]["top3"],
+              concentration["world"]["top5"]]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    x = np.arange(len(metrics))
+    width = 0.35
+    bars1 = ax.bar(x - width/2, ke_vals, width, label="Kenya", color="#2E75B6")
+    bars2 = ax.bar(x + width/2, w_vals, width, label="World", color="#ED7D31")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(metrics, fontsize=10)
+    ax.set_ylabel("Value", fontsize=10)
+    ax.set_title("Kenya vs World: Export Concentration Metrics", fontsize=12, weight="bold")
+    ax.legend(fontsize=10)
+    ax.yaxis.grid(True, linestyle="--", alpha=0.35)
+    ax.set_axisbelow(True)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+
+    for bar in bars1:
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
+                f"{bar.get_height():.3f}", ha="center", va="bottom", fontsize=8)
+    for bar in bars2:
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
+                f"{bar.get_height():.3f}", ha="center", va="bottom", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Diversification Potential analysis
+# ---------------------------------------------------------------------------
+def compute_diversification_potential(kenya_items, kenya_total, world_items, world_total,
+                                       kenya_imp_items, kenya_imp_total, years):
+    """Identify categories where Kenya could expand exports.
+
+    Opportunity score = global_growth * (1 - kenya_global_share) * import_penetration
+    """
+    # Find latest year with actual Kenya category data
+    latest_idx = None
+    for k in range(len(years) - 1, -1, -1):
+        has_data = any(
+            k < len(it["vals"]) and it["vals"][k] is not None
+            for it in kenya_items
+        )
+        if has_data:
+            latest_idx = k
+            break
+    if latest_idx is None:
+        latest_idx = len(years) - 1
+
+    prev_idx = latest_idx - 1 if latest_idx > 0 else None
+
+    world_by_code = {it["code"]: it for it in world_items}
+    kenya_imp_by_code = {it["code"]: it for it in kenya_imp_items}
+
+    ke_total_latest = kenya_total["vals"][latest_idx] if kenya_total and kenya_total.get("vals") and latest_idx < len(kenya_total["vals"]) else None
+    ke_total_prev = kenya_total["vals"][prev_idx] if kenya_total and kenya_total.get("vals") and prev_idx is not None and prev_idx < len(kenya_total["vals"]) else None
+    w_total_latest = world_total["vals"][latest_idx] if world_total and world_total.get("vals") and latest_idx < len(world_total["vals"]) else None
+    w_total_prev = world_total["vals"][prev_idx] if world_total and world_total.get("vals") and prev_idx is not None and prev_idx < len(world_total["vals"]) else None
+
+    results = []
+    for kit in kenya_items:
+        code = kit["code"]
+        if code.upper() == "S" or kit.get("label", "").lower() == "all services":
+            continue
+
+        wit = world_by_code.get(code)
+        kit_imp = kenya_imp_by_code.get(code)
+
+        ke_val = kit["vals"][latest_idx] if kit.get("vals") and len(kit["vals"]) > abs(latest_idx) else None
+        w_val = wit["vals"][latest_idx] if wit and wit.get("vals") and len(wit["vals"]) > abs(latest_idx) else None
+
+        if ke_val is None or w_val is None or w_total_latest is None or w_total_latest == 0:
+            continue
+
+        ke_global_share = ke_val / w_total_latest
+
+        ke_val_prev = kit["vals"][prev_idx] if kit.get("vals") and prev_idx is not None and prev_idx < len(kit["vals"]) else None
+        w_val_prev = wit["vals"][prev_idx] if wit and wit.get("vals") and prev_idx is not None and prev_idx < len(wit["vals"]) else None
+
+        if ke_val_prev is not None and ke_val_prev > 0:
+            ke_growth = (ke_val - ke_val_prev) / ke_val_prev
+        else:
+            ke_growth = None
+
+        if w_val_prev is not None and w_val_prev > 0:
+            w_growth = (w_val - w_val_prev) / w_val_prev
+        else:
+            w_growth = None
+
+        imp_penetration = 0
+        if kit_imp and kenya_imp_total:
+            imp_val = kit_imp["vals"][latest_idx] if kit_imp.get("vals") and len(kit_imp["vals"]) > abs(latest_idx) else None
+            imp_total = kenya_imp_total["vals"][latest_idx] if kenya_imp_total.get("vals") and len(kenya_imp_total["vals"]) > abs(latest_idx) else None
+            if imp_val is not None and imp_total is not None and imp_total > 0:
+                imp_penetration = imp_val / imp_total
+
+        growth_factor = max(0, w_growth) if w_growth is not None else 0
+        gap_factor = 1.0 - ke_global_share
+        opportunity_score = growth_factor * gap_factor * (1 + imp_penetration)
+
+        results.append({
+            "code": code,
+            "label": kit.get("label", ""),
+            "ke_val": ke_val,
+            "ke_global_share": ke_global_share,
+            "ke_growth": ke_growth,
+            "w_growth": w_growth,
+            "imp_penetration": imp_penetration,
+            "opportunity_score": opportunity_score,
+        })
+
+    results.sort(key=lambda x: x["opportunity_score"], reverse=True)
+    for i, it in enumerate(results, 1):
+        it["rank"] = i
+    return results
+
+
+def write_diversification_table(ws, items, row1_label=None, row1_title=None):
+    """Write diversification potential table."""
+    if row1_label or row1_title:
+        if row1_label:
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+        merge(ws, 1, 2, 1, 7)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        title_rows = 1
+    else:
+        title_rows = 0
+
+    h = 1 + title_rows
+    cols = ["Rank", "Code", "Service Category", "Kenya Export\n(USD Mn)",
+            "Kenya Global\nShare %", "Global\nGrowth %", "Import\nShare %",
+            "Opportunity\nScore"]
+    for c, hdr in enumerate(cols, 1):
+        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+
+    HIGH_FILL = PatternFill(fill_type="solid", fgColor="C6EFCE")
+    MED_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
+    LOW_FILL = PatternFill(fill_type="solid", fgColor="F2F2F2")
+
+    row0 = h + 1
+    for i, it in enumerate(items[:15]):
+        r = row0 + i
+        score = it.get("opportunity_score", 0)
+        if score >= 0.05:
+            fill = HIGH_FILL
+        elif score >= 0.02:
+            fill = MED_FILL
+        else:
+            fill = LOW_FILL
+
+        put_text(ws, r, 1, it.get("rank", ""), size=11, fill=fill)
+        put_text(ws, r, 2, str(it.get("code", "")), size=11, fill=fill)
+        put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True, align="left")
+        put_val(ws, r, 4, it.get("ke_val"), fill=fill)
+        put_share(ws, r, 5, it.get("ke_global_share"), fill=fill)
+        put_share(ws, r, 6, it.get("w_growth"), fill=fill)
+        put_share(ws, r, 7, it.get("imp_penetration"), fill=fill)
+        put(ws, r, 8, round(score, 4), fill=fill, numfmt="0.0000")
+
+    r = row0 + min(len(items), 15) + 1
+    put(ws, r, 1, "Higher opportunity score = greater diversification potential", size=9)
+
+    set_widths(ws, {"A": 7, "B": 8, "C": 42, "D": 16, "E": 16, "F": 14, "G": 14, "H": 14})
+    ws.freeze_panes = f"A{row0}"
+
+
+def make_diversification_chart(items, out_path):
+    """Horizontal bar chart of top diversification opportunities."""
+    top = [it for it in items[:10] if it.get("opportunity_score", 0) > 0]
+    if not top:
+        return
+    top.sort(key=lambda x: x["opportunity_score"])
+
+    labels = [it["label"][:35] for it in top]
+    scores = [it["opportunity_score"] for it in top]
+
+    fig, ax = plt.subplots(figsize=(10, max(4, len(top) * 0.5)))
+    colors = ["#C6EFCE" if s >= 0.05 else "#E2EFDA" if s >= 0.02 else "#F2F2F2" for s in scores]
+    bars = ax.barh(labels, scores, color=colors, edgecolor="#808080", linewidth=0.5)
+    ax.set_xlabel("Opportunity Score", fontsize=10)
+    ax.set_title("Kenya's Top Diversification Opportunities in Services", fontsize=12, weight="bold")
+    for bar, val in zip(bars, scores):
+        ax.text(bar.get_width() + 0.001, bar.get_y() + bar.get_height() / 2,
+                f"{val:.4f}", va="center", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Value Composition Trajectory analysis
+# ---------------------------------------------------------------------------
+HIGH_VALUE_CODES = {"7", "8", "9", "10"}   # Financial, IP, ICT, Other business
+TRADITIONAL_CODES = {"3", "4", "5"}         # Transport, Travel, Construction
+
+
+def compute_value_trajectory(kenya_items, kenya_total, years):
+    """Group categories into high-value, traditional, other and compute shares over time."""
+    results = {"years": years, "high_value": [], "traditional": [], "other": []}
+    n = len(years)
+
+    hv_totals = [0.0] * n
+    trad_totals = [0.0] * n
+    other_totals = [0.0] * n
+
+    for kit in kenya_items:
+        code = kit.get("code", "")
+        for k in range(n):
+            v = kit["vals"][k] if kit.get("vals") and k < len(kit["vals"]) and kit["vals"][k] is not None else 0
+            if code in HIGH_VALUE_CODES:
+                hv_totals[k] += v
+            elif code in TRADITIONAL_CODES:
+                trad_totals[k] += v
+            else:
+                other_totals[k] += v
+
+    total_vals = []
+    for k in range(n):
+        t = kenya_total["vals"][k] if kenya_total and kenya_total.get("vals") and k < len(kenya_total["vals"]) and kenya_total["vals"][k] is not None else 0
+        total_vals.append(t)
+
+    for k in range(n):
+        t = total_vals[k] if total_vals[k] > 0 else 1
+        results["high_value"].append(hv_totals[k] / t)
+        results["traditional"].append(trad_totals[k] / t)
+        results["other"].append(other_totals[k] / t)
+        results.setdefault("abs_high_value", []).append(hv_totals[k])
+        results.setdefault("abs_traditional", []).append(trad_totals[k])
+        results.setdefault("abs_other", []).append(other_totals[k])
+        results.setdefault("abs_total", []).append(total_vals[k])
+
+    return results
+
+
+def write_value_trajectory_table(ws, trajectory, row1_label=None, row1_title=None):
+    """Write value composition trajectory table."""
+    years = trajectory["years"]
+    if row1_label or row1_title:
+        if row1_label:
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+        merge(ws, 1, 2, 1, 3 + len(years))
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        title_rows = 1
+    else:
+        title_rows = 0
+
+    h = 1 + title_rows
+    cols = ["Category Group", "Service Codes"] + [str(y) for y in years]
+    for c, hdr in enumerate(cols, 1):
+        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+
+    HV_FILL = PatternFill(fill_type="solid", fgColor="D6E4F0")
+    TRAD_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
+    OTHER_FILL = PatternFill(fill_type="solid", fgColor="F2F2F2")
+
+    row0 = h + 1
+    groups = [
+        ("High-Value Services", "7, 8, 9, 10", trajectory["high_value"], HV_FILL,
+         "Financial, IP, ICT, Other business"),
+        ("Traditional Services", "3, 4, 5", trajectory["traditional"], TRAD_FILL,
+         "Transport, Travel, Construction"),
+        ("Other Services", "1, 2, 6, 11, 12, SN", trajectory["other"], OTHER_FILL,
+         "Manufacturing, Maintenance, Insurance, Personal, Government"),
+    ]
+
+    for i, (label, codes, shares, fill, desc) in enumerate(groups):
+        r = row0 + i
+        put_text(ws, r, 1, label, size=11, fill=fill, align="left", bold=True)
+        put_text(ws, r, 2, codes, size=9, fill=fill, align="center")
+        for k, sh in enumerate(shares):
+            put_share(ws, r, 3 + k, sh, fill=fill)
+
+    r = row0 + len(groups)
+    put_text(ws, r, 1, "Total Exports (USD Mn)", size=11, bold=True, align="left")
+    put_text(ws, r, 2, "", size=9)
+    for k, t in enumerate(trajectory.get("abs_total", [])):
+        put_val(ws, r, 3 + k, t)
+
+    r += 1
+    put_text(ws, r, 1, "High-Value Exports (USD Mn)", size=11, align="left")
+    put_text(ws, r, 2, "", size=9)
+    for k, v in enumerate(trajectory.get("abs_high_value", [])):
+        put_val(ws, r, 3 + k, v, fill=HV_FILL)
+
+    r += 1
+    put_text(ws, r, 1, "Traditional Exports (USD Mn)", size=11, align="left")
+    put_text(ws, r, 2, "", size=9)
+    for k, v in enumerate(trajectory.get("abs_traditional", [])):
+        put_val(ws, r, 3 + k, v, fill=TRAD_FILL)
+
+    widths = {"A": 26, "B": 18}
+    for k in range(len(years)):
+        widths[get_column_letter(3 + k)] = 14
+    set_widths(ws, widths)
+    ws.freeze_panes = f"A{row0}"
+
+
+def make_value_trajectory_chart(trajectory, out_path):
+    """Stacked area chart of value composition over time."""
+    years = trajectory["years"]
+    hv = [s * 100 for s in trajectory["high_value"]]
+    trad = [s * 100 for s in trajectory["traditional"]]
+    other = [s * 100 for s in trajectory["other"]]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.stackplot(years, hv, trad, other,
+                 labels=["High-Value Services", "Traditional Services", "Other Services"],
+                 colors=["#2E75B6", "#70AD47", "#A5A5A5"], alpha=0.85)
+    ax.set_xlabel("Year", fontsize=10)
+    ax.set_ylabel("Share of Total Exports (%)", fontsize=10)
+    ax.set_title("Kenya's Service Export Composition Over Time", fontsize=12, weight="bold")
+    ax.legend(loc="upper right", fontsize=9)
+    ax.set_ylim(0, 100)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
+    ax.yaxis.grid(True, linestyle="--", alpha=0.35)
+    ax.set_axisbelow(True)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Kenya vs Peer comparison
+# ---------------------------------------------------------------------------
+PEER_COUNTRIES = {
+    "African Peers": ["south africa", "egypt", "mauritius", "rwanda"],
+    "Aspirational Peers": ["singapore", "malaysia"],
+}
+
+
+def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_title=None):
+    """Write Kenya vs peer countries total service exports comparison."""
+    if row1_label or row1_title:
+        if row1_label:
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+        merge(ws, 1, 2, 1, 6)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        title_rows = 1
+    else:
+        title_rows = 0
+
+    h = 1 + title_rows
+    cols = ["Group", "Country", f"Exports\n({years_exp[-1]}) USD Bn",
+            "Global\nShare %", "Growth\n(YoY) %", "Rank\n(Global)"]
+    for c, hdr in enumerate(cols, 1):
+        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+
+    items_by_name = {it["label"].strip().lower(): it for it in items_exp}
+
+    row0 = h + 1
+    r = row0
+
+    KENYA_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
+    GROUP_FILL = PatternFill(fill_type="solid", fgColor="D6E4F0")
+    PEER_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
+
+    for group_name, peers in PEER_COUNTRIES.items():
+        group_start = r
+        for peer in peers:
+            it = items_by_name.get(peer)
+            if it is None:
+                continue
+            fill = PEER_FILL
+            put_text(ws, r, 1, group_name if r == group_start else "", size=11, fill=fill,
+                     align="left", bold=(r == group_start))
+            put_text(ws, r, 2, it.get("label", ""), size=11, fill=fill, align="left")
+            val = it["vals"][-1] if it.get("vals") and it["vals"][-1] is not None else None
+            put_val(ws, r, 3, val, fill=fill)
+            put_share(ws, r, 4, it.get("share"), fill=fill)
+            growth = it.get("growth")
+            if growth is not None:
+                put_share(ws, r, 5, growth, fill=fill)
+            else:
+                put_share(ws, r, 5, None, fill=fill)
+            put_text(ws, r, 6, it.get("rank", ""), size=11, fill=fill)
+            r += 1
+
+    ke_it = items_by_name.get("kenya")
+    if ke_it:
+        put_text(ws, r, 1, "Focus Country", size=11, fill=KENYA_FILL, align="left", bold=True)
+        put_text(ws, r, 2, ke_it.get("label", ""), size=11, fill=KENYA_FILL, align="left", bold=True)
+        val = ke_it["vals"][-1] if ke_it.get("vals") and ke_it["vals"][-1] is not None else None
+        put_val(ws, r, 3, val, fill=KENYA_FILL, bold=True)
+        put_share(ws, r, 4, ke_it.get("share"), fill=KENYA_FILL, bold=True)
+        growth = ke_it.get("growth")
+        if growth is not None:
+            put_share(ws, r, 5, growth, fill=KENYA_FILL, bold=True)
+        else:
+            put_share(ws, r, 5, None, fill=KENYA_FILL, bold=True)
+        put_text(ws, r, 6, ke_it.get("rank", ""), size=11, fill=KENYA_FILL, bold=True)
+        r += 1
+
+    set_widths(ws, {"A": 20, "B": 28, "C": 20, "D": 14, "E": 14, "F": 12})
     ws.freeze_panes = f"A{row0}"
 
 
@@ -1802,6 +2328,75 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     except Exception as e:
         print(f"Warning: Could not create RCA chart: {e}")
 
+    # ---- Table 10: Export Concentration Index (HHI) -----------------------
+    concentration = compute_concentration_index(
+        items_kexp, total_kexp, items_gexp, total_gexp, years_kexp)
+
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 10"
+    cache = []
+    write_concentration_table(ws, concentration,
+                              row1_label="Table 10:",
+                              row1_title="Export Concentration Index (HHI)")
+    out["t10_conc"] = os.path.join(out_dir, "Table 10 Export Concentration Index.xlsx")
+    _finalize(ws, out["t10_conc"], cache)
+
+    # Figure 7: Concentration comparison chart
+    conc_chart_path = os.path.join(out_dir, "Figure 7 Concentration Comparison.png")
+    try:
+        make_concentration_chart(concentration, conc_chart_path)
+        out["conc_chart"] = conc_chart_path
+    except Exception as e:
+        print(f"Warning: Could not create concentration chart: {e}")
+
+    # ---- Table 11: Diversification Potential -----------------------------
+    div_items = compute_diversification_potential(
+        items_kexp, total_kexp, items_gexp, total_gexp,
+        items_kimp, total_kimp, years_kexp)
+
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 11"
+    cache = []
+    write_diversification_table(ws, div_items,
+                                row1_label="Table 11:",
+                                row1_title="Diversification Potential in Services")
+    out["t11_div"] = os.path.join(out_dir, "Table 11 Diversification Potential.xlsx")
+    _finalize(ws, out["t11_div"], cache)
+
+    # Figure 8: Diversification chart
+    div_chart_path = os.path.join(out_dir, "Figure 8 Diversification Opportunities.png")
+    try:
+        make_diversification_chart(div_items, div_chart_path)
+        out["div_chart"] = div_chart_path
+    except Exception as e:
+        print(f"Warning: Could not create diversification chart: {e}")
+
+    # ---- Table 12: Value Composition Trajectory --------------------------
+    trajectory = compute_value_trajectory(items_kexp, total_kexp, years_kexp)
+
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 12"
+    cache = []
+    write_value_trajectory_table(ws, trajectory,
+                                 row1_label="Table 12:",
+                                 row1_title="Service Export Composition Trajectory")
+    out["t12_traj"] = os.path.join(out_dir, "Table 12 Value Composition Trajectory.xlsx")
+    _finalize(ws, out["t12_traj"], cache)
+
+    # Figure 9: Value composition chart
+    traj_chart_path = os.path.join(out_dir, "Figure 9 Value Composition Trajectory.png")
+    try:
+        make_value_trajectory_chart(trajectory, traj_chart_path)
+        out["traj_chart"] = traj_chart_path
+    except Exception as e:
+        print(f"Warning: Could not create trajectory chart: {e}")
+
+    # ---- Table 13: Kenya vs Peer Total Exports ---------------------------
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 13"
+    cache = []
+    write_peer_comparison_table(ws, items_exp, years_exp,
+                                row1_label="Table 13:",
+                                row1_title="Kenya vs Peer Countries: Service Exports")
+    out["t13_peer"] = os.path.join(out_dir, "Table 13 Kenya vs Peers Service Exports.xlsx")
+    _finalize(ws, out["t13_peer"], cache)
+
     # Figure 1: Kenya Services Balance
     bal_path = os.path.join(out_dir, "Figure 1 Services Balance.xlsx")
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Figure 1"
@@ -1855,7 +2450,8 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     cache_all = {}
 
     for s in ("Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6",
-              "Table 7", "Table 8", "Table 9", "Figure 1"):
+              "Table 7", "Table 8", "Table 9", "Table 10", "Table 11", "Table 12",
+              "Table 13", "Figure 1"):
         wb_all.create_sheet(s)
 
     ws = wb_all["Table 1"]; c = []
@@ -1923,6 +2519,30 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                     row1_label="Table 9:",
                     row1_title="Kenya's Revealed Comparative Advantage (RCA) in Services")
     cache_all["Table 9"] = dict(c)
+
+    ws = wb_all["Table 10"]; c = []
+    write_concentration_table(ws, concentration,
+                              row1_label="Table 10:",
+                              row1_title="Export Concentration Index (HHI)")
+    cache_all["Table 10"] = dict(c)
+
+    ws = wb_all["Table 11"]; c = []
+    write_diversification_table(ws, div_items,
+                                row1_label="Table 11:",
+                                row1_title="Diversification Potential in Services")
+    cache_all["Table 11"] = dict(c)
+
+    ws = wb_all["Table 12"]; c = []
+    write_value_trajectory_table(ws, trajectory,
+                                 row1_label="Table 12:",
+                                 row1_title="Service Export Composition Trajectory")
+    cache_all["Table 12"] = dict(c)
+
+    ws = wb_all["Table 13"]; c = []
+    write_peer_comparison_table(ws, items_exp, years_exp,
+                                row1_label="Table 13:",
+                                row1_title="Kenya vs Peer Countries: Service Exports")
+    cache_all["Table 13"] = dict(c)
 
     ws = wb_all["Figure 1"]; c = []
     write_balance(ws, bal_years, exports_full, imports_full, cache=c)

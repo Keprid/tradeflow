@@ -70,13 +70,13 @@ def find_service_excel_files(excel_dir):
         if not low.endswith((".xlsx", ".xlsm")):
             continue
         path = os.path.join(excel_dir, fname)
-        if "table 1" in low and "service" in low:
+        if "table 1 " in low and "service" in low and "table 10" not in low and "table 11" not in low and "table 12" not in low and "table 13" not in low:
             found["table1"] = path
-        elif "table 2" in low and "service" in low:
+        elif "table 2 " in low and "service" in low and "table 20" not in low:
             found["table2"] = path
-        elif "table 3" in low and "kenya" in low:
+        elif "table 3 " in low and "kenya" in low and "table 30" not in low:
             found["table3"] = path
-        elif "table 4" in low and "kenya" in low:
+        elif "table 4 " in low and "kenya" in low and "table 40" not in low:
             found["table4"] = path
         elif "balance" in low or "figure 1" in low:
             found["balance"] = path
@@ -87,13 +87,13 @@ def find_service_excel_files(excel_dir):
             if not low.endswith((".xlsx", ".xlsm")):
                 continue
             path = os.path.join(excel_dir, fname)
-            if "table 1" in low:
+            if "table 1 " in low and "table 10" not in low and "table 11" not in low and "table 12" not in low and "table 13" not in low:
                 found.setdefault("table1", path)
-            elif "table 2" in low:
+            elif "table 2 " in low and "table 20" not in low:
                 found.setdefault("table2", path)
-            elif "table 3" in low:
+            elif "table 3 " in low and "table 30" not in low:
                 found.setdefault("table3", path)
-            elif "table 4" in low:
+            elif "table 4 " in low and "table 40" not in low:
                 found.setdefault("table4", path)
             elif "balance" in low or "figure 1" in low:
                 found.setdefault("balance", path)
@@ -691,6 +691,102 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         b.add_table_caption("Figure 8: Kenya's Service Export RCA by Category")
         b.add_figure(rca_chart)
         b.add_source()
+    b.page_break()
+
+    # ============================== SECTION 3.7 =============================
+    b.add_heading("3.7 Export Concentration Analysis")
+
+    # Table 10: Concentration Index
+    b.add_table_caption(f"Table 10: Export Concentration Index (HHI)")
+    t10_path = os.path.join(excel_dir, "Table 10 Export Concentration Index.xlsx")
+    if os.path.exists(t10_path):
+        b.add_table_from_excel(t10_path, "Table 10")
+    else:
+        b.add_para("[Table 10 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+    b.add_para(
+        "The Herfindahl-Hirschman Index (HHI) measures export concentration across service "
+        "categories. Lower values indicate greater diversification. An HHI below 0.15 is considered "
+        "low concentration (well-diversified), 0.15-0.25 moderate, and above 0.25 high concentration.",
+        italic=True)
+    b.page_break()
+
+    # Figure 7: Concentration chart
+    conc_chart = os.path.join(excel_dir, "Figure 7 Concentration Comparison.png")
+    if os.path.exists(conc_chart):
+        b.add_table_caption("Figure 9: Kenya vs World Export Concentration Metrics")
+        b.add_figure(conc_chart)
+        b.add_source()
+    b.page_break()
+
+    # ============================== SECTION 3.8 =============================
+    b.add_heading("3.8 Diversification Potential")
+
+    # Table 11: Diversification Potential
+    b.add_table_caption(f"Table 11: Diversification Potential in Services")
+    t11_path = os.path.join(excel_dir, "Table 11 Diversification Potential.xlsx")
+    if os.path.exists(t11_path):
+        b.add_table_from_excel(t11_path, "Table 11")
+    else:
+        b.add_para("[Table 11 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+    b.add_para(
+        "Opportunity scores combine global growth rates, Kenya's current global share, and "
+        "import penetration to identify categories where Kenya has the greatest potential to "
+        "expand service exports. Higher scores indicate greater diversification opportunity.",
+        italic=True)
+    b.page_break()
+
+    # Figure 8: Diversification chart
+    div_chart = os.path.join(excel_dir, "Figure 8 Diversification Opportunities.png")
+    if os.path.exists(div_chart):
+        b.add_table_caption("Figure 10: Kenya's Top Diversification Opportunities")
+        b.add_figure(div_chart)
+        b.add_source()
+    b.page_break()
+
+    # ============================== SECTION 3.9 =============================
+    b.add_heading("3.9 Service Export Composition Trajectory")
+
+    # Table 12: Value Composition Trajectory
+    b.add_table_caption(f"Table 12: Service Export Composition Trajectory")
+    t12_path = os.path.join(excel_dir, "Table 12 Value Composition Trajectory.xlsx")
+    if os.path.exists(t12_path):
+        b.add_table_from_excel(t12_path, "Table 12")
+    else:
+        b.add_para("[Table 12 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+    b.add_para(
+        "Service categories are grouped into High-Value (Financial services, IP charges, ICT, "
+        "Other business services), Traditional (Transport, Travel, Construction), and Other "
+        "services. The trajectory shows Kenya's structural transformation in services exports.",
+        italic=True)
+    b.page_break()
+
+    # Figure 9: Value composition chart
+    traj_chart = os.path.join(excel_dir, "Figure 9 Value Composition Trajectory.png")
+    if os.path.exists(traj_chart):
+        b.add_table_caption("Figure 11: Kenya's Service Export Composition Over Time")
+        b.add_figure(traj_chart)
+        b.add_source()
+    b.page_break()
+
+    # ============================== SECTION 3.10 ============================
+    b.add_heading("3.10 Kenya vs Peer Countries: Service Exports")
+
+    # Table 13: Peer Comparison
+    b.add_table_caption(f"Table 13: Kenya vs Peer Countries - Service Exports")
+    t13_path = os.path.join(excel_dir, "Table 13 Kenya vs Peers Service Exports.xlsx")
+    if os.path.exists(t13_path):
+        b.add_table_from_excel(t13_path, "Table 13")
+    else:
+        b.add_para("[Table 13 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+    b.add_para(
+        "Kenya's total service exports are compared with African peers (South Africa, Egypt, "
+        "Mauritius, Rwanda) and aspirational peers (Singapore, Malaysia) to benchmark Kenya's "
+        "position in global services trade.",
+        italic=True)
     b.page_break()
 
     # ============================== SECTION 4 ===============================
