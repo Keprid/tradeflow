@@ -403,7 +403,7 @@ def api_configs():
             "id": p.stem,
             "name": cfg["country"]["name"],
             "title": cfg["country"]["title"],
-            "year": cfg["report"]["year"],
+            "year": cfg["report"].get("year", 0),
         })
     return out
 
