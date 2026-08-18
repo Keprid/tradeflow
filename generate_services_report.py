@@ -666,6 +666,33 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         b.add_source()
     b.page_break()
 
+    # ============================== SECTION 3.6 =============================
+    b.add_heading("3.6 Kenya's Revealed Comparative Advantage in Services")
+
+    # Table 9: Kenya's RCA
+    b.add_table_caption(f"Table 9: Kenya's Revealed Comparative Advantage (RCA) in Services ({Y})")
+    t9_path = os.path.join(excel_dir, "Table 9 Kenya Services RCA.xlsx")
+    if os.path.exists(t9_path):
+        b.add_table_from_excel(t9_path, "Table 9")
+    else:
+        b.add_para("[Table 9 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+    b.add_para(
+        "Revealed Comparative Advantage (RCA) is computed using the Balassa Index: "
+        "RCA = (Kenya's share of exports in category i) / (World's share of exports in category i). "
+        "RCA > 2.5 indicates strong comparative advantage; RCA 1.0-2.5 indicates moderate advantage; "
+        "RCA < 1.0 indicates comparative disadvantage.",
+        italic=True)
+    b.page_break()
+
+    # Figure 6: RCA chart
+    rca_chart = os.path.join(excel_dir, "Figure 6 Kenya Services RCA.png")
+    if os.path.exists(rca_chart):
+        b.add_table_caption("Figure 8: Kenya's Service Export RCA by Category")
+        b.add_figure(rca_chart)
+        b.add_source()
+    b.page_break()
+
     # ============================== SECTION 4 ===============================
     b.add_heading(f"4. {c['name']}'s Services Sector")
     b.add_para(

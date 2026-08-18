@@ -1418,6 +1418,23 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_bullet(narr["fig3_note"])
     b.page_break()
 
+    # 3.5 Kenya's export composition and market alignment
+    b.add_heading(f"3.5 Kenya's Export Composition and Market Alignment with {c['name']}", level=2)
+    t7_path = os.path.join(excel_dir, "Table 7 Kenya Export Composition and Market Alignment.xlsx")
+    if os.path.exists(t7_path):
+        b.add_table_caption(f"Table 7: Kenya's Export Products – Market Alignment with {c['name']} in {Y}")
+        b.add_table_from_excel(t7_path, "Table 7")
+    else:
+        b.add_para("[Table 7 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+    b.add_para(
+        f"This table compares Kenya's export products to {c['name']} against "
+        f"{c['name']}'s overall import demand. Products where Kenya has a significant "
+        "share of its own exports AND the partner has high import demand represent "
+        "the strongest market alignment opportunities.",
+        italic=True)
+    b.page_break()
+
     # ============================== SECTION 4 ===============================
     b.add_heading(f"4. KENYA'S EXPORT POTENTIAL ON {c['title']} MARKET")
     ep = cfg.get("export_potential", {}) or {}

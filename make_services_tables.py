@@ -1234,6 +1234,172 @@ def write_region_table(ws, by_region, years, verb, unit_label,
 
 
 # ---------------------------------------------------------------------------
+# RCA (Revealed Comparative Advantage) analysis
+# ---------------------------------------------------------------------------
+def compute_services_rca(kenya_items, kenya_total, world_items, world_total, years):
+    """Compute Balassa-style RCA for each service category.
+
+    RCA_i = (Kenya_cat_i / Kenya_total) / (World_cat_i / World_total)
+
+    Uses the latest year where Kenya has per-category data (not None).
+    Returns list of dicts sorted by RCA (desc), each with:
+      code, label, kenya_val, world_val, kenya_share, world_share, rca, rca_values
+    """
+    # Index world items by code
+    world_by_code = {}
+    for it in world_items:
+        world_by_code[it["code"]] = it
+
+    # Find the latest year with actual Kenya category data
+    best_year_idx = None
+    for k in range(len(years) - 1, -1, -1):
+        has_data = any(
+            k < len(it["vals"]) and it["vals"][k] is not None
+            for it in kenya_items
+        )
+        if has_data:
+            best_year_idx = k
+            break
+    if best_year_idx is None:
+        best_year_idx = len(years) - 1
+
+    results = []
+    for kit in kenya_items:
+        code = kit["code"]
+        wit = world_by_code.get(code)
+        if wit is None:
+            continue
+
+        entry = {
+            "code": code,
+            "label": kit["label"],
+            "rca_values": [],
+        }
+
+        for k in range(len(years)):
+            kv = kit["vals"][k] if k < len(kit["vals"]) else None
+            kt = kenya_total["vals"][k] if kenya_total and k < len(kenya_total["vals"]) else None
+            wv = wit["vals"][k] if k < len(wit["vals"]) else None
+            wt = world_total["vals"][k] if world_total and k < len(world_total["vals"]) else None
+
+            if kv is not None and kt is not None and kt != 0 and wv is not None and wt is not None and wt != 0:
+                k_share = kv / kt
+                w_share = wv / wt
+                rca = k_share / w_share if w_share != 0 else None
+            else:
+                k_share = None
+                w_share = None
+                rca = None
+
+            if k == best_year_idx:
+                entry["kenya_val"] = kv
+                entry["world_val"] = wv
+                entry["kenya_share"] = k_share
+                entry["world_share"] = w_share
+                entry["rca"] = rca
+            entry["rca_values"].append(rca)
+
+        entry["best_year"] = years[best_year_idx]
+        results.append(entry)
+
+    results.sort(key=lambda x: x["rca"] if x["rca"] is not None else -1, reverse=True)
+    for i, it in enumerate(results, 1):
+        it["rank"] = i
+    return results, years[best_year_idx]
+
+
+def write_rca_table(ws, rca_items, years, row1_label=None, row1_title=None):
+    """Write an RCA analysis table.
+
+    Columns: Rank | Code | Service Category | Kenya Share % | World Share % | RCA | Status
+    """
+    latest = years[-1] if years else ""
+
+    if row1_label or row1_title:
+        if row1_label:
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+        merge(ws, 1, 2, 1, 7)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        title_rows = 1
+    else:
+        title_rows = 0
+
+    h = 1 + title_rows
+    cols = ["Rank", "Code", f"Service Category",
+            f"Kenya Share ({latest}) %", f"World Share ({latest}) %",
+            f"RCA ({latest})", "Classification"]
+    for c, hdr in enumerate(cols, 1):
+        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
+                 wrap=True)
+
+    STRONG_FILL = PatternFill(fill_type="solid", fgColor="C6EFCE")
+    MODERATE_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
+    DISADVANTAGE_FILL = PatternFill(fill_type="solid", fgColor="FCE4D6")
+
+    row0 = h + 1
+    for i, it in enumerate(rca_items):
+        r = row0 + i
+        rca_val = it.get("rca")
+        if rca_val is not None and rca_val >= 2.5:
+            fill = STRONG_FILL
+            status = "Strong Advantage"
+        elif rca_val is not None and rca_val >= 1.0:
+            fill = MODERATE_FILL
+            status = "Moderate Advantage"
+        else:
+            fill = DISADVANTAGE_FILL
+            status = "Disadvantage"
+
+        put_text(ws, r, 1, it.get("rank", ""), size=11, fill=fill)
+        put_text(ws, r, 2, str(it.get("code", "")), size=11, fill=fill)
+        put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True,
+                 align="left")
+        put_share(ws, r, 4, it.get("kenya_share"), fill=fill)
+        put_share(ws, r, 5, it.get("world_share"), fill=fill)
+        if rca_val is not None:
+            put(ws, r, 6, round(rca_val, 2), fill=fill, numfmt="0.00")
+        else:
+            put(ws, r, 6, "", fill=fill)
+        put_text(ws, r, 7, status, size=11, fill=fill, align="center")
+
+    # Legend row
+    r = row0 + len(rca_items) + 1
+    put(ws, r, 1, "RCA > 2.5: Strong comparative advantage", size=9)
+    r += 1
+    put(ws, r, 1, "RCA 1.0-2.5: Moderate comparative advantage", size=9)
+    r += 1
+    put(ws, r, 1, "RCA < 1.0: Comparative disadvantage", size=9)
+
+    set_widths(ws, {"A": 8, "B": 8, "C": 48, "D": 18, "E": 18, "F": 14, "G": 22})
+    ws.freeze_panes = f"A{row0}"
+
+
+def make_rca_radar_chart(rca_items, years, out_path):
+    """Create a horizontal bar chart of RCA values for service categories."""
+    items = [it for it in rca_items if it.get("rca") is not None]
+    items.sort(key=lambda x: x["rca"])
+
+    labels = [it["label"][:35] for it in items]
+    rca_vals = [it["rca"] for it in items]
+
+    fig, ax = plt.subplots(figsize=(10, max(4, len(items) * 0.5)))
+    colors = ["#C6EFCE" if v >= 2.5 else "#E2EFDA" if v >= 1.0 else "#FCE4D6"
+              for v in rca_vals]
+    bars = ax.barh(labels, rca_vals, color=colors, edgecolor="#808080", linewidth=0.5)
+    ax.axvline(x=1.0, color="#808080", linestyle="--", linewidth=0.8, label="RCA = 1.0")
+    ax.axvline(x=2.5, color="#2E75B6", linestyle="--", linewidth=0.8, label="RCA = 2.5")
+    ax.set_xlabel("Revealed Comparative Advantage (RCA)", fontsize=10)
+    ax.set_title("Kenya's Service Export RCA by Category", fontsize=12, weight="bold")
+    ax.legend(fontsize=8)
+    for bar, val in zip(bars, rca_vals):
+        ax.text(bar.get_width() + 0.05, bar.get_y() + bar.get_height() / 2,
+                f"{val:.2f}", va="center", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
 # Chart generators
 # ---------------------------------------------------------------------------
 def make_pie_chart(exports_by_category, years, out_path):
@@ -1491,6 +1657,10 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     exports_full += [None] * (n_bal - len(exports_full))
     imports_full += [None] * (n_bal - len(imports_full))
 
+    # ---- RCA: Kenya services revealed comparative advantage ---------------
+    rca_items, rca_year = compute_services_rca(
+        items_kexp, total_kexp, items_gexp, total_gexp, years_gexp)
+
     # ---- Development status classification ------------------------------
     classification = load_development_classification()
     calc_growth_rates(items_exp, years_exp)
@@ -1615,6 +1785,23 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     out["t8"] = os.path.join(out_dir, "Table 8 Service Importers by Region.xlsx")
     _finalize(ws, out["t8"], cache)
 
+    # Table 9: Kenya's Revealed Comparative Advantage in Services
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 9"
+    cache = []
+    write_rca_table(ws, rca_items, [rca_year],
+                    row1_label="Table 9:",
+                    row1_title="Kenya's Revealed Comparative Advantage (RCA) in Services")
+    out["t9_rca"] = os.path.join(out_dir, "Table 9 Kenya Services RCA.xlsx")
+    _finalize(ws, out["t9_rca"], cache)
+
+    # Figure 6: RCA bar chart
+    rca_chart_path = os.path.join(out_dir, "Figure 6 Kenya Services RCA.png")
+    try:
+        make_rca_radar_chart(rca_items, [rca_year], rca_chart_path)
+        out["rca_chart"] = rca_chart_path
+    except Exception as e:
+        print(f"Warning: Could not create RCA chart: {e}")
+
     # Figure 1: Kenya Services Balance
     bal_path = os.path.join(out_dir, "Figure 1 Services Balance.xlsx")
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Figure 1"
@@ -1668,7 +1855,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     cache_all = {}
 
     for s in ("Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6",
-              "Table 7", "Table 8", "Figure 1"):
+              "Table 7", "Table 8", "Table 9", "Figure 1"):
         wb_all.create_sheet(s)
 
     ws = wb_all["Table 1"]; c = []
@@ -1730,6 +1917,12 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                        row1_label="Table 8:",
                        row1_title="Top Service Importers by Region")
     cache_all["Table 8"] = dict(c)
+
+    ws = wb_all["Table 9"]; c = []
+    write_rca_table(ws, rca_items, [rca_year],
+                    row1_label="Table 9:",
+                    row1_title="Kenya's Revealed Comparative Advantage (RCA) in Services")
+    cache_all["Table 9"] = dict(c)
 
     ws = wb_all["Figure 1"]; c = []
     write_balance(ws, bal_years, exports_full, imports_full, cache=c)

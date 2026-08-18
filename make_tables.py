@@ -866,6 +866,116 @@ def merge_balance_series(existing, years, exports, imports):
 
 
 # ---------------------------------------------------------------------------
+# Bilateral export composition analysis
+# ---------------------------------------------------------------------------
+def compute_bilateral_alignment(kenya_items, kenya_total, partner_items,
+                                partner_total, years):
+    """Compare Kenya's export products to the partner vs partner's import demand.
+
+    Matches by HS code. For each Kenya product, computes:
+    - Kenya's share of its total exports
+    - Partner's import share for the same product
+    - Alignment score: how well Kenya's exports match partner's import demand
+    """
+    partner_by_code = {}
+    for it in partner_items:
+        partner_by_code[it["code"]] = it
+
+    latest = -1
+    results = []
+    for kit in kenya_items:
+        code = kit["code"]
+        pit = partner_by_code.get(code)
+        if pit is None:
+            continue
+
+        kv = kit["vals"][latest] if kit["vals"] and len(kit["vals"]) > abs(latest) else None
+        kt = kenya_total["vals"][latest] if kenya_total and kenya_total["vals"] else None
+        pv = pit["vals"][latest] if pit["vals"] and len(pit["vals"]) > abs(latest) else None
+        pt = partner_total["vals"][latest] if partner_total and partner_total["vals"] else None
+
+        if kv is None or kt is None or kt == 0:
+            continue
+        k_share = kv / kt
+
+        p_share = None
+        if pv is not None and pt is not None and pt != 0:
+            p_share = pv / pt
+
+        # Alignment: how relevant is this product to the partner's imports
+        alignment = p_share if p_share is not None else 0
+
+        # Growth
+        growth = None
+        if (len(kit["vals"]) >= 2 and kit["vals"][-1] is not None
+                and kit["vals"][-2] is not None and kit["vals"][-2] != 0):
+            growth = (kit["vals"][-1] - kit["vals"][-2]) / abs(kit["vals"][-2])
+
+        results.append({
+            "code": code,
+            "label": kit["label"],
+            "kenya_val": kv,
+            "kenya_share": k_share,
+            "partner_val": pv,
+            "partner_share": p_share,
+            "alignment": alignment,
+            "growth": growth,
+        })
+
+    results.sort(key=lambda x: x["kenya_val"] if x["kenya_val"] is not None else -1,
+                 reverse=True)
+    results = results[:30]
+    for i, it in enumerate(results, 1):
+        it["rank"] = i
+    return results
+
+
+def write_bilateral_table(ws, items, years, krep, kpartner,
+                          row1_label=None, row1_title=None):
+    """Write Kenya's bilateral export composition + market alignment table.
+
+    Columns: Rank | Code | Product | Kenya Value | Kenya Share | Partner Import Share | Growth %
+    """
+    latest = years[-1] if years else ""
+
+    if row1_label or row1_title:
+        if row1_label:
+            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+        merge(ws, 1, 2, 1, 7)
+        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        title_rows = 1
+    else:
+        title_rows = 0
+
+    h = 1 + title_rows
+    cols = ["Rank", "HS Code", "Product",
+            f"Kenya Value USD M ({latest})",
+            f"Kenya Share (%)",
+            f"{kpartner} Import Share (%)",
+            "Annual Growth %"]
+    for c, hdr in enumerate(cols, 1):
+        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
+                 wrap=True)
+
+    row0 = h + 1
+    for it in items:
+        r = row0 + it["rank"] - 1
+        put_text(ws, r, 1, it["rank"], size=11)
+        put_text(ws, r, 2, str(it["code"]), size=11)
+        put_text(ws, r, 3, it["label"], size=11, wrap=True, align="left")
+        put_val(ws, r, 4, it["kenya_val"], fmt="0.0")
+        put_share(ws, r, 5, it["kenya_share"])
+        put_share(ws, r, 6, it["partner_share"])
+        if it["growth"] is not None:
+            put_share(ws, r, 7, it["growth"])
+        else:
+            put_share(ws, r, 7, None)
+
+    set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})
+    ws.freeze_panes = f"A{row0}"
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def generate_tables(excel_dir, out_dir, top_n):
@@ -903,6 +1013,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     rows, ycols, years, labels = parse_source(files["table2"], years=table_years)
     total, items = extract_products(rows, ycols)
     d2 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
+    p_total_raw = total   # partner import total (raw, USD Thousand)
+    p_items_raw = items   # partner import items (raw, USD Thousand)
 
     # ---- Table 4: export products ---------------------------------------
     rows, ycols, years, labels = parse_source(files["table4"], years=table_years)
@@ -915,11 +1027,17 @@ def generate_tables(excel_dir, out_dir, top_n):
     krep = labels["reporter"] or "Kenya"
     kpartner = labels["partner"]
     d5 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
+    k_total_raw = total   # Kenya export total (raw, USD Thousand)
+    k_items_raw = items   # Kenya export items (raw, USD Thousand)
 
     # ---- Table 6: Kenya imports from partner ----------------------------
     rows, ycols, years, labels = parse_source(files["table6"], years=table_years)
     total, items = extract_kenya(rows, ycols)
     d6 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
+
+    # ---- Table 7: Kenya's export composition + market alignment -----------
+    bilateral_items = compute_bilateral_alignment(
+        k_items_raw, k_total_raw, p_items_raw, p_total_raw, years)
 
     rep_possessive = rep if rep.endswith("s") else rep + "'s"
 
@@ -988,6 +1106,16 @@ def generate_tables(excel_dir, out_dir, top_n):
     out["t6"] = os.path.join(out_dir, f"Table 6 {krep} Top Imports from {kpartner}.xlsx")
     _finalize(ws, out["t6"], cache)
 
+    # Table 7: Kenya's export composition + market alignment
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 7"
+    cache = []
+    write_bilateral_table(ws, bilateral_items, years, krep, kpartner,
+                          row1_label="Table 7:",
+                          row1_title=f"{krep}'s Export Composition and Market Alignment with {kpartner}")
+    set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})
+    out["t7"] = os.path.join(out_dir, f"Table 7 {krep} Export Composition and Market Alignment.xlsx")
+    _finalize(ws, out["t7"], cache)
+
     # ---- Figure 1: trade balance derived from Table 5 / Table 6 ----------
     # The balance uses the full common year run (up to 10 years) even though
     # Tables 1-6 only show the last five years.
@@ -1012,7 +1140,7 @@ def generate_tables(excel_dir, out_dir, top_n):
     wb_all = openpyxl.Workbook()
     wb_all.remove(wb_all.active)
     for s in ("Table 1", "Table 2", "Table 3", "Table 4", "Table 5",
-              "Table 6", "Figure 1"):
+              "Table 6", "Table 7", "Figure 1"):
         wb_all.create_sheet(s)
     cache_all = {}
     widths_mkt = {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
@@ -1052,6 +1180,12 @@ def generate_tables(excel_dir, out_dir, top_n):
         row1_label="Table 6",
         row1_title=f"{krep}'s Top imports from {kpartner}")
     set_widths(ws, widths_prd); cache_all["Table 6"] = dict(c)
+    ws = wb_all["Table 7"]; c = []
+    write_bilateral_table(ws, bilateral_items, years, krep, kpartner,
+                          row1_label="Table 7:",
+                          row1_title=f"{krep}'s Export Composition and Market Alignment with {kpartner}")
+    set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})
+    cache_all["Table 7"] = dict(c)
     ws = wb_all["Figure 1"]; c = []
     write_balance(ws, krep, kpartner, years_m, exports_m, imports_m, cache=c, skip_chart=True)
     set_widths(ws, BALANCE_WIDTHS)
@@ -1087,7 +1221,7 @@ def main():
 
     print("[1/2] Read raw source files from :", os.path.abspath(args.excel_dir))
     print("[2/2] Wrote tables for           :", rep, "<-> Kenya")
-    for key in ("t1", "t2", "t3", "t4", "t5", "t6", "balance", "all"):
+    for key in ("t1", "t2", "t3", "t4", "t5", "t6", "t7", "balance", "all"):
         print(f"      - {os.path.basename(out[key])}")
     print()
     print("The Figure 1 file is derived from the Table 5 and Table 6 totals")
