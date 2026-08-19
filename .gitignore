@@ -12,6 +12,7 @@ sample_data/
 uae/
 
 *.xlsx
+!services/CLASS_2026_07_15.xlsx
 !config_template.json
 
 *.docx

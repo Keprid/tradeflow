@@ -99,6 +99,7 @@ LDC_GRADUATED = {
 
 # ITC name -> HDI / World Bank name aliases (for mismatches between data sources)
 NAME_ALIASES = {
+    "united states of america": "united states",
     "czech republic": "czechia",
     "hong kong, china": "hong kong",
     "macao, china": "macao sar, china",
