@@ -151,17 +151,24 @@ def find_source_files(excel_dir):
     missing = [k for k in ("table1", "table2", "table3", "table4", "table5", "table6")
                if k not in found]
     if missing:
+        expected = {
+            "table1": "imports-from-world-by-exporter",
+            "table2": "imports-from-world-by-product",
+            "table3": "exports-to-world-by-importer",
+            "table4": "exports-to-world-by-product",
+            "table5": "kenyas-exports-to-*-by-product",
+            "table6": "kenyas-imports-from-*-by-product",
+        }
+        missing_detail = []
+        for k in missing:
+            missing_detail.append(f"  - {k}: expected filename containing '{expected[k]}'")
         sys.exit(
-            "[ERROR] Could not find all six raw source files in '%s'.\n"
-            "Missing: %s\n"
-            "Expected names like:\n"
-            "  <country>s-imports-from-world-by-exporter_all.xlsx\n"
-            "  <country>s-imports-from-world-by-product_all.xlsx\n"
-            "  <country>s-exports-to-world-by-importer_all.xlsx\n"
-            "  <country>s-exports-to-world-by-product_all.xlsx\n"
-            "  kenyas-exports-to-<country>-by-product_all.xlsx\n"
-            "  kenyas-imports-from-<country>-by-product_all.xlsx"
-            % (excel_dir, ", ".join(missing)))
+            "[ERROR] Missing required source files in '%s'.\n"
+            "Found %d file(s): %s\n"
+            "Missing %d required file(s):\n%s"
+            % (excel_dir, len(found),
+               ", ".join(f"{k}={v}" for k, v in sorted(found.items())),
+               len(missing), "\n".join(missing_detail)))
     return {k: os.path.join(excel_dir, v) for k, v in found.items()}
 
 

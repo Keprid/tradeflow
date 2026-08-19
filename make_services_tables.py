@@ -394,22 +394,39 @@ def _inject_cached_values(path, cache):
             zout.writestr(n, blobs[n])
 
 
-def _finalize(ws, path, cache):
-    """Save workbook and inject cached formula values.
-
-    ``cache`` is a list of (cell_ref, value) pairs for this worksheet.
-    """
+def _save_workbook(wb, path, cache):
+    """Save the workbook, patch in cached formula values, and fall back to
+    plain values if anything goes wrong so the pipeline never breaks."""
     try:
-        ws.parent.calculation.fullCalcOnLoad = True
+        wb.calculation.fullCalcOnLoad = True
     except Exception:
         pass
-    ws.parent.save(path)
-    if cache:
-        try:
-            _inject_cached_values(path, {ws.title: {r: v for r, v in cache
-                                                     if v is not None}})
-        except Exception:
-            pass
+    wb.save(path)
+    if not cache:
+        return
+    try:
+        _inject_cached_values(path, {wb.sheetnames[0]: {r: v for r, v in cache
+                                                          if v is not None}})
+        wb2 = openpyxl.load_workbook(path, data_only=True)
+        ws2 = wb2.active
+        bad = []
+        for ref, val in cache:
+            if val is not None and ws2[ref].value is None:
+                bad.append(ref)
+        if bad:
+            raise RuntimeError(f"cached values missing for {bad}")
+    except Exception:
+        wb3 = openpyxl.load_workbook(path)
+        ws3 = wb3.active
+        for ref, val in cache:
+            if val is not None:
+                ws3[ref] = val
+        wb3.save(path)
+
+
+def _finalize(ws, path, cache):
+    """Convenience wrapper for _save_workbook with a single worksheet."""
+    _save_workbook(ws.parent, path, cache)
 
 
 # ---------------------------------------------------------------------------
@@ -489,19 +506,24 @@ def find_service_files(excel_dir):
                  "kenya_exports", "kenya_imports")
     missing = [k for k in required if k not in found]
     if missing:
+        expected = {
+            "exported_services": "List_of_exported_services_for_the_selected_service",
+            "exporters": "List_of_exporters_for_the_selected_service",
+            "imported_services": "List_of_imported_services_for_the_selected_service",
+            "importers": "List_of_importers_for_the_selected_service",
+            "kenya_exports": "List_of_services_exported_by_Kenya",
+            "kenya_imports": "List_of_services_imported_by_Kenya",
+        }
+        missing_detail = []
+        for k in missing:
+            missing_detail.append(f"  - {k}: expected filename containing '{expected[k]}'")
         sys.exit(
-            "[ERROR] Could not find all six required raw service source files in '%s'.\n"
-            "Missing: %s\n"
-            "Expected names containing keywords like:\n"
-            "  List_of_exported_services_for_the_selected_service\n"
-            "  List_of_exporters_for_the_selected_service\n"
-            "  List_of_imported_services_for_the_selected_service\n"
-            "  List_of_importers_for_the_selected_service\n"
-            "  List_of_services_exported_by_Kenya\n"
-            "  List_of_services_imported_by_Kenya\n"
-            "Optional (balance is always computed from export − import):\n"
-            "  List_of_services_commercialized_by_Kenya"
-            % (excel_dir, ", ".join(missing)))
+            "[ERROR] Missing required service source files in '%s'.\n"
+            "Found %d file(s): %s\n"
+            "Missing %d required file(s):\n%s"
+            % (excel_dir, len(found),
+               ", ".join(f"{k}={v}" for k, v in sorted(found.items())),
+               len(missing), "\n".join(missing_detail)))
     return {k: os.path.join(excel_dir, v) for k, v in found.items()}
 
 
@@ -685,6 +707,55 @@ def calc_growth_rates(items, years):
             it["growth"] = (vals[-1] - vals[-2]) / abs(vals[-2])
         else:
             it["growth"] = None
+    # Compute 5-year CAGR
+    for it in items:
+        cagr = calc_cagr(it.get("vals", []), years)
+        it["cagr"] = cagr
+
+
+def calc_cagr(vals, years):
+    """Compute Compound Annual Growth Rate from a value series.
+
+    CAGR = (end/start)^(1/n) - 1 where n is the number of year intervals.
+    Returns None if computation is not possible.
+    """
+    if not vals or not years or len(vals) < 2:
+        return None
+    # Find first and last non-None values
+    start_val = None
+    end_val = None
+    for v in vals:
+        if v is not None and v > 0:
+            if start_val is None:
+                start_val = v
+            end_val = v
+    if start_val is None or end_val is None or start_val == 0:
+        return None
+    n_years = years[-1] - years[0]
+    if n_years <= 0:
+        return None
+    return (end_val / start_val) ** (1.0 / n_years) - 1
+
+
+def calc_growth_stability(vals):
+    """Compute coefficient of variation of year-over-year growth rates.
+
+    Lower value = more stable growth. Returns None if insufficient data.
+    """
+    if not vals or len(vals) < 3:
+        return None
+    growths = []
+    for i in range(1, len(vals)):
+        if vals[i] is not None and vals[i-1] is not None and vals[i-1] > 0:
+            growths.append((vals[i] - vals[i-1]) / vals[i-1])
+    if len(growths) < 2:
+        return None
+    mean_g = sum(growths) / len(growths)
+    if mean_g == 0:
+        return None
+    var = sum((g - mean_g) ** 2 for g in growths) / len(growths)
+    std = var ** 0.5
+    return abs(std / mean_g) if mean_g != 0 else None
 
 
 def rank_by_dev_status(items, years, classification, top_n=10):
@@ -813,6 +884,13 @@ def put(ws, row, col, value, **kw):
     return cell
 
 
+def _put_formula(ws, cache, row, col, formula, cached, bold=False, fill=None,
+                 numfmt=None):
+    """Write an Excel formula and register the numeric result for caching."""
+    put(ws, row, col, formula, bold=bold, fill=fill, numfmt=numfmt)
+    cache.append((_cell_ref(row, col), cached))
+
+
 def put_text(ws, row, col, text, bold=False, size=11, fill=None, wrap=False,
              align="left"):
     return put(ws, row, col, text, bold=bold, size=size, fill=fill,
@@ -844,6 +922,7 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
 
     Used for Tables 1 (exporters) and 2 (importers).
     """
+    cache = []
     years = data["years"]
     n = len(years)
     latest = years[-1]
@@ -898,19 +977,22 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
             put_val(ws, r, 3 + k, it["vals"][k] if k < len(it["vals"]) else None, fill=fill)
         t_latest = total["vals"][-1] if total and len(total["vals"]) >= n else None
         val_latest = it["vals"][-1] if it["vals"] else None
-        if val_latest is not None and t_latest is not None:
-            put_share(ws, r, share_col, share(val_latest, t_latest), fill=fill)
-        else:
-            put_share(ws, r, share_col, None, fill=fill)
+        cached_share = share(val_latest, t_latest)
+        formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
+        _put_formula(ws, cache, r, share_col, formula, cached_share, fill=fill)
 
     # All other countries
     r = r_ao
     put_text(ws, r, 2, "All other countries", size=11, wrap=True)
     ao_vals = data["all_other"]["vals"]
     for k in range(n):
-        put_val(ws, r, 3 + k, ao_vals[k] if k < len(ao_vals) else None)
+        col_letter = get_column_letter(3 + k)
+        formula = f"={col_letter}{r_world}-SUM({col_letter}{r_first}:{col_letter}{r_last})"
+        cached_val = ao_vals[k] if k < len(ao_vals) else None
+        _put_formula(ws, cache, r, 3 + k, formula, cached_val)
     ao_share_val = data["all_other"]["share"]
-    put_share(ws, r, share_col, ao_share_val)
+    ao_formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
+    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val)
 
     # World total
     r = r_world
@@ -926,6 +1008,8 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
     except Exception:
         pass
 
+    return cache
+
 
 def write_product_table(ws, data, hdr, unit_row,
                         row1_label=None, row1_title=None):
@@ -933,6 +1017,7 @@ def write_product_table(ws, data, hdr, unit_row,
 
     Used for Tables 3 (Kenya exports) and 4 (Kenya imports).
     """
+    cache = []
     years = data["years"]
     n = len(years)
     latest = years[-1]
@@ -985,18 +1070,22 @@ def write_product_table(ws, data, hdr, unit_row,
             put_val(ws, r, 4 + k, it["vals"][k] if k < len(it["vals"]) else None)
         t_latest = total["vals"][-1] if total and len(total["vals"]) >= n else None
         val_latest = it["vals"][-1] if it["vals"] else None
-        if val_latest is not None and t_latest is not None:
-            put_share(ws, r, share_col, share(val_latest, t_latest))
-        else:
-            put_share(ws, r, share_col, None)
+        cached_share = share(val_latest, t_latest)
+        formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
+        _put_formula(ws, cache, r, share_col, formula, cached_share)
 
     # All other
     r = r_ao
     put_text(ws, r, 3, "All other services", size=11, wrap=True)
     ao_vals = data["all_other"]["vals"]
     for k in range(n):
-        put_val(ws, r, 4 + k, ao_vals[k] if k < len(ao_vals) else None)
-    put_share(ws, r, share_col, data["all_other"]["share"])
+        col_letter = get_column_letter(4 + k)
+        formula = f"={col_letter}{r_total}-SUM({col_letter}{r_first}:{col_letter}{r_last})"
+        cached_val = ao_vals[k] if k < len(ao_vals) else None
+        _put_formula(ws, cache, r, 4 + k, formula, cached_val)
+    ao_share_val = data["all_other"]["share"]
+    ao_formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
+    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val)
 
     # Total
     r = r_total
@@ -1014,6 +1103,8 @@ def write_product_table(ws, data, hdr, unit_row,
         ws.auto_filter.ref = f"A{h}:{_cell_ref(r_total, share_col)}"
     except Exception:
         pass
+
+    return cache
 
 
 def write_balance(ws, years, exports, imports, cache=None):
@@ -1083,7 +1174,7 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
 
     h = 1 + title_rows
     cols = ["Development Status", f"Rank in {latest}", verb, "Region",
-            f"Value in USD Billion ({latest})", "Annual Growth %"]
+            f"Value in USD Billion ({latest})", "Annual Growth %", "5Y CAGR %"]
     for c, hdr in enumerate(cols, 1):
         put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
                  wrap=True)
@@ -1111,6 +1202,7 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
                 put_share(ws, r, 6, growth, fill=fill)
             else:
                 put_share(ws, r, 6, None, fill=fill)
+            put_share(ws, r, 7, it.get("cagr"), fill=fill)
             r += 1
         # Write status label in first row and merge down for the group
         put_text(ws, group_start, 1, status, bold=True, size=11, fill=fill,
@@ -1118,7 +1210,7 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
         if r - group_start > 1:
             merge(ws, group_start, 1, r - 1, 1)
 
-    set_widths(ws, {"A": 18, "B": 14, "C": 32, "D": 28, "E": 22, "F": 18})
+    set_widths(ws, {"A": 18, "B": 14, "C": 32, "D": 28, "E": 22, "F": 18, "G": 14})
     ws.freeze_panes = f"A{row0}"
 
 
@@ -1141,7 +1233,7 @@ def write_region_table(ws, by_region, years, verb, unit_label,
 
     h = 1 + title_rows
     cols = ["Region", f"Rank in {latest}", verb,
-            f"Value in USD Billion ({latest})", "Annual Growth %"]
+            f"Value in USD Billion ({latest})", "Annual Growth %", "5Y CAGR %"]
     for c, hdr in enumerate(cols, 1):
         put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
                  wrap=True)
@@ -1173,9 +1265,10 @@ def write_region_table(ws, by_region, years, verb, unit_label,
                 put_share(ws, r, 5, growth, fill=fill)
             else:
                 put_share(ws, r, 5, None, fill=fill)
+            put_share(ws, r, 6, it.get("cagr"), fill=fill)
             r += 1
 
-    set_widths(ws, {"A": 28, "B": 14, "C": 32, "D": 22, "E": 18})
+    set_widths(ws, {"A": 28, "B": 14, "C": 32, "D": 22, "E": 18, "F": 14})
     ws.freeze_panes = f"A{row0}"
 
 
@@ -1792,7 +1885,7 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
 
     h = 1 + title_rows
     cols = ["Group", "Country", f"Exports\n({years_exp[-1]}) USD Bn",
-            "Global\nShare %", "Growth\n(YoY) %", "Rank\n(Global)"]
+            "Global\nShare %", "Growth\n(YoY) %", "5Y CAGR\n%", "Rank\n(Global)"]
     for c, hdr in enumerate(cols, 1):
         put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
 
@@ -1823,7 +1916,8 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
                 put_share(ws, r, 5, growth, fill=fill)
             else:
                 put_share(ws, r, 5, None, fill=fill)
-            put_text(ws, r, 6, it.get("rank", ""), size=11, fill=fill)
+            put_share(ws, r, 7, it.get("cagr"), fill=fill)
+            put_text(ws, r, 8, it.get("rank", ""), size=11, fill=fill)
             r += 1
 
     ke_it = items_by_name.get("kenya")
@@ -1838,10 +1932,11 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
             put_share(ws, r, 5, growth, fill=KENYA_FILL, bold=True)
         else:
             put_share(ws, r, 5, None, fill=KENYA_FILL, bold=True)
-        put_text(ws, r, 6, ke_it.get("rank", ""), size=11, fill=KENYA_FILL, bold=True)
+        put_share(ws, r, 7, ke_it.get("cagr"), fill=KENYA_FILL, bold=True)
+        put_text(ws, r, 8, ke_it.get("rank", ""), size=11, fill=KENYA_FILL, bold=True)
         r += 1
 
-    set_widths(ws, {"A": 20, "B": 28, "C": 20, "D": 14, "E": 14, "F": 12})
+    set_widths(ws, {"A": 20, "B": 28, "C": 20, "D": 14, "E": 14, "F": 14, "G": 12})
     ws.freeze_panes = f"A{row0}"
 
 
@@ -2166,8 +2261,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
 
     # Table 1
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 1"
-    cache = []
-    write_market_table(ws, d1, "Exporters",
+    cache = write_market_table(ws, d1, "Exporters",
                        f"List of Top Service Exporters\nValue in USD Billion",
                        unit_row=True, kenya_highlight=False,
                        row1_label="Table 1:",
@@ -2179,8 +2273,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
 
     # Table 2
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 2"
-    cache = []
-    write_market_table(ws, d2, "Importers",
+    cache = write_market_table(ws, d2, "Importers",
                        f"List of Top Service Importers\nValue in USD Billion",
                        unit_row=True, kenya_highlight=False,
                        row1_label="Table 2:",
@@ -2192,8 +2285,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
 
     # Table 3
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 3"
-    cache = []
-    write_product_table(ws, d3,
+    cache = write_product_table(ws, d3,
                         "Kenya's Service Exports by Category\nValue in USD Million",
                         unit_row="Value in USD Million",
                         row1_label="Table 3",
@@ -2205,8 +2297,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
 
     # Table 4
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 4"
-    cache = []
-    write_product_table(ws, d4,
+    cache = write_product_table(ws, d4,
                         "Kenya's Service Imports by Category\nValue in USD Million",
                         unit_row="Value in USD Million",
                         row1_label="Table 4",
@@ -2399,32 +2490,28 @@ def generate_service_tables(excel_dir, out_dir, top_n):
               "Table 13", "Figure 1"):
         wb_all.create_sheet(s)
 
-    ws = wb_all["Table 1"]; c = []
-    write_market_table(ws, d1, "Exporters",
+    ws = wb_all["Table 1"]; c = write_market_table(ws, d1, "Exporters",
                        "List of Top Service Exporters\nValue in USD Billion",
                        unit_row=True, kenya_highlight=False,
                        row1_label="Table 1:",
                        row1_title="Top Global Service Exporters")
     set_widths(ws, widths_mkt); cache_all["Table 1"] = dict(c)
 
-    ws = wb_all["Table 2"]; c = []
-    write_market_table(ws, d2, "Importers",
+    ws = wb_all["Table 2"]; c = write_market_table(ws, d2, "Importers",
                        "List of Top Service Importers\nValue in USD Billion",
                        unit_row=True, kenya_highlight=False,
                        row1_label="Table 2:",
                        row1_title="Top Global Service Importers")
     set_widths(ws, widths_mkt); cache_all["Table 2"] = dict(c)
 
-    ws = wb_all["Table 3"]; c = []
-    write_product_table(ws, d3,
+    ws = wb_all["Table 3"]; c = write_product_table(ws, d3,
                         "Kenya's Service Exports by Category\nValue in USD Million",
                         unit_row="Value in USD Million",
                         row1_label="Table 3",
                         row1_title="Kenya's Service Exports by Category")
     set_widths(ws, widths_prd); cache_all["Table 3"] = dict(c)
 
-    ws = wb_all["Table 4"]; c = []
-    write_product_table(ws, d4,
+    ws = wb_all["Table 4"]; c = write_product_table(ws, d4,
                         "Kenya's Service Imports by Category\nValue in USD Million",
                         unit_row="Value in USD Million",
                         row1_label="Table 4",

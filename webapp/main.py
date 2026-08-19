@@ -415,16 +415,24 @@ def _detect_mode(uploads_dir, report_type="goods"):
     if report_type == "services":
         if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
             return "services_raw", ""
-        return None, ("Could not recognise the services upload set. Upload the seven "
-                      "raw ITC services files (or a zip of them).")
+        uploaded = ", ".join(sorted(names))
+        kw_list = ", ".join(SERVICE_RAW_KEYWORDS)
+        return None, (
+            f"Could not recognise the services upload set.\n"
+            f"Uploaded files: {uploaded}\n"
+            f"Expected filenames containing any of: {kw_list}")
     if any(any(k in n for k in RAW_KEYWORDS) for n in names):
         return "raw", ""
     if sum(1 for n in names if re.search(r"table\s*\d", n)) >= 6:
         return "ready", ""
-    return None, ("Could not recognise the upload set. Upload either the six "
-                  "raw ITC downloads (or a zip of them), or the seven "
-                  "ready-made 'Table 1 .. 6' files plus 'Figure 1 Trade "
-                  "Balance.xlsx'.")
+    uploaded = ", ".join(sorted(names))
+    raw_kw = ", ".join(RAW_KEYWORDS)
+    return None, (
+        f"Could not recognise the upload set.\n"
+        f"Uploaded files: {uploaded}\n"
+        f"Expected raw filenames containing any of: {raw_kw}\n"
+        f"Or ready-made files named 'Table 1' through 'Table 6' plus "
+        f"'Figure 1 Trade Balance'.")
 
 
 def _detect_reporter(excel_dir):

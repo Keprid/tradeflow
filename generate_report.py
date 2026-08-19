@@ -193,7 +193,26 @@ def find_excel_files(excel_dir):
                ("table1", "table2", "table3", "table4", "table5", "table6", "balance")
                if k not in found]
     if missing:
-        sys.exit(f"[ERROR] Missing Excel file(s) in '{excel_dir}': {', '.join(missing)}")
+        expected = {
+            "table1": "Table 1",
+            "table2": "Table 2",
+            "table3": "Table 3",
+            "table4": "Table 4",
+            "table5": "Table 5",
+            "table6": "Table 6",
+            "balance": "Balance or Figure 1",
+        }
+        missing_detail = []
+        for k in missing:
+            missing_detail.append(f"  - {k}: expected filename containing '{expected[k]}'")
+        found_names = {k: os.path.basename(v) for k, v in found.items()}
+        sys.exit(
+            "[ERROR] Missing Excel file(s) in '%s'.\n"
+            "Found %d file(s): %s\n"
+            "Missing %d required file(s):\n%s"
+            % (excel_dir, len(found),
+               ", ".join(f"{k}={v}" for k, v in sorted(found_names.items())),
+               len(missing), "\n".join(missing_detail)))
     return found
 
 
