@@ -9,7 +9,8 @@ trade with any partner country into the six "Table 1 .. Table 6" workbooks
 that the report generator (`generate_report.py`) expects.
 
 Raw source files expected in ``--excel-dir`` (located by keywords in the
-filename, case-insensitive):
+filename, case-insensitive; all Excel formats accepted: .xls, .xlsx, .xlsm,
+.xlsb, .csv):
 
     <country>s-imports-from-world-by-exporter_all.xlsx   -> Table 1  (import source markets)
     <country>s-imports-from-world-by-product_all.xlsx    -> Table 2  (import products)
@@ -56,6 +57,8 @@ import openpyxl
 from lxml import etree
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+
+from xlsx_compat import convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
 # Constants / styles
@@ -130,9 +133,9 @@ def find_source_files(excel_dir):
     """Locate the six raw source files by filename keywords."""
     found = {}
     for fname in sorted(os.listdir(excel_dir)):
-        low = fname.lower()
-        if not low.endswith((".xlsx", ".xlsm")):
+        if not is_spreadsheet(fname):
             continue
+        low = fname.lower()
         if "imports-from-world" in low and "by-exporter" in low:
             found["table1"] = fname
         elif "imports-from-world" in low and "by-product" in low:
@@ -173,7 +176,7 @@ def parse_source(path, years=None):
     one report must share the same year set); otherwise the years are chosen
     automatically via _pick_years.
     """
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    wb, _used = convert_to_xlsx(path)
     ws = wb[wb.sheetnames[0]]
     grid = list(ws.iter_rows(values_only=True))
     wb.close()

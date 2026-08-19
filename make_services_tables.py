@@ -9,7 +9,8 @@ into styled Table 1-4 + Figure 1 workbooks that the services report
 generator (``generate_services_report.py``) expects.
 
 Raw source files expected in ``--excel-dir`` (located by keywords in the
-filename, case-insensitive):
+filename, case-insensitive; all Excel formats accepted: .xls, .xlsx, .xlsm,
+.xlsb, .csv):
 
     List_of_exported_services_for_the_selected_service_*.xls   -> global service exports by category
     List_of_exporters_for_the_selected_service_*.xls           -> global top exporters by country
@@ -40,7 +41,7 @@ from lxml import etree
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from html.parser import HTMLParser
+from xlsx_compat import HTMLTableParser, convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
 # Constants / styles (shared with make_tables.py)
@@ -337,58 +338,7 @@ def _dev_fill(status):
 # ---------------------------------------------------------------------------
 # HTML table parser (for ITC .xls files that are actually HTML)
 # ---------------------------------------------------------------------------
-class _HTMLTableParser(HTMLParser):
-    """Extract all <table> elements from an HTML file."""
-
-    def __init__(self):
-        super().__init__()
-        self.tables = []
-        self._cur = None
-        self._row = None
-        self._data = []
-        self._in_cell = False
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "table":
-            self._cur = []
-        elif tag == "tr" and self._cur is not None:
-            self._row = []
-        elif tag in ("td", "th") and self._row is not None:
-            self._data = []
-            self._in_cell = True
-
-    def handle_endtag(self, tag):
-        if tag == "table" and self._cur is not None:
-            if self._cur:
-                self.tables.append(self._cur)
-            self._cur = None
-        elif tag == "tr" and self._row is not None:
-            if self._row:
-                self._cur.append(self._row)
-            self._row = None
-        elif tag in ("td", "th") and self._in_cell:
-            self._row.append(" ".join(self._data).replace("\xa0", " ").strip())
-            self._data = []
-            self._in_cell = False
-
-    def handle_data(self, data):
-        if self._in_cell:
-            self._data.append(data)
-
-
-def _read_html(path):
-    """Read an HTML file, returning the parsed table list."""
-    for enc in ("utf-8-sig", "utf-8", "latin-1"):
-        try:
-            text = open(path, encoding=enc).read()
-            break
-        except (UnicodeDecodeError, OSError):
-            continue
-    else:
-        text = open(path, encoding="latin-1", errors="replace").read()
-    parser = _HTMLTableParser()
-    parser.feed(text)
-    return parser.tables
+# _HTMLTableParser and _read_html moved to xlsx_compat.py
 
 
 # ---------------------------------------------------------------------------
@@ -515,9 +465,9 @@ def find_service_files(excel_dir):
     """
     found = {}
     for fname in sorted(os.listdir(excel_dir)):
-        low = fname.lower()
-        if not low.endswith((".xls", ".xlsx", ".xlsm")):
+        if not is_spreadsheet(fname):
             continue
+        low = fname.lower()
         if "exported_services_for" in low or "list_of_exported_services" in low:
             found["exported_services"] = fname
         elif "exporters_for" in low or "list_of_exporters_for" in low:
@@ -560,28 +510,18 @@ def find_service_files(excel_dir):
 def parse_service_html_table(path):
     """Parse an ITC services file.
 
-    Handles both HTML-in-.xls format and proper .xlsx/.xlsm files.
+    Handles .xlsx, .xlsm, .xls (HTML-wrapped or binary), .xlsb, and .csv.
 
     Returns (data_table, years) where data_table is the data
     as a list of row-lists, and years is the list of year ints
     found in the header.
     """
-    ext = os.path.splitext(path)[1].lower()
-
-    if ext in (".xlsx", ".xlsm"):
-        # Proper Excel file — read directly with openpyxl
-        wb = openpyxl.load_workbook(path, data_only=True)
-        ws = wb.active
-        data_table = []
-        for row in ws.iter_rows(values_only=True):
-            data_table.append([str(c) if c is not None else "" for c in row])
-        wb.close()
-    else:
-        # .xls — assume HTML-wrapped (ITC default format)
-        tables = _read_html(path)
-        if not tables:
-            raise ValueError(f"No HTML tables found in {path}")
-        data_table = max(tables, key=len)
+    wb, used_path = convert_to_xlsx(path)
+    ws = wb.active
+    data_table = []
+    for row in ws.iter_rows(values_only=True):
+        data_table.append([str(c) if c is not None else "" for c in row])
+    wb.close()
 
     if len(data_table) < 2:
         raise ValueError(f"Data table too small in {path}")
