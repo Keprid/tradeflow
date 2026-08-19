@@ -508,7 +508,11 @@ def _header_year_indices(header_row):
 # File detection
 # ---------------------------------------------------------------------------
 def find_service_files(excel_dir):
-    """Locate the seven raw service source files by filename keywords."""
+    """Locate the six required raw service source files by filename keywords.
+
+    The ``kenya_commercialized`` file is optional; when present its data is
+    loaded but the balance is always computed from export − import totals.
+    """
     found = {}
     for fname in sorted(os.listdir(excel_dir)):
         low = fname.lower()
@@ -529,14 +533,13 @@ def find_service_files(excel_dir):
         elif "services_commercialized_by" in low:
             found["kenya_commercialized"] = fname
 
-    missing = [k for k in ("exported_services", "exporters",
-                            "imported_services", "importers",
-                            "kenya_exports", "kenya_imports",
-                            "kenya_commercialized")
-               if k not in found]
+    required = ("exported_services", "exporters",
+                 "imported_services", "importers",
+                 "kenya_exports", "kenya_imports")
+    missing = [k for k in required if k not in found]
     if missing:
         sys.exit(
-            "[ERROR] Could not find all seven raw service source files in '%s'.\n"
+            "[ERROR] Could not find all six required raw service source files in '%s'.\n"
             "Missing: %s\n"
             "Expected names containing keywords like:\n"
             "  List_of_exported_services_for_the_selected_service\n"
@@ -545,6 +548,7 @@ def find_service_files(excel_dir):
             "  List_of_importers_for_the_selected_service\n"
             "  List_of_services_exported_by_Kenya\n"
             "  List_of_services_imported_by_Kenya\n"
+            "Optional (balance is always computed from export − import):\n"
             "  List_of_services_commercialized_by_Kenya"
             % (excel_dir, ", ".join(missing)))
     return {k: os.path.join(excel_dir, v) for k, v in found.items()}
