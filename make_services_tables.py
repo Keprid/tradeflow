@@ -46,22 +46,60 @@ from xlsx_compat import HTMLTableParser, convert_to_xlsx, is_spreadsheet
 # ---------------------------------------------------------------------------
 # Constants / styles (shared with make_tables.py)
 # ---------------------------------------------------------------------------
-FONT = "Times New Roman"
+# Professional color palette (muted, modern tones)
+FONT = "Calibri"
+FONT_SIZE = 10
+HEADER_FONT_SIZE = 10
 
 TOP_EXPORTERS = 25
 
-HDR_FILL = PatternFill(fill_type="solid", fgColor="5D7B9D")
-KENYA_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
-BAND_FILL = PatternFill(fill_type="solid", fgColor="F7F6F3")
-DEV_FILL = PatternFill(fill_type="solid", fgColor="D6E4F0")
-DEVEL_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
+# Header styles - deep navy with white text
+HDR_FILL = PatternFill(fill_type="solid", fgColor="1F3864")
+HDR_FONT_COLOR = "FFFFFF"
 
-THIN = Side(style="thin", color="808080")
+# Alternating row fills (very subtle gray tones)
+ROW_FILL_EVEN = PatternFill(fill_type="solid", fgColor="F2F2F2")
+ROW_FILL_ODD = None  # No fill for odd rows (white)
+
+# Kenya highlight (soft gold)
+KENYA_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
+
+# Band/summary row (light blue-gray)
+BAND_FILL = PatternFill(fill_type="solid", fgColor="D6DCE4")
+
+# Development status fills
+DEV_FILL = PatternFill(fill_type="solid", fgColor="BDD7EE")      # Developed - soft blue
+DEVEL_FILL = PatternFill(fill_type="solid", fgColor="C6EFCE")    # Developing - soft green
+LDC_FILL = PatternFill(fill_type="solid", fgColor="FCE4D6")      # LDC - soft orange
+
+# Region fills (muted, professional)
+REGION_FILLS = {
+    "Africa": PatternFill(fill_type="solid", fgColor="D9E2F3"),
+    "Asia": PatternFill(fill_type="solid", fgColor="E2EFDA"),
+    "Americas": PatternFill(fill_type="solid", fgColor="FFF2CC"),
+    "Pacific": PatternFill(fill_type="solid", fgColor="DAEEF3"),
+    "Europe": PatternFill(fill_type="solid", fgColor="EDEDED"),
+    "Other": PatternFill(fill_type="solid", fgColor="F2F2F2"),
+}
+
+# Border styles - thin bottom only for headers, no side borders
+THIN = Side(style="thin", color="B4C6E7")  # Light blue-gray
+MEDIUM = Side(style="medium", color="1F3864")  # Navy accent
+HEADER_BORDER = Border(bottom=MEDIUM)
+DATA_BORDER = Border(bottom=Side(style="thin", color="D6DCE4"))
+TOTAL_BORDER = Border(top=Side(style="thin", color="808080"),
+                      bottom=Side(style="double", color="808080"))
+
+# Legacy border (kept for compatibility)
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
-FMT_VALUE = "0.0"
+# Number formats
+FMT_VALUE = "#,##0.0"
+FMT_VALUE_INT = "#,##0"
 FMT_SHARE = "0.0%"
 FMT_GROWTH = "0.0%"
+FMT_CAGR = "0.0%"
+FMT_RCA = "0.00"
 
 BALANCE_WIDTHS = {"A": 16, "B": 30, "C": 12, "D": 12, "E": 12, "F": 12,
                   "G": 12, "H": 12, "I": 12, "J": 12, "K": 12}
@@ -867,15 +905,45 @@ def set_widths(ws, widths):
         ws.column_dimensions[col].width = w
 
 
-def style_cell(cell, bold=False, size=11, fill=None, numfmt=None,
-               wrap=False, align="center"):
-    cell.font = Font(name=FONT, size=size, bold=bold)
-    cell.border = BORDER
+def style_cell(cell, bold=False, size=FONT_SIZE, fill=None, numfmt=None,
+               wrap=False, align="center", border_style="data"):
+    """Apply professional styling to a cell.
+    
+    border_style: 'header', 'data', 'total', or 'none'
+    """
+    cell.font = Font(name=FONT, size=size, bold=bold, color="000000" if not bold else "1F3864")
+    
+    # Apply appropriate border
+    if border_style == "header":
+        cell.border = HEADER_BORDER
+    elif border_style == "total":
+        cell.border = TOTAL_BORDER
+    elif border_style == "none":
+        cell.border = Border()
+    else:
+        cell.border = DATA_BORDER
+    
     if fill is not None:
         cell.fill = fill
     if numfmt is not None:
         cell.number_format = numfmt
+    cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap,
+                               indent=1 if align == "left" else 0)
+
+
+def style_header(cell, text, size=HEADER_FONT_SIZE, fill=HDR_FILL, 
+                 font_color=HDR_FONT_COLOR, align="center", wrap=True):
+    """Style a header cell with professional dark header."""
+    cell.value = text
+    cell.font = Font(name=FONT, size=size, bold=True, color=font_color)
+    cell.fill = fill
+    cell.border = HEADER_BORDER
     cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap)
+
+
+def get_row_fill(row_index):
+    """Get alternating row fill for data rows (0-indexed)."""
+    return ROW_FILL_EVEN if row_index % 2 == 0 else ROW_FILL_ODD
 
 
 def put(ws, row, col, value, **kw):
@@ -891,17 +959,26 @@ def _put_formula(ws, cache, row, col, formula, cached, bold=False, fill=None,
     cache.append((_cell_ref(row, col), cached))
 
 
-def put_text(ws, row, col, text, bold=False, size=11, fill=None, wrap=False,
-             align="left"):
+def put_text(ws, row, col, text, bold=False, size=FONT_SIZE, fill=None, wrap=False,
+             align="left", use_row_fill=True):
+    """Write text with optional alternating row fill."""
+    if fill is None and use_row_fill:
+        fill = get_row_fill(row)
     return put(ws, row, col, text, bold=bold, size=size, fill=fill,
                wrap=wrap, align=align)
 
 
-def put_val(ws, row, col, value, bold=False, fill=None, fmt=FMT_VALUE):
+def put_val(ws, row, col, value, bold=False, fill=None, fmt=FMT_VALUE, use_row_fill=True):
+    """Write numeric value with optional alternating row fill."""
+    if fill is None and use_row_fill:
+        fill = get_row_fill(row)
     return put(ws, row, col, value, bold=bold, fill=fill, numfmt=fmt)
 
 
-def put_share(ws, row, col, value, bold=False, fill=None):
+def put_share(ws, row, col, value, bold=False, fill=None, use_row_fill=True):
+    """Write share percentage with optional alternating row fill."""
+    if fill is None and use_row_fill:
+        fill = get_row_fill(row)
     return put(ws, row, col, value, bold=bold, fill=fill, numfmt=FMT_SHARE)
 
 
@@ -933,31 +1010,42 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
 
     h = 1 + title_rows
-    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=11, align="center")
+    # Header row with dark navy fill
+    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=HEADER_FONT_SIZE, 
+             fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, 1).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     merge(ws, h, 1, h + 1, 1)
-    put_text(ws, h, 2, hdr_label, bold=True, size=8, fill=HDR_FILL, align="center")
+    
+    put_text(ws, h, 2, hdr_label, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, 2).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     merge(ws, h, 3, h, 2 + n)
-    put_text(ws, h, 3, verb, bold=True, size=11 if unit_row else 8,
-             fill=None if unit_row else HDR_FILL, wrap=True, align="center")
+    put_text(ws, h, 3, verb, bold=True, size=HEADER_FONT_SIZE if unit_row else HEADER_FONT_SIZE,
+             fill=None if unit_row else HDR_FILL, wrap=True, align="center", use_row_fill=False)
+    if not unit_row:
+        ws.cell(h, 3).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     merge(ws, h, share_col, h + 1, share_col)
-    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=11, align="center")
+    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=HEADER_FONT_SIZE, 
+             fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, share_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     for k, y in enumerate(years):
-        put_text(ws, h + 1, 3 + k, y, bold=True, size=8, fill=HDR_FILL, align="center")
+        put_text(ws, h + 1, 3 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
+        ws.cell(h + 1, 3 + k).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     if unit_row:
         merge(ws, h + 2, 3, h + 2, 2 + n)
-        put_text(ws, h + 2, 3, "Value in USD Billion", bold=True, size=8,
-                 fill=HDR_FILL, align="center")
-        put_text(ws, h + 2, 2, "", bold=True, size=8, fill=HDR_FILL, align="center")
+        put_text(ws, h + 2, 3, "Value in USD Billion", bold=True, size=HEADER_FONT_SIZE,
+                 fill=HDR_FILL, align="center", use_row_fill=False)
+        ws.cell(h + 2, 3).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+        put_text(ws, h + 2, 2, "", bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
         row0 = h + 3
     else:
         row0 = h + 2
@@ -970,11 +1058,11 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
     for i, it in enumerate(shown):
         r = row0 + i
         is_kenya = kenya_highlight and str(it["label"]).strip().lower() == "kenya"
-        fill = KENYA_FILL if is_kenya else None
-        put_text(ws, r, 1, it["rank"], size=11, fill=fill)
-        put_text(ws, r, 2, it["label"], size=8, fill=fill, wrap=True)
+        fill = KENYA_FILL if is_kenya else get_row_fill(i)
+        put_text(ws, r, 1, it["rank"], size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 2, it["label"], size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
         for k in range(n):
-            put_val(ws, r, 3 + k, it["vals"][k] if k < len(it["vals"]) else None, fill=fill)
+            put_val(ws, r, 3 + k, it["vals"][k] if k < len(it["vals"]) else None, fill=fill, use_row_fill=False)
         t_latest = total["vals"][-1] if total and len(total["vals"]) >= n else None
         val_latest = it["vals"][-1] if it["vals"] else None
         cached_share = share(val_latest, t_latest)
@@ -983,23 +1071,26 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
 
     # All other countries
     r = r_ao
-    put_text(ws, r, 2, "All other countries", size=11, wrap=True)
+    ao_fill = BAND_FILL
+    put_text(ws, r, 2, "All other countries", size=FONT_SIZE, fill=ao_fill, wrap=True, use_row_fill=False)
     ao_vals = data["all_other"]["vals"]
     for k in range(n):
         col_letter = get_column_letter(3 + k)
         formula = f"={col_letter}{r_world}-SUM({col_letter}{r_first}:{col_letter}{r_last})"
         cached_val = ao_vals[k] if k < len(ao_vals) else None
-        _put_formula(ws, cache, r, 3 + k, formula, cached_val)
+        _put_formula(ws, cache, r, 3 + k, formula, cached_val, fill=ao_fill)
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
-    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val)
+    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val, fill=ao_fill)
 
     # World total
     r = r_world
-    put_text(ws, r, 2, "World", bold=True, size=8, fill=BAND_FILL)
+    total_fill = BAND_FILL
+    put_text(ws, r, 2, "World", bold=True, size=FONT_SIZE, fill=total_fill, use_row_fill=False)
+    ws.cell(r, 2).font = Font(name=FONT, size=FONT_SIZE, bold=True, color="1F3864")
     for k in range(n):
         val = total["vals"][k] if k < len(total["vals"]) else None
-        put_val(ws, r, 3 + k, val, bold=True, fill=BAND_FILL)
+        put_val(ws, r, 3 + k, val, bold=True, fill=total_fill, use_row_fill=False)
     put_share(ws, r, share_col, total.get("share"), bold=True)
     ws.freeze_panes = f"A{row0}"
 
@@ -1026,32 +1117,42 @@ def write_product_table(ws, data, hdr, unit_row,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
 
     h = 1 + title_rows
-    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=11, align="center")
+    # Header row with dark navy fill
+    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=HEADER_FONT_SIZE, 
+             fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, 1).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     merge(ws, h, 2, h + 1, 2)
-    put_text(ws, h, 2, "Code", bold=True, size=11, align="center")
+    put_text(ws, h, 2, "Code", bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, 2).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     merge(ws, h, 3, h + 1, 3)
-    put_text(ws, h, 3, "Service label", bold=True, size=11, align="center")
+    put_text(ws, h, 3, "Service label", bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, 3).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     merge(ws, h, 4, h, 3 + n)
-    put_text(ws, h, 4, hdr, bold=True, size=11, wrap=True, align="center")
+    put_text(ws, h, 4, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
+    ws.cell(h, 4).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     share_col = 4 + n
     merge(ws, h, share_col, h + 1, share_col)
-    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=11, align="center")
+    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=HEADER_FONT_SIZE, 
+             fill=HDR_FILL, align="center", use_row_fill=False)
+    ws.cell(h, share_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     for k, y in enumerate(years):
-        put_text(ws, h + 1, 4 + k, y, bold=True, size=11, align="center")
+        put_text(ws, h + 1, 4 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
+        ws.cell(h + 1, 4 + k).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     if unit_row:
         merge(ws, h + 2, 4, h + 2, 3 + n)
-        put_text(ws, h + 2, 4, unit_row, bold=True, size=11,
-                 fill=HDR_FILL, align="center")
+        put_text(ws, h + 2, 4, unit_row, bold=True, size=HEADER_FONT_SIZE,
+                 fill=HDR_FILL, align="center", use_row_fill=False)
+        ws.cell(h + 2, 4).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
         row0 = h + 3
     else:
         row0 = h + 2
@@ -1063,40 +1164,44 @@ def write_product_table(ws, data, hdr, unit_row,
 
     for i, it in enumerate(shown):
         r = row0 + i
-        put_text(ws, r, 1, it["rank"], size=11)
-        put_text(ws, r, 2, it["code"], size=11)
-        put_text(ws, r, 3, it["label"], size=11, wrap=True)
+        fill = get_row_fill(i)
+        put_text(ws, r, 1, it["rank"], size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 2, it["code"], size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 3, it["label"], size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
         for k in range(n):
-            put_val(ws, r, 4 + k, it["vals"][k] if k < len(it["vals"]) else None)
+            put_val(ws, r, 4 + k, it["vals"][k] if k < len(it["vals"]) else None, fill=fill, use_row_fill=False)
         t_latest = total["vals"][-1] if total and len(total["vals"]) >= n else None
         val_latest = it["vals"][-1] if it["vals"] else None
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
-        _put_formula(ws, cache, r, share_col, formula, cached_share)
+        _put_formula(ws, cache, r, share_col, formula, cached_share, fill=fill)
 
     # All other
     r = r_ao
-    put_text(ws, r, 3, "All other services", size=11, wrap=True)
+    ao_fill = BAND_FILL
+    put_text(ws, r, 3, "All other services", size=FONT_SIZE, fill=ao_fill, wrap=True, use_row_fill=False)
     ao_vals = data["all_other"]["vals"]
     for k in range(n):
         col_letter = get_column_letter(4 + k)
         formula = f"={col_letter}{r_total}-SUM({col_letter}{r_first}:{col_letter}{r_last})"
         cached_val = ao_vals[k] if k < len(ao_vals) else None
-        _put_formula(ws, cache, r, 4 + k, formula, cached_val)
+        _put_formula(ws, cache, r, 4 + k, formula, cached_val, fill=ao_fill)
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
-    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val)
+    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val, fill=ao_fill)
 
     # Total
     r = r_total
+    total_fill = BAND_FILL
     if total and total.get("code"):
-        put_text(ws, r, 2, str(total["code"]), bold=True, size=11,
-                 fill=BAND_FILL, wrap=True)
-    put_text(ws, r, 3, "All services", bold=True, size=11, fill=BAND_FILL, wrap=True)
+        put_text(ws, r, 2, str(total["code"]), bold=True, size=FONT_SIZE,
+                 fill=total_fill, wrap=True, use_row_fill=False)
+    put_text(ws, r, 3, "All services", bold=True, size=FONT_SIZE, fill=total_fill, wrap=True, use_row_fill=False)
+    ws.cell(r, 3).font = Font(name=FONT, size=FONT_SIZE, bold=True, color="1F3864")
     for k in range(n):
         val = total["vals"][k] if k < len(total["vals"]) else None
-        put_val(ws, r, 4 + k, val, bold=True, fill=BAND_FILL)
-    put_share(ws, r, share_col, total.get("share") if total else None, bold=True)
+        put_val(ws, r, 4 + k, val, bold=True, fill=total_fill, use_row_fill=False)
+    put_share(ws, r, share_col, total.get("share") if total else None, bold=True, fill=total_fill)
     ws.freeze_panes = f"A{row0}"
 
     try:
@@ -1115,33 +1220,40 @@ def write_balance(ws, years, exports, imports, cache=None):
     """
     cache = [] if cache is None else cache
     hdr = HDR_FILL
-    put_text(ws, 1, 1, "Figure 1", bold=True, size=11, align="center")
-    put_text(ws, 1, 2, "Kenya Services Balance of Trade", bold=True, size=11, align="center")
+    put_text(ws, 1, 1, "Figure 1", bold=True, size=12, align="center", use_row_fill=False)
+    put_text(ws, 1, 2, "Kenya Services Balance of Trade", bold=True, size=12, align="center", use_row_fill=False)
 
-    put_text(ws, 2, 2, "", bold=True, size=11, fill=hdr, align="center")
+    # Header row
+    put_text(ws, 2, 2, "", bold=True, size=HEADER_FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
     for k, y in enumerate(years):
-        put_text(ws, 3, 2 + k, y, bold=True, size=11, fill=hdr, align="center")
+        put_text(ws, 3, 2 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
+        ws.cell(3, 2 + k).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     r_exp = 4
     r_imp = 5
     r_bal = 6
-    put_text(ws, r_exp, 1, "Exports", bold=True, size=11, fill=hdr, align="center")
+    
+    # Row labels with header fill
+    put_text(ws, r_exp, 1, "Exports", bold=True, size=FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
+    ws.cell(r_exp, 1).font = Font(name=FONT, size=FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     for k, v in enumerate(exports):
-        put_val(ws, r_exp, 2 + k, v)
+        put_val(ws, r_exp, 2 + k, v, fill=ROW_FILL_EVEN)
 
-    put_text(ws, r_imp, 1, "Imports", bold=True, size=11, fill=hdr, align="center")
+    put_text(ws, r_imp, 1, "Imports", bold=True, size=FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
+    ws.cell(r_imp, 1).font = Font(name=FONT, size=FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     for k, v in enumerate(imports):
-        put_val(ws, r_imp, 2 + k, v)
+        put_val(ws, r_imp, 2 + k, v, fill=ROW_FILL_ODD)
 
-    put_text(ws, r_bal, 1, "Balance of Trade", bold=True, size=11, fill=hdr, align="center")
+    put_text(ws, r_bal, 1, "Balance of Trade", bold=True, size=FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
+    ws.cell(r_bal, 1).font = Font(name=FONT, size=FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     for k, (e, i) in enumerate(zip(exports, imports)):
         c = 2 + k
         if e is not None and i is not None:
             cache.append((_cell_ref(r_bal, c), e - i))
             put(ws, r_bal, c, f"={_cell_ref(r_exp, c)}-{_cell_ref(r_imp, c)}",
-                bold=False, numfmt=FMT_VALUE)
+                bold=False, numfmt=FMT_VALUE, fill=BAND_FILL)
         else:
-            put_val(ws, r_bal, c, (e - i) if (e is not None and i is not None) else None)
+            put_val(ws, r_bal, c, (e - i) if (e is not None and i is not None) else None, fill=BAND_FILL)
 
     try:
         ws.auto_filter.ref = f"A3:{_cell_ref(r_bal, 2 + len(years))}"
@@ -1165,9 +1277,9 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 6)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1176,8 +1288,9 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
     cols = ["Development Status", f"Rank in {latest}", verb, "Region",
             f"Value in USD Billion ({latest})", "Annual Growth %", "5Y CAGR %"]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
-                 wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center",
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     row0 = h + 1
     r = row0
@@ -1190,23 +1303,24 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
         fill = _dev_fill(status.split()[0] if status.startswith("Developed") else
                          ("LDC" if "LDC" in status else "Developing"))
         for it in items:
-            put_text(ws, r, 2, it.get("dev_rank", ""), size=11, fill=fill)
-            put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True,
-                     align="left")
-            put_text(ws, r, 4, it.get("region", ""), size=11, fill=fill, wrap=True,
-                     align="left")
+            put_text(ws, r, 2, it.get("dev_rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
+            put_text(ws, r, 3, it.get("label", ""), size=FONT_SIZE, fill=fill, wrap=True,
+                     align="left", use_row_fill=False)
+            put_text(ws, r, 4, it.get("region", ""), size=FONT_SIZE, fill=fill, wrap=True,
+                     align="left", use_row_fill=False)
             val = it["vals"][-1] if it.get("vals") and it["vals"][-1] is not None else None
-            put_val(ws, r, 5, val, fill=fill)
+            put_val(ws, r, 5, val, fill=fill, use_row_fill=False)
             growth = it.get("growth")
             if growth is not None:
-                put_share(ws, r, 6, growth, fill=fill)
+                put_share(ws, r, 6, growth, fill=fill, use_row_fill=False)
             else:
-                put_share(ws, r, 6, None, fill=fill)
-            put_share(ws, r, 7, it.get("cagr"), fill=fill)
+                put_share(ws, r, 6, None, fill=fill, use_row_fill=False)
+            put_share(ws, r, 7, it.get("cagr"), fill=fill, use_row_fill=False)
             r += 1
         # Write status label in first row and merge down for the group
-        put_text(ws, group_start, 1, status, bold=True, size=11, fill=fill,
-                 wrap=True, align="center")
+        put_text(ws, group_start, 1, status, bold=True, size=FONT_SIZE, fill=fill,
+                 wrap=True, align="center", use_row_fill=False)
+        ws.cell(group_start, 1).font = Font(name=FONT, size=FONT_SIZE, bold=True, color="1F3864")
         if r - group_start > 1:
             merge(ws, group_start, 1, r - 1, 1)
 
@@ -1224,9 +1338,9 @@ def write_region_table(ws, by_region, years, verb, unit_label,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 5)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1235,37 +1349,31 @@ def write_region_table(ws, by_region, years, verb, unit_label,
     cols = ["Region", f"Rank in {latest}", verb,
             f"Value in USD Billion ({latest})", "Annual Growth %", "5Y CAGR %"]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
-                 wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center",
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     row0 = h + 1
     r = row0
-    region_fills = {
-        "Africa": PatternFill(fill_type="solid", fgColor="D6E4F0"),
-        "Asia": PatternFill(fill_type="solid", fgColor="E2EFDA"),
-        "Americas": PatternFill(fill_type="solid", fgColor="FFF2CC"),
-        "Pacific": PatternFill(fill_type="solid", fgColor="BDD7EE"),
-        "Europe": PatternFill(fill_type="solid", fgColor="FCE4D6"),
-        "Other": PatternFill(fill_type="solid", fgColor="F2F2F2"),
-    }
+    # Use the globally defined REGION_FILLS
     for region in ["Africa", "Asia", "Americas", "Pacific", "Europe", "Other"]:
         items = by_region.get(region, [])
         if not items:
             continue
-        fill = region_fills.get(region, BAND_FILL)
+        fill = REGION_FILLS.get(region, BAND_FILL)
         for it in items:
-            put_text(ws, r, 1, region, size=11, fill=fill, wrap=True, align="left")
-            put_text(ws, r, 2, it.get("region_rank", ""), size=11, fill=fill)
-            put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True,
-                     align="left")
+            put_text(ws, r, 1, region, size=FONT_SIZE, fill=fill, wrap=True, align="left", use_row_fill=False)
+            put_text(ws, r, 2, it.get("region_rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
+            put_text(ws, r, 3, it.get("label", ""), size=FONT_SIZE, fill=fill, wrap=True,
+                     align="left", use_row_fill=False)
             val = it["vals"][-1] if it.get("vals") and it["vals"][-1] is not None else None
-            put_val(ws, r, 4, val, fill=fill)
+            put_val(ws, r, 4, val, fill=fill, use_row_fill=False)
             growth = it.get("growth")
             if growth is not None:
-                put_share(ws, r, 5, growth, fill=fill)
+                put_share(ws, r, 5, growth, fill=fill, use_row_fill=False)
             else:
-                put_share(ws, r, 5, None, fill=fill)
-            put_share(ws, r, 6, it.get("cagr"), fill=fill)
+                put_share(ws, r, 5, None, fill=fill, use_row_fill=False)
+            put_share(ws, r, 6, it.get("cagr"), fill=fill, use_row_fill=False)
             r += 1
 
     set_widths(ws, {"A": 28, "B": 14, "C": 32, "D": 22, "E": 18, "F": 14})
@@ -1356,9 +1464,9 @@ def write_rca_table(ws, rca_items, years, row1_label=None, row1_title=None):
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 7)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1368,9 +1476,11 @@ def write_rca_table(ws, rca_items, years, row1_label=None, row1_title=None):
             f"Kenya Share ({latest}) %", f"World Share ({latest}) %",
             f"RCA ({latest})", "Classification"]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center",
-                 wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center",
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
+    # RCA classification fills (professional muted tones)
     STRONG_FILL = PatternFill(fill_type="solid", fgColor="C6EFCE")
     MODERATE_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
     DISADVANTAGE_FILL = PatternFill(fill_type="solid", fgColor="FCE4D6")
@@ -1389,17 +1499,17 @@ def write_rca_table(ws, rca_items, years, row1_label=None, row1_title=None):
             fill = DISADVANTAGE_FILL
             status = "Disadvantage"
 
-        put_text(ws, r, 1, it.get("rank", ""), size=11, fill=fill)
-        put_text(ws, r, 2, str(it.get("code", "")), size=11, fill=fill)
-        put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True,
-                 align="left")
-        put_share(ws, r, 4, it.get("kenya_share"), fill=fill)
-        put_share(ws, r, 5, it.get("world_share"), fill=fill)
+        put_text(ws, r, 1, it.get("rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 2, str(it.get("code", "")), size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 3, it.get("label", ""), size=FONT_SIZE, fill=fill, wrap=True,
+                 align="left", use_row_fill=False)
+        put_share(ws, r, 4, it.get("kenya_share"), fill=fill, use_row_fill=False)
+        put_share(ws, r, 5, it.get("world_share"), fill=fill, use_row_fill=False)
         if rca_val is not None:
-            put(ws, r, 6, round(rca_val, 2), fill=fill, numfmt="0.00")
+            put(ws, r, 6, round(rca_val, 2), fill=fill, numfmt=FMT_RCA)
         else:
             put(ws, r, 6, "", fill=fill)
-        put_text(ws, r, 7, status, size=11, fill=fill, align="center")
+        put_text(ws, r, 7, status, size=FONT_SIZE, fill=fill, align="center", use_row_fill=False)
 
     # Legend row
     r = row0 + len(rca_items) + 1
@@ -1463,9 +1573,9 @@ def write_concentration_table(ws, concentration, row1_label=None, row1_title=Non
     """Write export concentration index comparison table."""
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 4)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1473,7 +1583,9 @@ def write_concentration_table(ws, concentration, row1_label=None, row1_title=Non
     h = 1 + title_rows
     cols = ["Metric", "Kenya", "World", "Assessment"]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", 
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     ke = concentration["kenya"]
     w = concentration["world"]
@@ -1495,30 +1607,23 @@ def write_concentration_table(ws, concentration, row1_label=None, row1_title=Non
         ("Herfindahl-Hirschman Index (HHI)", ke["hhi"], w["hhi"],
          _assess(ke["hhi"], w["hhi"]), "0.000"),
         ("Top-3 Category Share", ke["top3"], w["top3"],
-         _assess(ke["top3"], w["top3"]), "0.0%"),
+         _assess(ke["top3"], w["top3"]), FMT_SHARE),
         ("Top-5 Category Share", ke["top5"], w["top5"],
-         _assess(ke["top5"], w["top5"]), "0.0%"),
+         _assess(ke["top5"], w["top5"]), FMT_SHARE),
         ("Effective No. of Categories (1/HHI)", ke["eff_cats"], w["eff_cats"],
          _assess(ke["eff_cats"], w["eff_cats"], lower_is_better=False), "0.0"),
         ("Number of Service Categories", concentration["kenya_n_categories"],
-         concentration["world_n_categories"], "", "0"),
+         concentration["world_n_categories"], "", FMT_VALUE_INT),
     ]
 
     row0 = h + 1
     for i, (label, ke_val, w_val, assess, fmt) in enumerate(rows):
         r = row0 + i
-        fill = BAND_FILL if i % 2 == 0 else None
-        put_text(ws, r, 1, label, size=11, fill=fill, align="left")
-        if fmt == "0.0%":
-            put_share(ws, r, 2, ke_val, fill=fill)
-            put_share(ws, r, 3, w_val, fill=fill)
-        elif fmt == "0.000":
-            put(ws, r, 2, ke_val, fill=fill, numfmt="0.000")
-            put(ws, r, 3, w_val, fill=fill, numfmt="0.000")
-        else:
-            put(ws, r, 2, ke_val, fill=fill, numfmt=fmt)
-            put(ws, r, 3, w_val, fill=fill, numfmt=fmt)
-        put_text(ws, r, 4, assess, size=11, fill=fill, align="center")
+        fill = ROW_FILL_EVEN if i % 2 == 0 else ROW_FILL_ODD
+        put_text(ws, r, 1, label, size=FONT_SIZE, fill=fill, align="left", use_row_fill=False)
+        put(ws, r, 2, ke_val, fill=fill, numfmt=fmt)
+        put(ws, r, 3, w_val, fill=fill, numfmt=fmt)
+        put_text(ws, r, 4, assess, size=FONT_SIZE, fill=fill, align="center", use_row_fill=False)
 
     r = row0 + len(rows) + 1
     put(ws, r, 1, "HHI < 0.15: Low concentration (diversified)", size=9)
@@ -1663,7 +1768,7 @@ def write_diversification_table(ws, items, row1_label=None, row1_title=None):
         if row1_label:
             put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
         merge(ws, 1, 2, 1, 7)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1673,8 +1778,11 @@ def write_diversification_table(ws, items, row1_label=None, row1_title=None):
             "Kenya Global\nShare %", "Global\nGrowth %", "Import\nShare %",
             "Opportunity\nScore"]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", 
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
+    # Opportunity score fills
     HIGH_FILL = PatternFill(fill_type="solid", fgColor="C6EFCE")
     MED_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
     LOW_FILL = PatternFill(fill_type="solid", fgColor="F2F2F2")
@@ -1690,13 +1798,13 @@ def write_diversification_table(ws, items, row1_label=None, row1_title=None):
         else:
             fill = LOW_FILL
 
-        put_text(ws, r, 1, it.get("rank", ""), size=11, fill=fill)
-        put_text(ws, r, 2, str(it.get("code", "")), size=11, fill=fill)
-        put_text(ws, r, 3, it.get("label", ""), size=11, fill=fill, wrap=True, align="left")
-        put_val(ws, r, 4, it.get("ke_val"), fill=fill)
-        put_share(ws, r, 5, it.get("ke_global_share"), fill=fill)
-        put_share(ws, r, 6, it.get("w_growth"), fill=fill)
-        put_share(ws, r, 7, it.get("imp_penetration"), fill=fill)
+        put_text(ws, r, 1, it.get("rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 2, str(it.get("code", "")), size=FONT_SIZE, fill=fill, use_row_fill=False)
+        put_text(ws, r, 3, it.get("label", ""), size=FONT_SIZE, fill=fill, wrap=True, align="left", use_row_fill=False)
+        put_val(ws, r, 4, it.get("ke_val"), fill=fill, use_row_fill=False)
+        put_share(ws, r, 5, it.get("ke_global_share"), fill=fill, use_row_fill=False)
+        put_share(ws, r, 6, it.get("w_growth"), fill=fill, use_row_fill=False)
+        put_share(ws, r, 7, it.get("imp_penetration"), fill=fill, use_row_fill=False)
         put(ws, r, 8, round(score, 4), fill=fill, numfmt="0.0000")
 
     r = row0 + min(len(items), 15) + 1
@@ -1779,9 +1887,9 @@ def write_value_trajectory_table(ws, trajectory, row1_label=None, row1_title=Non
     years = trajectory["years"]
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 3 + len(years))
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1789,8 +1897,11 @@ def write_value_trajectory_table(ws, trajectory, row1_label=None, row1_title=Non
     h = 1 + title_rows
     cols = ["Category Group", "Service Codes"] + [str(y) for y in years]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", 
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
+    # Category group fills (professional muted tones)
     HV_FILL = PatternFill(fill_type="solid", fgColor="D6E4F0")
     TRAD_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
     OTHER_FILL = PatternFill(fill_type="solid", fgColor="F2F2F2")
@@ -1807,28 +1918,29 @@ def write_value_trajectory_table(ws, trajectory, row1_label=None, row1_title=Non
 
     for i, (label, codes, shares, fill, desc) in enumerate(groups):
         r = row0 + i
-        put_text(ws, r, 1, label, size=11, fill=fill, align="left", bold=True)
-        put_text(ws, r, 2, codes, size=9, fill=fill, align="center")
+        put_text(ws, r, 1, label, size=FONT_SIZE, fill=fill, align="left", bold=True, use_row_fill=False)
+        put_text(ws, r, 2, codes, size=9, fill=fill, align="center", use_row_fill=False)
         for k, sh in enumerate(shares):
-            put_share(ws, r, 3 + k, sh, fill=fill)
+            put_share(ws, r, 3 + k, sh, fill=fill, use_row_fill=False)
 
     r = row0 + len(groups)
-    put_text(ws, r, 1, "Total Exports (USD Mn)", size=11, bold=True, align="left")
+    put_text(ws, r, 1, "Total Exports (USD Mn)", size=FONT_SIZE, bold=True, align="left", use_row_fill=False)
+    ws.cell(r, 1).font = Font(name=FONT, size=FONT_SIZE, bold=True, color="1F3864")
     put_text(ws, r, 2, "", size=9)
     for k, t in enumerate(trajectory.get("abs_total", [])):
-        put_val(ws, r, 3 + k, t)
+        put_val(ws, r, 3 + k, t, fill=BAND_FILL, use_row_fill=False)
 
     r += 1
-    put_text(ws, r, 1, "High-Value Exports (USD Mn)", size=11, align="left")
+    put_text(ws, r, 1, "High-Value Exports (USD Mn)", size=FONT_SIZE, align="left", use_row_fill=False)
     put_text(ws, r, 2, "", size=9)
     for k, v in enumerate(trajectory.get("abs_high_value", [])):
-        put_val(ws, r, 3 + k, v, fill=HV_FILL)
+        put_val(ws, r, 3 + k, v, fill=HV_FILL, use_row_fill=False)
 
     r += 1
-    put_text(ws, r, 1, "Traditional Exports (USD Mn)", size=11, align="left")
+    put_text(ws, r, 1, "Traditional Exports (USD Mn)", size=FONT_SIZE, align="left", use_row_fill=False)
     put_text(ws, r, 2, "", size=9)
     for k, v in enumerate(trajectory.get("abs_traditional", [])):
-        put_val(ws, r, 3 + k, v, fill=TRAD_FILL)
+        put_val(ws, r, 3 + k, v, fill=TRAD_FILL, use_row_fill=False)
 
     widths = {"A": 26, "B": 18}
     for k in range(len(years)):
@@ -1876,9 +1988,9 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
     """Write Kenya vs peer countries total service exports comparison."""
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
         merge(ws, 1, 2, 1, 6)
-        put_text(ws, 1, 2, row1_title, bold=True, size=11, wrap=True, align="center")
+        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
         title_rows = 0
@@ -1887,16 +1999,19 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
     cols = ["Group", "Country", f"Exports\n({years_exp[-1]}) USD Bn",
             "Global\nShare %", "Growth\n(YoY) %", "5Y CAGR\n%", "Rank\n(Global)"]
     for c, hdr in enumerate(cols, 1):
-        put_text(ws, h, c, hdr, bold=True, size=8, fill=HDR_FILL, align="center", wrap=True)
+        put_text(ws, h, c, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", 
+                 wrap=True, use_row_fill=False)
+        ws.cell(h, c).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     items_by_name = {it["label"].strip().lower(): it for it in items_exp}
 
     row0 = h + 1
     r = row0
 
-    KENYA_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
+    # Peer comparison fills
     GROUP_FILL = PatternFill(fill_type="solid", fgColor="D6E4F0")
     PEER_FILL = PatternFill(fill_type="solid", fgColor="E2EFDA")
+    KENYA_PEER_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
 
     for group_name, peers in PEER_COUNTRIES.items():
         group_start = r
@@ -1905,35 +2020,38 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
             if it is None:
                 continue
             fill = PEER_FILL
-            put_text(ws, r, 1, group_name if r == group_start else "", size=11, fill=fill,
-                     align="left", bold=(r == group_start))
-            put_text(ws, r, 2, it.get("label", ""), size=11, fill=fill, align="left")
+            put_text(ws, r, 1, group_name if r == group_start else "", size=FONT_SIZE, fill=fill,
+                     align="left", bold=(r == group_start), use_row_fill=False)
+            put_text(ws, r, 2, it.get("label", ""), size=FONT_SIZE, fill=fill, align="left", use_row_fill=False)
             val = it["vals"][-1] if it.get("vals") and it["vals"][-1] is not None else None
-            put_val(ws, r, 3, val, fill=fill)
-            put_share(ws, r, 4, it.get("share"), fill=fill)
+            put_val(ws, r, 3, val, fill=fill, use_row_fill=False)
+            put_share(ws, r, 4, it.get("share"), fill=fill, use_row_fill=False)
             growth = it.get("growth")
             if growth is not None:
-                put_share(ws, r, 5, growth, fill=fill)
+                put_share(ws, r, 5, growth, fill=fill, use_row_fill=False)
             else:
-                put_share(ws, r, 5, None, fill=fill)
-            put_share(ws, r, 7, it.get("cagr"), fill=fill)
-            put_text(ws, r, 8, it.get("rank", ""), size=11, fill=fill)
+                put_share(ws, r, 5, None, fill=fill, use_row_fill=False)
+            put_share(ws, r, 7, it.get("cagr"), fill=fill, use_row_fill=False)
+            put_text(ws, r, 8, it.get("rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
             r += 1
 
     ke_it = items_by_name.get("kenya")
     if ke_it:
-        put_text(ws, r, 1, "Focus Country", size=11, fill=KENYA_FILL, align="left", bold=True)
-        put_text(ws, r, 2, ke_it.get("label", ""), size=11, fill=KENYA_FILL, align="left", bold=True)
+        fill = KENYA_PEER_FILL
+        put_text(ws, r, 1, "Focus Country", size=FONT_SIZE, fill=fill, align="left", bold=True, use_row_fill=False)
+        ws.cell(r, 1).font = Font(name=FONT, size=FONT_SIZE, bold=True, color="1F3864")
+        put_text(ws, r, 2, ke_it.get("label", ""), size=FONT_SIZE, fill=fill, align="left", bold=True, use_row_fill=False)
+        ws.cell(r, 2).font = Font(name=FONT, size=FONT_SIZE, bold=True, color="1F3864")
         val = ke_it["vals"][-1] if ke_it.get("vals") and ke_it["vals"][-1] is not None else None
-        put_val(ws, r, 3, val, fill=KENYA_FILL, bold=True)
-        put_share(ws, r, 4, ke_it.get("share"), fill=KENYA_FILL, bold=True)
+        put_val(ws, r, 3, val, fill=fill, bold=True, use_row_fill=False)
+        put_share(ws, r, 4, ke_it.get("share"), fill=fill, bold=True, use_row_fill=False)
         growth = ke_it.get("growth")
         if growth is not None:
-            put_share(ws, r, 5, growth, fill=KENYA_FILL, bold=True)
+            put_share(ws, r, 5, growth, fill=fill, bold=True, use_row_fill=False)
         else:
-            put_share(ws, r, 5, None, fill=KENYA_FILL, bold=True)
-        put_share(ws, r, 7, ke_it.get("cagr"), fill=KENYA_FILL, bold=True)
-        put_text(ws, r, 8, ke_it.get("rank", ""), size=11, fill=KENYA_FILL, bold=True)
+            put_share(ws, r, 5, None, fill=fill, bold=True, use_row_fill=False)
+        put_share(ws, r, 7, ke_it.get("cagr"), fill=fill, bold=True, use_row_fill=False)
+        put_text(ws, r, 8, ke_it.get("rank", ""), size=FONT_SIZE, fill=fill, bold=True, use_row_fill=False)
         r += 1
 
     set_widths(ws, {"A": 20, "B": 28, "C": 20, "D": 14, "E": 14, "F": 14, "G": 12})
