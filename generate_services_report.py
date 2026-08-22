@@ -49,7 +49,7 @@ from docx.shared import Inches, Pt, RGBColor
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
-from charts import draw_share_pie, series_shares, side_legend, new_fig, finish
+from charts import draw_share_pie, series_shares, slice_callouts, new_fig, finish
 from country_names import short_product_name, title_partner
 from generate_report import (
     ReportBuilder, load_config,
@@ -431,7 +431,7 @@ def make_chart_export_share(a: ServicesAnalysis, out_path):
     labels, shares, wedges = draw_share_pie(
         ax, labels, shares, palette,
         style="3d_exploded", other_label="Other services")
-    side_legend(fig, wedges, labels, shares)
+    slice_callouts(fig, wedges, labels, shares)
     ax.set_title(f"Share of Kenya's Service Exports by Category in {a.year}",
                  fontsize=12, weight="bold")
     finish(fig, out_path)
@@ -450,7 +450,7 @@ def make_chart_import_share(a: ServicesAnalysis, out_path):
     labels, shares, wedges = draw_share_pie(
         ax, labels, shares, palette,
         style="3d_exploded", other_label="Other services")
-    side_legend(fig, wedges, labels, shares)
+    slice_callouts(fig, wedges, labels, shares)
     ax.set_title(f"Share of Kenya's Service Imports by Category in {a.year}",
                  fontsize=12, weight="bold")
     finish(fig, out_path)
@@ -499,7 +499,8 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_list_placeholder("List of Tables", "table")
     b.page_break()
     b.add_list_placeholder("List of Figures", "figure")
-    b.page_break()
+    # page numbers start at 1 from here (title/TOC/lists carry none)
+    b.start_body_section()
 
     # ============================== SECTION 1 ===============================
     b.add_heading(f"1. {c['title']}")
@@ -851,7 +852,6 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         b.add_para(ref)
 
     b.add_footer()
-    b.finalize_lists()
     doc.save(out_path)
 
 

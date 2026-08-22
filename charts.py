@@ -25,7 +25,6 @@ Only matplotlib is required.
 import math
 
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 
 # Style constants -----------------------------------------------------------
 WEDGE_WIDTH = 0.42        # ring thickness for donut styles
@@ -92,7 +91,7 @@ def series_shares(items):
     return [0.0] * len(items)
 
 
-def _draw_extruded(ax, values, colors, offsets, donut=False):
+def _draw_extruded(ax, values, colors, offsets, donut=False, pct_inside=True):
     """Office-style 3D pie: layered darkened copies build the side wall,
     the unsquashed top face carries the colours and labels. Callers must
     apply the vertical squash via ``ax.set_aspect(ASPECT_3D)`` afterwards.
@@ -107,12 +106,15 @@ def _draw_extruded(ax, values, colors, offsets, donut=False):
                colors=layer_colors[:n],
                wedgeprops=dict(width=None, edgecolor=_darken("#FFFFFF", f),
                                linewidth=0.6))
-    wedges, _, autotexts = ax.pie(
-        values, labels=None, autopct="%1.1f%%", startangle=90,
-        counterclock=False, colors=list(colors)[:n],
+    result = ax.pie(
+        values, labels=None, autopct="%1.1f%%" if pct_inside else None,
+        startangle=90, counterclock=False, colors=list(colors)[:n],
         explode=offsets,
         wedgeprops=dict(edgecolor=EDGE_COLOR, linewidth=EDGE_WIDTH),
         textprops={"fontsize": 8})
+    contents = list(result)
+    wedges = contents[0]
+    autotexts = contents[2] if len(contents) > 2 else []
     for at in autotexts:
         at.set_fontsize(8)
         at.set_color("white")
@@ -120,13 +122,17 @@ def _draw_extruded(ax, values, colors, offsets, donut=False):
     return wedges
 
 
-def draw_share_pie(ax, labels, values, colors, *,
-                   style="donut", other_label="Other",
-                   max_slices=7, min_pct=2.5):
+def draw_share_pie(ax, labels, values, colors, *, style="donut",
+                   other_label="Other", max_slices=7, min_pct=2.5,
+                   pct_inside=True):
     """Draw a styled pie/doughnut on ``ax``; returns (labels, values, wedges).
 
     style : "pie" | "exploded_pie" | "donut" | "exploded_donut" |
             "3d" | "3d_exploded"
+    pct_inside : draw the white percentage callouts inside the slices; turn
+                 off when the shares are carried by outside slice labels
+                 (see :func:`slice_callouts`) to avoid printing every share
+                 twice.
     """
     labels, values = consolidate(labels, values, max_slices=max_slices,
                                  min_pct=min_pct, other_label=other_label)
@@ -153,16 +159,17 @@ def draw_share_pie(ax, labels, values, colors, *,
         palette = list(colors)[:n]
         while len(palette) < n:
             palette.append(palette[len(palette) % max(1, len(colors))] if colors else "#888888")
-        wedges = _draw_extruded(ax, values, palette, offsets)
+        wedges = _draw_extruded(ax, values, palette, offsets, pct_inside=pct_inside)
         ax.set_aspect(ASPECT_3D)
         lim = 1.0 + max(offsets or [0]) + DEPTH + 0.05
         ax.set_xlim(-lim, lim)
         ax.set_ylim(-lim * ASPECT_3D * 2, lim)
         return labels, values, wedges
 
-    wedges, _, autotexts = ax.pie(
-        values, labels=None, autopct=pct_fmt, startangle=90,
-        counterclock=False, colors=list(colors)[:n],
+    result = ax.pie(
+        values, labels=None,
+        autopct=(pct_fmt if pct_inside else None),
+        startangle=90, counterclock=False, colors=list(colors)[:n],
         explode=offsets,
         pctdistance=(0.80 if donut else 0.68),
         wedgeprops=dict(width=(WEDGE_WIDTH if donut else None),
@@ -170,6 +177,9 @@ def draw_share_pie(ax, labels, values, colors, *,
         textprops={"fontsize": 8},
         shadow=shadow,
     )
+    contents = list(result)
+    wedges = contents[0]
+    autotexts = contents[2] if len(contents) > 2 else []
     for at in autotexts:
         at.set_fontsize(8)
         at.set_color("white")
@@ -192,9 +202,7 @@ def side_legend(fig, wedges, labels, values, fontsize=None):
     """Legend to the right of the chart (template style: category names).
 
     Anchored beyond the axes' right edge (axes-relative transform) so the
-    legend can never mingle with the slices or their data labels. The wedges
-    are remembered so finish() can draw Excel-style leader lines from every
-    slice to its legend entry (some slice colours are near-identical).
+    legend can never mingle with the slices or their data labels.
     """
     fontsize = fontsize or LEGEND_FONTSIZE
     ax = fig.axes[0] if fig.axes else None
@@ -205,7 +213,64 @@ def side_legend(fig, wedges, labels, values, fontsize=None):
     else:
         kwargs.update(bbox_to_anchor=(0.98, 0.5))
     fig.legend(wedges, list(labels), **kwargs)
-    fig._legend_wedges = list(wedges)
+
+
+def slice_callouts(fig, wedges, labels, values, fontsize=None):
+    """Place each 'name – share %' label right next to its own slice.
+
+    Replaces the one-sided legend: every slice gets a short radial stub plus
+    a straight connector to its label (Excel call-out style), so even slices
+    with near-identical colours are unambiguous. The actual drawing happens
+    in :func:`_render_slice_callouts` from finish(), once the final layout -
+    and therefore the anti-overlap pass - can use settled geometry.
+    """
+    total = sum(values) or 1.0
+    entries = [f"{l} – {v / total * 100:.1f}%" for l, v in zip(labels, values)]
+    fig._slice_callouts = list(zip(wedges, entries))
+
+
+def _render_slice_callouts(fig):
+    """Draw the stored slice call-outs with de-overlapped label positions."""
+    callouts = getattr(fig, "_slice_callouts", None)
+    ax = fig.axes[0] if fig.axes else None
+    if not callouts or ax is None:
+        return
+    fontsize = LEGEND_FONTSIZE
+    inv_axes = ax.transAxes.inverted()
+    gap = 0.062          # min vertical spacing between labels (axes fraction)
+    items = []
+    for w, text in callouts:
+        mid = math.radians((w.theta1 + w.theta2) / 2.0)
+        ux, uy = math.cos(mid), math.sin(mid)
+        cx, cy = w.center
+        arc = (cx + w.r * ux, cy + w.r * uy)                 # on the rim
+        stub = (cx + (w.r + 0.14) * ux, cy + (w.r + 0.14) * uy)
+        fx, fy = inv_axes.transform(ax.transData.transform(stub))
+        right = ux >= 0
+        items.append({"w": w, "text": text, "arc": arc, "stub": stub,
+                      "fx": fx, "fy": fy, "right": right})
+    # anti-overlap: nudge labels apart within each side, top-anchored order
+    for side in (True, False):
+        group = sorted((it for it in items if it["right"] == side),
+                       key=lambda it: it["fy"])
+        prev = None
+        for it in group:
+            y = it["fy"]
+            if prev is not None and y - prev < gap:
+                y = prev + gap
+            y = min(max(y, 0.03), 1.35)
+            it["fy"] = y
+            prev = y
+    for it in items:
+        tx = min(it["fx"] + 0.02, 1.30) if it["right"] else max(it["fx"] - 0.02, -0.55)
+        ax.annotate(
+            it["text"],
+            xy=it["stub"], xycoords="data",
+            xytext=(tx, it["fy"]), textcoords="axes fraction",
+            ha=("left" if it["right"] else "right"), va="center",
+            fontsize=fontsize, color="#1a1a1a", annotation_clip=False,
+            arrowprops=dict(arrowstyle="-", color=it["w"].get_facecolor(),
+                            lw=0.9, shrinkA=0, shrinkB=1))
 
 
 def new_fig(width=7.9, height=4.9, dpi=160):
@@ -245,53 +310,17 @@ def _shrink_axes_for_legends(fig):
         ax.set_position([x0, y0, w, h])
 
 
-def _legend_handles(leg):
-    """Legend handle patches across matplotlib versions."""
-    return getattr(leg, "legend_handles", None) or getattr(leg, "legendHandles", [])
-
-
-def _draw_leader_lines(fig):
-    """Excel-style leader lines: one thin connector per slice, from the
-    outer edge of the slice (plus a short radial stub) to the left edge of
-    its legend entry. Each line takes its slice's colour so entries with
-    near-identical colours remain unambiguous.
-    """
-    wedges = getattr(fig, "_legend_wedges", None)
-    leg = fig.legends[0] if fig.legends else None
-    if not wedges or not leg:
-        return
-    handles = _legend_handles(leg)
-    ax = fig.axes[0] if fig.axes else None
-    if not handles or ax is None:
-        return
-    inv_fig = fig.transFigure.inverted()
-    for w, h in zip(wedges, handles):
-        try:
-            hb = h.get_window_extent(fig.canvas.get_renderer())
-        except Exception:
-            continue
-        mid = math.radians((w.theta1 + w.theta2) / 2.0)
-        ux, uy = math.cos(mid), math.sin(mid)
-        cx, cy = w.center
-        # anchor on the outer arc, then a short radial stub outward
-        px, py = cx + w.r * ux, cy + w.r * uy
-        sx, sy = px + 0.12 * ux, py + 0.12 * uy
-        p0 = inv_fig.transform(ax.transData.transform((px, py)))
-        p1 = inv_fig.transform(ax.transData.transform((sx, sy)))
-        target = inv_fig.transform((hb.x0 - 4, (hb.y0 + hb.y1) / 2.0))
-        color = w.get_facecolor()
-        line = Line2D([p0[0], p1[0], target[0]], [p0[1], p1[1], target[1]],
-                      transform=fig.transFigure, color=color,
-                      lw=0.9, solid_capstyle="round", zorder=1)
-        fig.add_artist(line)
-
-
 def finish(fig, out_path, ax=None):
     """Tight layout, save, close."""
-    if fig.legends:
+    if getattr(fig, "_slice_callouts", None):
+        fig.canvas.draw()          # settle final positions before labelling
+        _render_slice_callouts(fig)
+        try:
+            fig.tight_layout()
+        except Exception:
+            pass
+    elif fig.legends:
         _shrink_axes_for_legends(fig)
-        fig.canvas.draw()          # settle final positions before connecting
-        _draw_leader_lines(fig)
     else:
         fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")

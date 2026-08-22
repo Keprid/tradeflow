@@ -50,13 +50,15 @@ import matplotlib.pyplot as plt
 import openpyxl
 
 from docx import Document
+from docx.enum.section import WD_SECTION_START
+from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Emu, Inches, Pt, RGBColor
 
-from charts import draw_share_pie, series_shares, side_legend, new_fig, finish
+from charts import draw_share_pie, series_shares, slice_callouts, new_fig, finish
 from country_names import display_name, narrative_ref, short_product_name, title_partner
 
 # ---------------------------------------------------------------------------
@@ -736,8 +738,8 @@ def make_chart_share(a: Analysis, out_path, direction):
     fig, ax = new_fig()
     labels, shares, wedges = draw_share_pie(
         ax, labels, shares, palette,
-        style="3d_exploded", other_label="Other products")
-    side_legend(fig, wedges, labels, shares)
+        style="3d_exploded", other_label="Other products", pct_inside=False)
+    slice_callouts(fig, wedges, labels, shares)
     title = f"EXPORT SHARE {a.year}" if direction == "exports" else f"IMPORT SHARE {a.year}"
     ax.set_title(title, fontsize=12, weight="bold")
     finish(fig, out_path)
@@ -753,9 +755,6 @@ class ReportBuilder:
         self.c = cfg["country"]
         self.a = None
         self.doc = Document()
-        self.table_entries = []      # (number, caption) captured for List of Tables
-        self.figure_entries = []     # (number, caption) captured for List of Figures
-        self._list_anchors = {}      # kind -> anchor paragraph filled by finalize_lists()
         section = self.doc.sections[0]
         section.top_margin = Inches(1)
         section.bottom_margin = Inches(1)
@@ -796,6 +795,17 @@ class ReportBuilder:
         h2.paragraph_format.space_before = Pt(10)
         h2.paragraph_format.space_after = Pt(4)
         h2.paragraph_format.keep_with_next = True
+
+        # Caption styles feed the automated List of Tables / List of Figures
+        # (TOC \t fields match paragraphs by style name).
+        for style_name in ("Caption Table", "Caption Figure"):
+            st = self.doc.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
+            st.base_style = self.doc.styles["Normal"]
+            st.font.name = "Times New Roman"
+            st.font.size = Pt(12)
+            st.font.italic = True
+            st.paragraph_format.space_before = Pt(10)
+            st.quick_style = True
 
     def _style_run(self, run, size=None, bold=None, italic=None, color=None, name="Times New Roman"):
         run.font.name = name
@@ -876,14 +886,13 @@ class ReportBuilder:
         p = self.doc.add_paragraph()
         r = p.add_run(text)
         self._style_run(r, italic=True)
-        p.paragraph_format.space_before = Pt(10)
-        m = re.match(r"^(Table|Figure)\s+(\d+)\s*[:\-–]", str(text), re.IGNORECASE)
+        m = re.match(r"^(Table|Figure)\s+\d+\s*[:\-–]", str(text), re.IGNORECASE)
         if m:
-            kind = "table" if m.group(1).lower() == "table" else "figure"
-            entries = self.table_entries if kind == "table" else self.figure_entries
-            number = int(m.group(2))
-            if all(n != number for n, _ in entries):
-                entries.append((number, str(text)))
+            # style drives the automated List of Tables / List of Figures
+            p.style = self.doc.styles[
+                "Caption Table" if m.group(1).lower() == "table" else "Caption Figure"]
+        else:
+            p.paragraph_format.space_before = Pt(10)
         return p
 
     def add_source(self, text=SRC):
@@ -904,12 +913,8 @@ class ReportBuilder:
     def page_break(self):
         self.doc.add_page_break()
 
-    def add_toc(self):
-        p = self.doc.add_paragraph()
-        r = p.add_run("Table of Contents")
-        self._style_run(r, bold=True, size=14, color=RGBColor(0x15, 0x60, 0x82))
-        p.paragraph_format.space_after = Pt(12)
-
+    def _toc_field(self, instr, placeholder):
+        """Insert a Word TOC field that populates on 'Update Field'."""
         def field_piece(fld_type=None, instr=None, text=None):
             pr = self.doc.add_paragraph()
             pr.paragraph_format.space_after = Pt(0)
@@ -930,47 +935,67 @@ class ReportBuilder:
             return pr
 
         field_piece(fld_type="begin")
-        field_piece(instr=r'TOC \o "1-2" \h \z \u')
+        field_piece(instr=instr)
         field_piece(fld_type="separate")
-        field_piece(text="Right-click and select 'Update Field' to generate the Table of Contents.")
+        field_piece(text=placeholder)
         field_piece(fld_type="end")
+
+    def add_toc(self):
+        p = self.doc.add_paragraph()
+        r = p.add_run("Table of Contents")
+        self._style_run(r, bold=True, size=14, color=RGBColor(0x15, 0x60, 0x82))
+        p.paragraph_format.space_after = Pt(12)
+        self._toc_field(r'TOC \o "1-2" \h \z \u',
+                        "Right-click and select 'Update Field' to generate "
+                        "the Table of Contents.")
 
     def add_list_placeholder(self, title, kind):
         """Front-matter page: 'List of Tables' / 'List of Figures'.
 
-        The heading is written now and an (empty) anchor paragraph is kept;
-        finalize_lists() fills in the captured captions once the whole body
-        has been assembled (the lists precede their captions in page order).
+        A real Word TOC field scoped to the caption style, so right-click ->
+        'Update Field' fills in every entry with its exact page number.
         """
         p = self.doc.add_paragraph()
         r = p.add_run(title)
         self._style_run(r, bold=True, size=14, color=RGBColor(0x15, 0x60, 0x82))
         p.paragraph_format.space_after = Pt(12)
-        anchor = self.doc.add_paragraph()
-        anchor.paragraph_format.space_after = Pt(0)
-        self._list_anchors[kind] = anchor
-        return p
+        if kind == "table":
+            instr = r'TOC \h \z \t "Caption Table,1"'
+        else:
+            instr = r'TOC \h \z \t "Caption Figure,1"'
+        self._toc_field(instr,
+                        f"Right-click and select 'Update Field' to generate "
+                        f"the {title}.")
 
-    def finalize_lists(self):
-        """Fill the List of Tables / List of Figures placeholder pages."""
-        for kind, anchor in self._list_anchors.items():
-            entries = sorted(self.table_entries if kind == "table"
-                             else self.figure_entries)
-            if not entries:
-                r = anchor.add_run("[Placeholder: no matching captions found]")
-                self._style_run(r, italic=True, color=RGBColor(0x60, 0x60, 0x60))
-                continue
-            for _, text in entries:
-                e = anchor.insert_paragraph_before("")
-                e.paragraph_format.space_after = Pt(4)
-                e.paragraph_format.left_indent = Inches(0.25)
-                er = e.add_run(text)
-                self._style_run(er, size=12)
-            anchor._p.getparent().remove(anchor._p)
+    def start_body_section(self):
+        """Begin the report body as a new document section.
+
+        Front matter (title page, TOC, lists) sits in the first section with
+        an empty footer; from here on the footer carries a PAGE field whose
+        numbering restarts at 1.
+        """
+        sec = self.doc.add_section(WD_SECTION_START.NEW_PAGE)
+        sect_pr = sec._sectPr
+        pg_num = OxmlElement("w:pgNumType")
+        pg_num.set(qn("w:start"), "1")
+        # schema order: pgNumType belongs just before w:cols / w:docGrid
+        anchor = None
+        for tag in ("w:cols", "w:docGrid"):
+            found = sect_pr.find(qn(tag))
+            if found is not None:
+                anchor = found
+                break
+        if anchor is not None:
+            anchor.addprevious(pg_num)
+        else:
+            sect_pr.append(pg_num)
+        return sec
 
     def add_footer(self):
-        section = self.doc.sections[0]
+        """Footer of the last (body) section: directorate + page number."""
+        section = self.doc.sections[-1]
         footer = section.footer
+        footer.is_linked_to_previous = False
         p = footer.paragraphs[0]
         p.text = ""
         tab_stops = p.paragraph_format.tab_stops
@@ -1392,7 +1417,8 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_list_placeholder("List of Tables", "table")
     b.page_break()
     b.add_list_placeholder("List of Figures", "figure")
-    b.page_break()
+    # page numbers start at 1 from here (title/TOC/lists carry none)
+    b.start_body_section()
 
     # ============================== SECTION 1 ===============================
     b.add_heading(f"1. {c['title']}")
@@ -1559,7 +1585,6 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     # footer
     b.add_footer()
 
-    b.finalize_lists()
     doc.save(out_path)
 
 
