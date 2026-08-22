@@ -265,6 +265,25 @@ def _pick_year_cols(ycols):
     return [(i, y) for i, y in ycols if y in selected]
 
 
+def _balance_years(years, n=10):
+    """Trailing run of consecutive years (at most `n`) ending at the latest.
+
+    Used for the trade-balance series: unlike Tables 1-6 (last five years),
+    the balance reaches back up to ten years whenever the Kenya export and
+    import sources carry that history.
+    """
+    if not years:
+        return []
+    years = sorted(set(years))
+    run = [years[-1]]
+    for y in reversed(years[:-1]):
+        if y == run[0] - 1:
+            run.insert(0, y)
+        else:
+            break
+    return run[-n:]
+
+
 def _vals(row, ycols):
     return [to_float(row[i]) if i < len(row) else None for i, _ in ycols]
 
@@ -1108,8 +1127,16 @@ def generate_tables(excel_dir, out_dir, top_n):
         years_sets.append(set(ys))
     full_years = _pick_years(sorted(set.intersection(*years_sets)))
     # Tables 1-6 show only the last five years; Figure 1 (the trade balance)
-    # uses the full common year run so the analysis covers e.g. 2016-2025.
+    # uses the last up-to-TEN consecutive years so the analysis covers e.g.
+    # 2016-2025 whenever the source data carries that history.
     table_years = full_years[-5:] if len(full_years) > 5 else full_years
+    # The balance window is derived from the Kenya exports (Table 5) and
+    # imports (Table 6) sources alone -- it must not shrink just because the
+    # narrower Tables 1-4 cover fewer years. Older history already captured
+    # in an existing balance workbook is merged back in further below.
+    _, _, ys5_all, _ = parse_source(files["table5"])
+    _, _, ys6_all, _ = parse_source(files["table6"])
+    balance_window = _balance_years(set(ys5_all) & set(ys6_all), n=10) or full_years
 
     # ---- Table 1: import source markets --------------------------------
     rows, ycols, years, labels = parse_source(files["table1"], years=table_years)
@@ -1230,11 +1257,11 @@ def generate_tables(excel_dir, out_dir, top_n):
     _finalize(ws, out["t7"], cache)
 
     # ---- Figure 1: trade balance derived from Table 5 / Table 6 ----------
-    # The balance uses the full common year run (up to 10 years) even though
-    # Tables 1-6 only show the last five years.
+    # The balance spans the last up-to-10 consecutive years even though
+    # Tables 1-6 only show the last five.
     bal_path = os.path.join(out_dir, "Figure 1 Trade Balance.xlsx")
-    rows5f, ycols5f, years5f, _ = parse_source(files["table5"], years=full_years)
-    rows6f, ycols6f, years6f, _ = parse_source(files["table6"], years=full_years)
+    rows5f, ycols5f, years5f, _ = parse_source(files["table5"], years=balance_window)
+    rows6f, ycols6f, years6f, _ = parse_source(files["table6"], years=balance_window)
     tot5f, _ = extract_kenya(rows5f, ycols5f)
     tot6f, _ = extract_kenya(rows6f, ycols6f)
     exports_full = [v / 1e3 if v is not None else None for v in tot5f["vals"]]

@@ -57,7 +57,7 @@ from docx.oxml.ns import qn
 from docx.shared import Emu, Inches, Pt, RGBColor
 
 from charts import draw_share_pie, series_shares, side_legend, new_fig, finish
-from country_names import display_name, short_product_name
+from country_names import display_name, narrative_ref, short_product_name, title_partner
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -675,8 +675,10 @@ def build_narratives(a: Analysis, cfg):
         lambda d: f"{clean_label(d['label'])} ({pct(d['share'])})")
     t["s33"] = [f"The top import products in {Y} included {s33_prods}."] if s33_prods else []
 
-    t["fig2_note"] = f"Top 10 products accounted for {pct(a.top10_export_share())} of total exports to the market in {Y}."
-    t["fig3_note"] = f"Top 10 import products accounted for {pct(a.top10_import_share())} of total imports from {c['name']} in {Y}."
+    t["fig2_note"] = (f"Top 10 export products accounted for {pct(a.top10_export_share())} "
+                      f"of Kenya's total exports to {narrative_ref(c['name'])} in {Y}.")
+    t["fig3_note"] = (f"Top 10 import products accounted for {pct(a.top10_import_share())} "
+                      f"of Kenya's total imports from {narrative_ref(c['name'])} in {Y}.")
 
     return t
 
@@ -753,6 +755,9 @@ class ReportBuilder:
         self.c = cfg["country"]
         self.a = None
         self.doc = Document()
+        self.table_entries = []      # (number, caption) captured for List of Tables
+        self.figure_entries = []     # (number, caption) captured for List of Figures
+        self._list_anchors = {}      # kind -> anchor paragraph filled by finalize_lists()
         section = self.doc.sections[0]
         section.top_margin = Inches(1)
         section.bottom_margin = Inches(1)
@@ -873,6 +878,13 @@ class ReportBuilder:
         r = p.add_run(text)
         self._style_run(r, italic=True)
         p.paragraph_format.space_before = Pt(10)
+        m = re.match(r"^(Table|Figure)\s+(\d+)\s*[:\-–]", str(text), re.IGNORECASE)
+        if m:
+            kind = "table" if m.group(1).lower() == "table" else "figure"
+            entries = self.table_entries if kind == "table" else self.figure_entries
+            number = int(m.group(2))
+            if all(n != number for n, _ in entries):
+                entries.append((number, str(text)))
         return p
 
     def add_source(self, text=SRC):
@@ -923,6 +935,39 @@ class ReportBuilder:
         field_piece(fld_type="separate")
         field_piece(text="Right-click and select 'Update Field' to generate the Table of Contents.")
         field_piece(fld_type="end")
+
+    def add_list_placeholder(self, title, kind):
+        """Front-matter page: 'List of Tables' / 'List of Figures'.
+
+        The heading is written now and an (empty) anchor paragraph is kept;
+        finalize_lists() fills in the captured captions once the whole body
+        has been assembled (the lists precede their captions in page order).
+        """
+        p = self.doc.add_paragraph()
+        r = p.add_run(title)
+        self._style_run(r, bold=True, size=14, color=RGBColor(0x15, 0x60, 0x82))
+        p.paragraph_format.space_after = Pt(12)
+        anchor = self.doc.add_paragraph()
+        anchor.paragraph_format.space_after = Pt(0)
+        self._list_anchors[kind] = anchor
+        return p
+
+    def finalize_lists(self):
+        """Fill the List of Tables / List of Figures placeholder pages."""
+        for kind, anchor in self._list_anchors.items():
+            entries = sorted(self.table_entries if kind == "table"
+                             else self.figure_entries)
+            if not entries:
+                r = anchor.add_run("[Placeholder: no matching captions found]")
+                self._style_run(r, italic=True, color=RGBColor(0x60, 0x60, 0x60))
+                continue
+            for _, text in entries:
+                e = anchor.insert_paragraph_before("")
+                e.paragraph_format.space_after = Pt(4)
+                e.paragraph_format.left_indent = Inches(0.25)
+                er = e.add_run(text)
+                self._style_run(er, size=12)
+            anchor._p.getparent().remove(anchor._p)
 
     def add_footer(self):
         section = self.doc.sections[0]
@@ -1326,7 +1371,8 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
 
     # ============================== TITLE PAGE ==============================
     b.add_letterhead()
-    b.add_para(rep["title_line1"], size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=0)
+    b.add_para(f"KENYA- {title_partner(c['name'])} TRADE FLOW",
+               size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=0)
     b.add_para(rep["title_line2"], size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=30)
     for _ in range(3):
         b.add_para("")
@@ -1341,6 +1387,12 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
 
     # ============================== TABLE OF CONTENTS =======================
     b.add_toc()
+    b.page_break()
+
+    # ==================== LIST OF TABLES / LIST OF FIGURES ==================
+    b.add_list_placeholder("List of Tables", "table")
+    b.page_break()
+    b.add_list_placeholder("List of Figures", "figure")
     b.page_break()
 
     # ============================== SECTION 1 ===============================
@@ -1414,14 +1466,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     for line in narr["s31"]:
         b.add_bullet(line)
 
-    # Export share figure
-    b.add_para(f"Share of Kenya's Top Export Products to {c['name']}", bold=True)
-    b.add_table_caption(f"Figure 2: Share of Kenya's Top Exports to {c['name']} in {Y}")
-    fig2 = os.path.join(tmp_dir, "chart_export_share.png")
-    make_chart_share(a, fig2, "exports")
-    b.add_figure(fig2)
-    b.add_bullet(narr["fig2_note"])
-
+    # Export share figure (placed after Table 5, mirroring Table 6 -> Figure 3)
     # 3.2 Export products
     b.add_heading(f"3.2 Kenya's Export Products to {c['name']}", level=2)
     b.add_table_caption(f"Table 5: Kenya's Top {len(a.table5['items'])} Export Products to {c['name']} in {Y}")
@@ -1430,6 +1475,13 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     for line in narr["s32"]:
         b.add_bullet(line)
+
+    b.add_para(f"Share of Kenya's Top Export Products to {c['name']}", bold=True)
+    b.add_table_caption(f"Figure 2: Share of Kenya's Top Exports to {c['name']} in {Y}")
+    fig2 = os.path.join(tmp_dir, "chart_export_share.png")
+    make_chart_share(a, fig2, "exports")
+    b.add_figure(fig2)
+    b.add_bullet(narr["fig2_note"])
     b.page_break()
 
     # 3.3 Import products
@@ -1508,6 +1560,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     # footer
     b.add_footer()
 
+    b.finalize_lists()
     doc.save(out_path)
 
 
@@ -1536,7 +1589,7 @@ def main():
 
     out = args.output
     if not out:
-        cname = cfg["country"]["name"].replace(" ", "_")
+        cname = title_partner(cfg["country"]["name"])
         out = os.path.join(BASE_DIR, "output", f"KENYA-{cname} TRADE FLOW.docx")
     out = os.path.abspath(out)
     out_dir = os.path.dirname(out)

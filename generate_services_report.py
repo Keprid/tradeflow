@@ -50,7 +50,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
 from charts import draw_share_pie, series_shares, side_legend, new_fig, finish
-from country_names import short_product_name
+from country_names import short_product_name, title_partner
 from generate_report import (
     ReportBuilder, load_config,
     to_float, num, pct, clean_label, short_label, lighten,
@@ -474,7 +474,7 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
 
     # ============================== TITLE PAGE ==============================
     b.add_letterhead()
-    svc_title = f"KENYA- {c['title']} SERVICES TRADE FLOW"
+    svc_title = f"KENYA- {title_partner(c['name'])} SERVICES TRADE FLOW"
     b.add_para(svc_title,
                size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=0)
     b.add_para(rep.get("title_line2", "ANALYSIS REPORT"),
@@ -493,6 +493,12 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
 
     # ============================== TABLE OF CONTENTS =======================
     b.add_toc()
+    b.page_break()
+
+    # ==================== LIST OF TABLES / LIST OF FIGURES ==================
+    b.add_list_placeholder("List of Tables", "table")
+    b.page_break()
+    b.add_list_placeholder("List of Figures", "figure")
     b.page_break()
 
     # ============================== SECTION 1 ===============================
@@ -845,6 +851,7 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         b.add_para(ref)
 
     b.add_footer()
+    b.finalize_lists()
     doc.save(out_path)
 
 
@@ -869,7 +876,7 @@ def main():
 
     out = args.output
     if not out:
-        cname = cfg["country"]["name"].replace(" ", "_")
+        cname = title_partner(cfg["country"]["name"])
         out = os.path.join(BASE_DIR, "output",
                            f"KENYA-{cname} SERVICES TRADE FLOW.docx")
     out = os.path.abspath(out)

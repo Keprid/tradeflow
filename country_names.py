@@ -130,6 +130,34 @@ def display_name(name, maxlen=None):
     return text
 
 
+def title_partner(name, max_len=14):
+    """Uppercase partner name for report titles ('KENYA-<PARTNER> ...').
+
+    Prefers the professional short form (SHORT_NAMES) whenever the official
+    name is long, e.g. 'United States of America' -> 'KENYA-USA TRADE FLOW'
+    and 'United Arab Emirates' -> 'KENYA-UAE TRADE FLOW'. Short names pass
+    through unchanged ('Saudi Arabia' -> 'SAUDI ARABIA'); a leading 'the'
+    is dropped ('the World' -> 'WORLD').
+    """
+    text = re.sub(r"\s+", " ", str(name or "")).strip()
+    disp = display_name(text)
+    if disp and len(disp) < len(text) and len(text) > max_len:
+        text = disp
+    text = re.sub(r"^the\s+", "", text, flags=re.IGNORECASE)
+    return text.upper()
+
+
+def narrative_ref(name):
+    """Partner reference for running prose, with the article abbreviations take.
+
+    All-caps short forms read naturally with 'the' in sentences such as
+    "Kenya's total imports from the USA in 2025"; regular country names do
+    not take an article ('imports from Saudi Arabia').
+    """
+    disp = display_name(name)
+    return f"the {disp}" if disp and disp.isupper() else disp
+
+
 # ---------------------------------------------------------------------------
 # Product labels (HS descriptions)
 # ---------------------------------------------------------------------------

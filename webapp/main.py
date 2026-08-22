@@ -520,7 +520,7 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs):
     cfg, cfg_id = _resolve_cfg(excel_dir, cfg_id, logs)
 
     os.makedirs(charts, exist_ok=True)
-    report_name = f"KENYA-{cfg['country']['title']} TRADE FLOW.docx"
+    report_name = f"KENYA-{gr.title_partner(cfg['country']['name'])} TRADE FLOW.docx"
     report_path = job_dir / report_name
     logs.append(f"Building report for {cfg['country']['name']} (charts -> {charts})")
     try:
@@ -585,7 +585,7 @@ def _run_services_pipeline(job_dir, cfg_id, top_n, logs):
     cfg = gr.load_config(gr.cfg_path)
 
     os.makedirs(charts, exist_ok=True)
-    report_name = f"KENYA-{cfg['country']['title']} SERVICES TRADE FLOW.docx"
+    report_name = f"KENYA-{gr.title_partner(cfg['country']['name'])} SERVICES TRADE FLOW.docx"
     report_path = job_dir / report_name
     logs.append(f"Building services report for {cfg['country']['name']} (charts -> {charts})")
     try:

@@ -188,11 +188,20 @@ def share_legend(fig, wedges, labels, values, ncol=2, fontsize=None):
 
 
 def side_legend(fig, wedges, labels, values, fontsize=None):
-    """Legend to the right of the chart (template style: category names)."""
+    """Legend to the right of the chart (template style: category names).
+
+    Anchored beyond the axes' right edge (axes-relative transform) so the
+    legend can never mingle with the slices or their data labels.
+    """
     fontsize = fontsize or LEGEND_FONTSIZE
-    fig.legend(wedges, list(labels), loc="center right",
-               bbox_to_anchor=(1.0, 0.5), frameon=False,
-               fontsize=fontsize, handlelength=1.2, labelspacing=0.7)
+    ax = fig.axes[0] if fig.axes else None
+    kwargs = dict(loc="center left", frameon=False, fontsize=fontsize,
+                  handlelength=1.2, labelspacing=0.7)
+    if ax is not None:
+        kwargs.update(bbox_to_anchor=(1.04, 0.5), bbox_transform=ax.transAxes)
+    else:
+        kwargs.update(bbox_to_anchor=(0.98, 0.5))
+    fig.legend(wedges, list(labels), **kwargs)
 
 
 def new_fig(width=7.9, height=4.9, dpi=160):
@@ -201,8 +210,42 @@ def new_fig(width=7.9, height=4.9, dpi=160):
     return fig, ax
 
 
+def _shrink_axes_for_legends(fig):
+    """Pull the axes in so figure-level legends sit clear of the chart.
+
+    tight_layout() ignores figure-level legends, so without this the pie
+    would keep its full width and slide under a side legend.
+    """
+    try:
+        fig.canvas.draw()
+    except Exception:
+        return
+    renderer = fig.canvas.get_renderer()
+    fw, fh = fig.bbox.width, fig.bbox.height
+    for ax in fig.axes:
+        pos = ax.get_position()
+        x0, y0, w, h = pos.x0, pos.y0, pos.width, pos.height
+        for leg in fig.legends:
+            bb = leg.get_window_extent(renderer)
+            lx0, lx1 = bb.x0 / fw, bb.x1 / fw
+            ly0, ly1 = bb.y0 / fh, bb.y1 / fh
+            beside = (ly0 < y0 + h) and (ly1 > y0)
+            overlaps_x = (lx0 < x0 + w) and (lx1 > x0)
+            if beside and overlaps_x:
+                if lx0 >= x0 + w / 2:      # legend sits on the right half
+                    w = max(0.28, lx0 - 0.02 - x0)
+                else:                      # legend sits on the left half
+                    new_x0 = max(0.0, min(x0 + w - 0.28, lx1 + 0.02))
+                    w = pos.x0 + pos.width - new_x0
+                    x0 = new_x0
+        ax.set_position([x0, y0, w, h])
+
+
 def finish(fig, out_path, ax=None):
     """Tight layout, save, close."""
-    fig.tight_layout()
+    if fig.legends:
+        _shrink_axes_for_legends(fig)
+    else:
+        fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
