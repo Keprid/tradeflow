@@ -41,6 +41,8 @@ from lxml import etree
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from charts import draw_share_pie, new_fig, finish
+from country_names import display_name, short_product_name
 from xlsx_compat import HTMLTableParser, convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
@@ -1060,7 +1062,7 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
         is_kenya = kenya_highlight and str(it["label"]).strip().lower() == "kenya"
         fill = KENYA_FILL if is_kenya else get_row_fill(i)
         put_text(ws, r, 1, it["rank"], size=FONT_SIZE, fill=fill, use_row_fill=False)
-        put_text(ws, r, 2, it["label"], size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
+        put_text(ws, r, 2, display_name(it["label"]), size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
         for k in range(n):
             put_val(ws, r, 3 + k, it["vals"][k] if k < len(it["vals"]) else None, fill=fill, use_row_fill=False)
         t_latest = total["vals"][-1] if total and len(total["vals"]) >= n else None
@@ -2116,25 +2118,22 @@ def make_pie_chart(exports_by_category, years, out_path):
     if other_total > 0:
         main_slices.append(("Other services", other_total))
 
-    labels = [s[0] for s in main_slices]
+    labels = [short_product_name(s[0], maxlen=40) for s in main_slices]
     sizes = [s[1] for s in main_slices]
 
     colors = ["#2E75B6", "#ED7D31", "#A5A5A5", "#FFC000", "#4472C4",
               "#70AD47", "#264478", "#9B57A0", "#636363", "#EB7E30"]
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    wedges, texts, autotexts = ax.pie(
-        sizes, labels=None, autopct="%1.1f%%", startangle=90,
-        colors=colors[:len(sizes)], pctdistance=0.85,
-        textprops={"fontsize": 9})
-    for t in autotexts:
-        t.set_fontsize(8)
-
-    ax.legend(labels, loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8)
+    fig, ax = new_fig(8, 6, 150)
+    labels, sizes, wedges = draw_share_pie(
+        ax, labels, sizes, colors,
+        style="3d_exploded", other_label="Other services",
+        max_slices=8, min_pct=3.0)
+    total = sum(sizes) or 1.0
+    ax.legend(wedges, [f"{l} - {v / total * 100:.1f}%" for l, v in zip(labels, sizes)],
+              loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8)
     ax.set_title("Global Service Exports by Category", fontsize=12, weight="bold")
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    finish(fig, out_path)
 
 
 def make_stacked_bar_chart(category_items, years, out_path):

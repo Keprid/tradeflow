@@ -49,6 +49,8 @@ from docx.shared import Inches, Pt, RGBColor
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
+from charts import draw_share_pie, series_shares, side_legend, new_fig, finish
+from country_names import short_product_name
 from generate_report import (
     ReportBuilder, load_config,
     to_float, num, pct, clean_label, short_label, lighten,
@@ -417,69 +419,41 @@ def make_chart_balance(a: ServicesAnalysis, out_path):
 
 
 def make_chart_export_share(a: ServicesAnalysis, out_path):
-    """Doughnut chart of Kenya's service export shares by category."""
+    """Styled doughnut of Kenya's service export shares by category."""
     items = a.table3["items"][:10]
-    labels = [short_label(d["label"] or d["name"]) for d in items]
-    shares = [d["share"] for d in items if d["share"] is not None]
-    labels = labels[:len(shares)]
-    other = max(0.0, 1.0 - sum(shares))
-    if other > 0.01:
-        labels.append("Other services")
-        shares.append(other)
+    labels = [short_product_name(d["label"] or d["name"], maxlen=42) for d in items]
+    shares = series_shares(items)
 
     palette = list(THEME_ACCENTS) + [lighten(c, 0.45) for c in THEME_ACCENTS]
-    colors = palette[:len(shares)]
 
     plt.rcParams["font.family"] = chart_font()
-    fig, ax = plt.subplots(figsize=(7.8, 4.6), dpi=160)
-    wedges, _, autotexts = ax.pie(
-        shares, labels=None, autopct="%1.1f%%", startangle=90,
-        counterclock=False, colors=colors, pctdistance=0.80,
-        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=1.2))
-    for at in autotexts:
-        at.set_fontsize(8)
-        at.set_color("white")
+    fig, ax = new_fig()
+    labels, shares, wedges = draw_share_pie(
+        ax, labels, shares, palette,
+        style="3d_exploded", other_label="Other services")
+    side_legend(fig, wedges, labels, shares)
     ax.set_title(f"Share of Kenya's Service Exports by Category in {a.year}",
                  fontsize=12, weight="bold")
-    ax.legend(wedges, [f"{l} - {s * 100:.1f}%" for l, s in zip(labels, shares)],
-              loc="upper center", bbox_to_anchor=(0.5, -0.03), ncol=2,
-              frameon=False, fontsize=8.5)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight")
-    plt.close(fig)
+    finish(fig, out_path)
 
 
 def make_chart_import_share(a: ServicesAnalysis, out_path):
-    """Doughnut chart of Kenya's service import shares by category."""
+    """Styled exploded doughnut of Kenya's service import shares by category."""
     items = a.table4["items"][:10]
-    labels = [short_label(d["label"] or d["name"]) for d in items]
-    shares = [d["share"] for d in items if d["share"] is not None]
-    labels = labels[:len(shares)]
-    other = max(0.0, 1.0 - sum(shares))
-    if other > 0.01:
-        labels.append("Other services")
-        shares.append(other)
+    labels = [short_product_name(d["label"] or d["name"], maxlen=42) for d in items]
+    shares = series_shares(items)
 
     palette = list(THEME_ACCENTS) + [lighten(c, 0.45) for c in THEME_ACCENTS]
-    colors = palette[:len(shares)]
 
     plt.rcParams["font.family"] = chart_font()
-    fig, ax = plt.subplots(figsize=(7.8, 4.6), dpi=160)
-    wedges, _, autotexts = ax.pie(
-        shares, labels=None, autopct="%1.1f%%", startangle=90,
-        counterclock=False, colors=colors, pctdistance=0.80,
-        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=1.2))
-    for at in autotexts:
-        at.set_fontsize(8)
-        at.set_color("white")
+    fig, ax = new_fig()
+    labels, shares, wedges = draw_share_pie(
+        ax, labels, shares, palette,
+        style="3d_exploded", other_label="Other services")
+    side_legend(fig, wedges, labels, shares)
     ax.set_title(f"Share of Kenya's Service Imports by Category in {a.year}",
                  fontsize=12, weight="bold")
-    ax.legend(wedges, [f"{l} - {s * 100:.1f}%" for l, s in zip(labels, shares)],
-              loc="upper center", bbox_to_anchor=(0.5, -0.03), ncol=2,
-              frameon=False, fontsize=8.5)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight")
-    plt.close(fig)
+    finish(fig, out_path)
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +473,7 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     doc = b.doc
 
     # ============================== TITLE PAGE ==============================
+    b.add_letterhead()
     svc_title = f"KENYA- {c['title']} SERVICES TRADE FLOW"
     b.add_para(svc_title,
                size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=0)

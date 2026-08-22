@@ -56,6 +56,9 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Emu, Inches, Pt, RGBColor
 
+from charts import draw_share_pie, series_shares, side_legend, new_fig, finish
+from country_names import display_name, short_product_name
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -711,39 +714,33 @@ def make_chart_balance(a: Analysis, out_path):
 
 
 def make_chart_share(a: Analysis, out_path, direction):
-    """Doughnut chart of top-10 product shares for exports or imports."""
+    """Styled doughnut chart of top product shares for exports or imports.
+
+    Exports use an exploded doughnut (all slices offset, largest called
+    out); imports a plain doughnut. Small slices are consolidated into an
+    "Other products" slice and percentage callouts are suppressed on slices
+    too small to hold them so labels never overlap.
+    """
     table = a.table5 if direction == "exports" else a.table6
     items = table["items"][:10]
-    labels = [short_label(d["label"] or d["name"]) for d in items]
-    shares = [d["share"] for d in items]
-    other = max(0.0, 1.0 - sum(shares))
-    if other > 0:
-        labels.append("Other products")
-        shares.append(other)
+    labels = [short_product_name(d.get("label") or d.get("name"), d.get("code"),
+                                 maxlen=42) for d in items]
+    shares = series_shares(items)
 
     palette = list(THEME_ACCENTS)
     palette += [lighten(c, 0.45) for c in THEME_ACCENTS]
-    colors = palette[: len(shares)]
 
     plt.rcParams["font.family"] = chart_font()
-    fig, ax = plt.subplots(figsize=(7.8, 4.6), dpi=160)
-    wedges, _, autotexts = ax.pie(
-        shares, labels=None, autopct="%1.1f%%", startangle=90,
-        counterclock=False, colors=colors, pctdistance=0.80,
-        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=1.2))
-    for at in autotexts:
-        at.set_fontsize(8)
-        at.set_color("white")
+    fig, ax = new_fig()
+    labels, shares, wedges = draw_share_pie(
+        ax, labels, shares, palette,
+        style="3d_exploded", other_label="Other products")
+    side_legend(fig, wedges, labels, shares)
     ax.set_title(f"Share of Kenya's Top Exports to {a.country} in {a.year}",
                  fontsize=12, weight="bold") if direction == "exports" else \
         ax.set_title(f"Share of Kenya's Top Imports from {a.country} in {a.year}",
                      fontsize=12, weight="bold")
-    ax.legend(wedges, [f"{l} – {s * 100:.1f}%" for l, s in zip(labels, shares)],
-              loc="upper center", bbox_to_anchor=(0.5, -0.03), ncol=2,
-              frameon=False, fontsize=8.5)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight")
-    plt.close(fig)
+    finish(fig, out_path)
 
 
 # ---------------------------------------------------------------------------
@@ -808,6 +805,22 @@ class ReportBuilder:
             run.font.italic = italic
         if color is not None:
             run.font.color.rgb = color
+
+    def add_letterhead(self):
+        """KEPROBA letterhead in the running header of every page.
+
+        Replicates the template report: the letterhead image inline in the
+        default page header, 2.76in x 0.72in, left-aligned. Skipped silently
+        when the asset is not present.
+        """
+        letterhead = os.path.join(BASE_DIR, "keproba_letterhead.png")
+        if not os.path.exists(letterhead):
+            return
+        header = self.doc.sections[0].header
+        p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        p.text = ""
+        p.paragraph_format.space_after = Pt(6)
+        p.add_run().add_picture(letterhead, width=Inches(2.76))
 
     def add_para(self, text="", size=None, bold=None, italic=None, color=None,
                  align=None, style=None, space_after=None, space_before=None):
@@ -1312,6 +1325,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     doc = b.doc
 
     # ============================== TITLE PAGE ==============================
+    b.add_letterhead()
     b.add_para(rep["title_line1"], size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=0)
     b.add_para(rep["title_line2"], size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=30)
     for _ in range(3):

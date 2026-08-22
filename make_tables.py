@@ -58,6 +58,7 @@ from lxml import etree
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from country_names import display_name, short_product_name
 from xlsx_compat import convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
@@ -685,7 +686,7 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
         is_kenya = kenya_highlight and str(it["label"]).strip().lower() == "kenya"
         fill = KENYA_FILL if is_kenya else get_row_fill(i)
         put_text(ws, r, 1, it["rank"], size=FONT_SIZE, fill=fill, use_row_fill=False)
-        put_text(ws, r, 2, it["label"], size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
+        put_text(ws, r, 2, display_name(it["label"]), size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
         for k in range(n):
             put_val(ws, r, 3 + k, it["vals"][k], fill=fill, use_row_fill=False)
         if it["share"] is not None and total and total["vals"][-1] is not None:
@@ -803,7 +804,8 @@ def write_product_table(ws, data, hdr, unit_row,
         if prefix_apostrophe and code:
             code = "'" + code
         put_text(ws, r, 2, code, size=FONT_SIZE, fill=fill, use_row_fill=False)
-        put_text(ws, r, 3, truncate_label(it["label"]), size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
+        put_text(ws, r, 3, short_product_name(it["label"], it.get("code"), maxlen=48),
+                 size=FONT_SIZE, fill=fill, wrap=True, use_row_fill=False)
         for k in range(n):
             put_val(ws, r, 4 + k, it["vals"][k], fill=fill, use_row_fill=False)
         if it["share"] is not None and total and total["vals"][-1] is not None:
@@ -1072,7 +1074,8 @@ def write_bilateral_table(ws, items, years, krep, kpartner,
         fill = get_row_fill(i)
         put_text(ws, r, 1, it["rank"], size=FONT_SIZE, fill=fill, use_row_fill=False)
         put_text(ws, r, 2, str(it["code"]), size=FONT_SIZE, fill=fill, use_row_fill=False)
-        put_text(ws, r, 3, it["label"], size=FONT_SIZE, fill=fill, wrap=True, align="left", use_row_fill=False)
+        put_text(ws, r, 3, short_product_name(it["label"], it.get("code"), maxlen=55),
+                 size=FONT_SIZE, fill=fill, wrap=True, align="left", use_row_fill=False)
         put_val(ws, r, 4, it["kenya_val"], fill=fill, use_row_fill=False)
         put_share(ws, r, 5, it["kenya_share"], fill=fill, use_row_fill=False)
         put_share(ws, r, 6, it["partner_share"], fill=fill, use_row_fill=False)
