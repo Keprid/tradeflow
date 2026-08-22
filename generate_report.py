@@ -738,10 +738,8 @@ def make_chart_share(a: Analysis, out_path, direction):
         ax, labels, shares, palette,
         style="3d_exploded", other_label="Other products")
     side_legend(fig, wedges, labels, shares)
-    ax.set_title(f"Share of Kenya's Top Exports to {a.country} in {a.year}",
-                 fontsize=12, weight="bold") if direction == "exports" else \
-        ax.set_title(f"Share of Kenya's Top Imports from {a.country} in {a.year}",
-                     fontsize=12, weight="bold")
+    title = f"EXPORT SHARE {a.year}" if direction == "exports" else f"IMPORT SHARE {a.year}"
+    ax.set_title(title, fontsize=12, weight="bold")
     finish(fig, out_path)
 
 
@@ -824,6 +822,7 @@ class ReportBuilder:
         header = self.doc.sections[0].header
         p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
         p.text = ""
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.space_after = Pt(6)
         p.add_run().add_picture(letterhead, width=Inches(2.76))
 

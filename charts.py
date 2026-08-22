@@ -25,6 +25,7 @@ Only matplotlib is required.
 import math
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 # Style constants -----------------------------------------------------------
 WEDGE_WIDTH = 0.42        # ring thickness for donut styles
@@ -191,7 +192,9 @@ def side_legend(fig, wedges, labels, values, fontsize=None):
     """Legend to the right of the chart (template style: category names).
 
     Anchored beyond the axes' right edge (axes-relative transform) so the
-    legend can never mingle with the slices or their data labels.
+    legend can never mingle with the slices or their data labels. The wedges
+    are remembered so finish() can draw Excel-style leader lines from every
+    slice to its legend entry (some slice colours are near-identical).
     """
     fontsize = fontsize or LEGEND_FONTSIZE
     ax = fig.axes[0] if fig.axes else None
@@ -202,6 +205,7 @@ def side_legend(fig, wedges, labels, values, fontsize=None):
     else:
         kwargs.update(bbox_to_anchor=(0.98, 0.5))
     fig.legend(wedges, list(labels), **kwargs)
+    fig._legend_wedges = list(wedges)
 
 
 def new_fig(width=7.9, height=4.9, dpi=160):
@@ -241,10 +245,53 @@ def _shrink_axes_for_legends(fig):
         ax.set_position([x0, y0, w, h])
 
 
+def _legend_handles(leg):
+    """Legend handle patches across matplotlib versions."""
+    return getattr(leg, "legend_handles", None) or getattr(leg, "legendHandles", [])
+
+
+def _draw_leader_lines(fig):
+    """Excel-style leader lines: one thin connector per slice, from the
+    outer edge of the slice (plus a short radial stub) to the left edge of
+    its legend entry. Each line takes its slice's colour so entries with
+    near-identical colours remain unambiguous.
+    """
+    wedges = getattr(fig, "_legend_wedges", None)
+    leg = fig.legends[0] if fig.legends else None
+    if not wedges or not leg:
+        return
+    handles = _legend_handles(leg)
+    ax = fig.axes[0] if fig.axes else None
+    if not handles or ax is None:
+        return
+    inv_fig = fig.transFigure.inverted()
+    for w, h in zip(wedges, handles):
+        try:
+            hb = h.get_window_extent(fig.canvas.get_renderer())
+        except Exception:
+            continue
+        mid = math.radians((w.theta1 + w.theta2) / 2.0)
+        ux, uy = math.cos(mid), math.sin(mid)
+        cx, cy = w.center
+        # anchor on the outer arc, then a short radial stub outward
+        px, py = cx + w.r * ux, cy + w.r * uy
+        sx, sy = px + 0.12 * ux, py + 0.12 * uy
+        p0 = inv_fig.transform(ax.transData.transform((px, py)))
+        p1 = inv_fig.transform(ax.transData.transform((sx, sy)))
+        target = inv_fig.transform((hb.x0 - 4, (hb.y0 + hb.y1) / 2.0))
+        color = w.get_facecolor()
+        line = Line2D([p0[0], p1[0], target[0]], [p0[1], p1[1], target[1]],
+                      transform=fig.transFigure, color=color,
+                      lw=0.9, solid_capstyle="round", zorder=1)
+        fig.add_artist(line)
+
+
 def finish(fig, out_path, ax=None):
     """Tight layout, save, close."""
     if fig.legends:
         _shrink_axes_for_legends(fig)
+        fig.canvas.draw()          # settle final positions before connecting
+        _draw_leader_lines(fig)
     else:
         fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
