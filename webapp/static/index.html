@@ -448,6 +448,12 @@ input[type=file]:hover {
         <i class="fas fa-concierge-bell" style="color:var(--dark-blue);font-size:13px;"></i>
         Services Trade Flow
       </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">
+        <input type="radio" name="report_type" value="quarterly"
+               style="width:auto;height:auto;accent-color:var(--green);">
+        <i class="fas fa-calendar-alt" style="color:var(--dark-blue);font-size:13px;"></i>
+        Quarterly Performance
+      </label>
     </div>
 
     <div id="cfg-wrapper">
@@ -459,6 +465,11 @@ input[type=file]:hover {
     <div id="services-info" style="display:none; margin-top:14px; padding:12px; background:var(--bg-light); border-radius:3px; border-left:3px solid var(--dark-blue);">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       <b>Services Mode:</b> Config is automatically set to <b>services_world</b> (global services trade). No manual config selection needed.
+    </div>
+
+    <div id="quarterly-info" style="display:none; margin-top:14px; padding:12px; background:var(--bg-light); border-radius:3px; border-left:3px solid var(--dark-blue);">
+      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
+      <b>Quarterly Mode:</b> Upload the raw KRA extracts (<i>&hellip;Exports by HS Destination&hellip;</i> and <i>&hellip;Imports by HS Origin&hellip;</i>) &mdash; for both years if you want the year-on-year comparison (up to 4 files, or a .zip) &mdash; or the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. No config selection needed. Top N controls rows per market/product table (markets default to 25).
     </div>
 
     <div class="row">
@@ -603,7 +614,17 @@ input[type=file]:hover {
       const cfgSelect = document.getElementById('cfg');
       const cfgWrapper = document.getElementById('cfg-wrapper');
       const servicesInfo = document.getElementById('services-info');
-      if (r.value === 'services') {
+      const quarterlyInfo = document.getElementById('quarterly-info');
+      if (r.value === 'quarterly') {
+        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
+          'Upload the <b>raw KRA extracts</b> (&hellip;<b>Exports by HS Destination&hellip;</b> and &hellip;<b>Imports by HS Origin&hellip;</b>, or a .zip of them) &mdash; ' +
+          'for <b>both years</b> to get the year-on-year comparison (up to 4 files), ' +
+          '<i>or</i> the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. ' +
+          '<b>.xls</b> files are converted automatically.';
+        cfgWrapper.style.display = 'none';
+        servicesInfo.style.display = 'none';
+        quarterlyInfo.style.display = 'block';
+      } else if (r.value === 'services') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them). ' +
           'Expected files contain keywords like "exported_services", "importers_for", "services_exported_by_Kenya", etc. ' +
@@ -611,6 +632,7 @@ input[type=file]:hover {
         cfgSelect.value = 'services_world';
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'block';
+        quarterlyInfo.style.display = 'none';
       } else {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
@@ -619,6 +641,7 @@ input[type=file]:hover {
         cfgSelect.value = '__auto__';
         cfgWrapper.style.display = 'block';
         servicesInfo.style.display = 'none';
+        quarterlyInfo.style.display = 'none';
       }
     });
   });

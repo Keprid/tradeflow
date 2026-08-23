@@ -50,6 +50,8 @@ import generate_report as gr             # noqa: E402
 import make_config                       # noqa: E402
 import make_services_tables              # noqa: E402
 import generate_services_report as gsr   # noqa: E402
+import make_quarterly_tables as mqt      # noqa: E402
+import generate_quarterly_report as gqr  # noqa: E402
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
@@ -64,6 +66,7 @@ SERVICE_RAW_KEYWORDS = ("exported_services_for", "imported_services_for",
                         "services_exported_by", "services_imported_by",
                         "services_commercialized", "list_of_exporters_for",
                         "list_of_importers_for")
+QUARTERLY_RAW_KEYWORDS = ("exports by hs destination", "imports by hs origin")
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -412,6 +415,19 @@ def _detect_mode(uploads_dir, report_type="goods"):
     names = [f.lower() for f in os.listdir(uploads_dir) if f.lower().endswith(ALLOWED_EXT)]
     if not names:
         return None, "No Excel files were uploaded."
+    if report_type == "quarterly":
+        stems = {os.path.splitext(n)[0] for n in names}
+        if {"exports", "imports"} <= stems:
+            return "quarterly_ready", ""
+        if any(any(k in n for k in QUARTERLY_RAW_KEYWORDS) for n in names):
+            return "quarterly_raw", ""
+        uploaded = ", ".join(sorted(names))
+        kw_list = ", ".join(QUARTERLY_RAW_KEYWORDS)
+        return None, (
+            f"Could not recognise the quarterly upload set.\n"
+            f"Uploaded files: {uploaded}\n"
+            f"Expected the raw KRA extracts (filenames containing any of: "
+            f"{kw_list}) or the generated Exports.xlsx and Imports.xlsx.")
     if report_type == "services":
         if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
             return "services_raw", ""
@@ -623,6 +639,62 @@ def _run_services_pipeline(job_dir, cfg_id, top_n, logs):
     return report_path, manifest
 
 
+def _run_quarterly_pipeline(job_dir, top_n, mode, logs):
+    uploads = job_dir / "uploads"
+    tables = job_dir / "tables"
+    charts = job_dir / "charts"
+
+    if mode == "quarterly_raw":
+        logs.append("Mode: raw KRA extracts -> building quarterly pivot workbooks ...")
+        try:
+            meta = mqt.generate_quarterly_tables(
+                str(uploads), str(tables),
+                top_markets=top_n, top_products=top_n)
+        except SystemExit as e:
+            raise HTTPException(400, str(e))
+        if meta.get("comparison"):
+            logs.append("Review quarter %s %d compared with %s %d"
+                        % (meta["quarter"], meta["year"],
+                           meta["quarter"], meta["year"] - 1))
+        else:
+            logs.append(
+                "Single-year data detected -> tables built without the "
+                "year-on-year comparison columns. Upload the previous "
+                "year's extracts too to enable comparisons.")
+        excel_dir = str(tables)
+        logs.append(f"Quarterly workbooks written to {tables}")
+    else:
+        excel_dir = str(uploads)
+        logs.append("Mode: ready-made Exports/Imports workbooks -> skipping make_quarterly_tables.py")
+
+    os.makedirs(charts, exist_ok=True)
+    report_name = "KENYA EXPORT PERFORMANCE REPORT.docx"   # renamed below
+    tmp_path = job_dir / report_name
+    logs.append(f"Building quarterly report (charts -> {charts})")
+    try:
+        a, doc = gqr.build_quarterly_report(excel_dir, str(tmp_path),
+                                            str(charts))
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    doc.save(str(tmp_path))
+    quarter_tag = f"{a.quarter.upper()} {a.year - 1}-{a.year}"
+    report_name = f"KENYA EXPORT PERFORMANCE IN {quarter_tag}.docx"
+    report_path = job_dir / report_name
+    tmp_path.rename(report_path)
+    logs.append(f"Review period: {a.quarter} {a.year} - report saved as {report_name}")
+
+    manifest = {
+        "mode": mode,
+        "report_type": "quarterly",
+        "report_name": report_name,
+        "excel_dir": os.path.relpath(excel_dir, job_dir),
+        "config": "",
+    }
+    (job_dir / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    return report_path, manifest
+
+
 @app.post("/api/run")
 async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                   report_type: str = Form("goods"),
@@ -633,8 +705,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         raise HTTPException(400, "Please select files (or a zip) to upload.")
     if top < 1:
         raise HTTPException(400, "top must be >= 1")
-    if report_type not in ("goods", "services"):
-        raise HTTPException(400, "report_type must be 'goods' or 'services'")
+    if report_type not in ("goods", "services", "quarterly"):
+        raise HTTPException(400, "report_type must be 'goods', 'services' or 'quarterly'")
 
     job_dir = _new_job_dir()
     try:
@@ -655,7 +727,10 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                  config, top, mode, report_type, job_dir.name)
 
         logs = []
-        if report_type == "services":
+        if report_type == "quarterly":
+            report_path, manifest = _run_quarterly_pipeline(
+                job_dir, top, mode, logs)
+        elif report_type == "services":
             report_path, manifest = _run_services_pipeline(
                 job_dir, config, top, logs)
         else:

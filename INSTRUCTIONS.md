@@ -170,6 +170,47 @@ On Linux use `python3` instead of `python` if needed.
 
 ---
 
+## 6b. Kenya Quarterly Performance Report (KRA data)
+
+This is a separate, simpler report: the quarterly *Kenya Export Performance*
+report built from two raw KRA customs extracts (the files named
+`…Exports by HS Destination…` and `…Imports by HS Origin…`).
+
+**Web app:** choose **Quarterly Performance**, upload the KRA `.xls` files
+(up to four: exports + imports for each of the two years, or a single file
+per side covering both years; a zip also works), and click Generate.
+Everything else is automatic. You can also upload the already-built
+`Exports.xlsx` + `Imports.xlsx` instead.
+
+**Command line:**
+
+```
+python make_quarterly_tables.py --excel-dir "EXPORT PERFORMANCE FOR Q2" --out-dir output/quarterly
+python generate_quarterly_report.py --excel-dir output/quarterly --output output/report.docx
+```
+
+The first command builds `Exports.xlsx` / `Imports.xlsx` (values in Ksh.
+Billion, live formulas). The second writes the Word report with title page,
+table of contents, lists of tables and figures, the balance-of-trade chart,
+Tables 1–6, Figures 1–2, a data-driven deduction section and both annexes.
+Title page and contents are not numbered; body pages restart at 1.
+
+**Year-on-year comparison:** every table (1–6) shows the previous year's
+quarter next to the current one, plus a change column with green ▲ / red ▼
+arrows. Tables 2 and 4 list the markets/products that grew or fell by over
+Ksh. 1 billion; Figures 1–2 show "SHARE IN <Y>" above "SHARE IN <Y-1>",
+stacked vertically on a full A4 page. Upload extracts covering **both
+years** (e.g. Jan–Jun 2026 plus Apr–Jun 2025).
+
+**Single year only?** Then the comparison is skipped automatically — no
+synthetic data is created. Tables become `Rank | Item | months | Total |
+Share`, the growth/decline exhibits disappear and numbering shifts to
+Tables 1–4; each figure shows a single doughnut. For testing the comparison
+layout anyway, add `--synthesize-prev-year` on the command line (fixed-seed
+fake prior-year rows).
+
+---
+
 ## 7. Generating a report for a different country
 
 Two ways to get the country config:
