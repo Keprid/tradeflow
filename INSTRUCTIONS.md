@@ -227,10 +227,9 @@ country (and its data) changes frequently:
    ```
    This detects the country name from Table 1, reads the report years from the
    table columns, and writes `config/<country>.json` (for example
-   `config/uganda.json`). In the web app, the dropdown's
-   *Auto-detect country from data* option does the same thing automatically:
-   it reuses an existing config if the country already has one, otherwise it
-   creates the JSON on the spot.
+   `config/uganda.json`). In the web app, the country is always
+   auto-detected from the uploaded data: it reuses an existing config if the
+   country already has one, otherwise it creates the JSON on the spot.
 
 **Option B - write it by hand.** Copy `config_template.json` to
 `config/<country>.json`.

@@ -3,252 +3,397 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trade Flow Report Generator</title>
+<title>Trade Flow Report Generator | KEPROBA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 <style>
 :root {
   --green: #00a34b;
   --green-dark: #008f40;
+  --green-light: #e6f4ec;
   --red: #be2838;
   --red-dark: #9a1f2c;
+  --red-light: #fce8eb;
   --dark-blue: #163C69;
   --navy: #212062;
   --orange: #F3801C;
   --white: #fff;
-  --text: #333333;
-  --text-secondary: #666666;
-  --text-muted: #999999;
-  --border: #DCDCDC;
-  --bg: #F5F5F5;
-  --bg-light: #E8F2F5;
-  --shadow: 0 3px 6px rgba(0,0,0,0.12);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
+  --text: #1a1a2e;
+  --text-secondary: #4a4a68;
+  --text-muted: #8b8ba7;
+  --border: #e2e8f0;
+  --bg: #f8fafc;
+  --bg-light: #f1f5f9;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --shadow-md: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.04);
+  --radius: 12px;
+  --radius-sm: 8px;
 }
 
 * { box-sizing: border-box; }
 
+html { scroll-behavior: smooth; }
+
 body {
   margin: 0;
-  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Header */
 .header {
-  background: linear-gradient(135deg, var(--dark-blue) 0%, var(--navy) 100%);
-  color: var(--white);
-  padding: 0 28px;
-  height: 70px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: var(--shadow-lg);
+  background: #fff;
+  border-bottom: 3px solid var(--red);
+  padding: 0;
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: var(--shadow);
 }
 
-.header-brand {
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0;
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 0;
+  min-height: 80px;
 }
 
-.header-logo {
-  width: 42px;
-  height: 42px;
-  background: var(--green);
-  border-radius: 8px;
+.header-emblem {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 12px 20px;
+}
+
+.header-emblem-img {
+  height: 52px;
+  width: auto;
+  display: block;
+}
+
+.header-text {
+  flex: 1 1 auto;
+  border-left: 3px solid var(--red);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+}
+
+.header-tagline {
+  margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: var(--white);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  color: var(--dark-blue);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
 }
 
-.header-title h1 {
+.header-tagline .flag-red { color: var(--red); }
+.header-tagline .flag-green { color: var(--green); }
+.header-tagline .flag-black { color: #1a1a2e; }
+
+.header-tagline small {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  letter-spacing: 0;
+}
+
+.header-meta {
+  flex: 0 0 auto;
+  text-align: right;
+  padding: 16px 24px;
+  border-left: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--bg-light) 0%, #fff 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.header-meta p {
   margin: 0;
-  font-size: 18px;
+  font-size: 11px;
+  color: #000;
+  line-height: 1.5;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  font-style: italic;
 }
 
-.header-title p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  opacity: 0.85;
-  font-weight: 300;
-}
-
-.header-accent {
-  width: 4px;
-  height: 32px;
-  background: var(--orange);
-  border-radius: 2px;
-  margin-left: 8px;
-}
-
-.hero {
-  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
-  color: var(--white);
-  padding: 28px;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.hero::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -20%;
-  width: 400px;
-  height: 400px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 50%;
-}
-
-.hero h2 {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 600;
-  position: relative;
-}
-
-.hero p {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.95;
-  font-weight: 300;
-  position: relative;
-}
-
+/* Main Layout */
 main {
-  max-width: 860px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: 32px 24px 48px;
 }
 
+/* Cards */
 .card {
   background: var(--white);
   border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 22px;
-  margin-bottom: 16px;
+  border-radius: var(--radius);
+  padding: 28px;
+  margin-bottom: 20px;
   box-shadow: var(--shadow);
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
 }
 
 .card:hover {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .card-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 18px;
-  font-size: 15px;
+  gap: 12px;
+  margin: 0 0 20px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--red);
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  color: var(--dark-blue);
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--bg-light);
 }
 
 .card-title i {
-  font-size: 16px;
-  color: var(--red);
+  font-size: 18px;
+  color: var(--green);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-light);
+  border-radius: var(--radius-sm);
 }
 
-.card-title::before {
-  content: '';
-  display: inline-block;
-  width: 4px;
-  height: 18px;
-  background: var(--red);
-  border-radius: 2px;
-  margin-right: 4px;
+/* Typography */
+h1, h2, h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 label {
   display: block;
-  font-weight: 500;
-  margin: 14px 0 6px;
+  font-weight: 600;
+  margin: 16px 0 8px;
   font-size: 13px;
   color: var(--text);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-select, input[type=number] {
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* Form Elements */
+select, input[type=number], input[type=text] {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-family: inherit;
+  font-weight: 500;
   background: var(--white);
   color: var(--text);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
 }
 
-select:focus, input[type=number]:focus {
+select:focus, input[type=number]:focus, input[type=text]:focus {
   outline: none;
   border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(0,163,75,0.12);
+  box-shadow: 0 0 0 4px rgba(0,163,75,0.1);
+  background-color: #fff;
 }
 
 input[type=file] {
   width: 100%;
-  padding: 16px;
+  padding: 20px;
   border: 2px dashed var(--border);
-  border-radius: 3px;
-  background: var(--bg-light);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--bg-light) 0%, #fff 100%);
   font-size: 14px;
   font-family: inherit;
+  font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: all 0.2s ease;
+  text-align: center;
 }
 
 input[type=file]:hover {
   border-color: var(--green);
+  background: linear-gradient(135deg, var(--green-light) 0%, #fff 100%);
+  transform: translateY(-1px);
+}
+
+input[type=file]::file-selector-button {
+  margin: 0 12px 0 0;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: var(--green);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+input[type=file]::file-selector-button:hover {
+  background: var(--green-dark);
+  transform: translateY(-1px);
+}
+
+/* Radio Group - Segmented Control */
+.radio-group {
+  display: flex;
+  width: 100%;
+  gap: 0;
+  margin: 8px 0 20px;
+  padding: 0;
+  background: var(--bg-light);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.radio-option {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+}
+
+.radio-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.radio-option label {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0;
+  transition: all 0.2s ease;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  border: none;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+
+.radio-option:last-child label {
+  border-right: none;
+}
+
+.radio-option label i {
+  font-size: 14px;
+  color: var(--text-muted);
+  width: 18px;
+  text-align: center;
+  transition: color 0.2s ease;
+}
+
+.radio-option input[type="radio"]:checked + label {
+  background: #fff;
+  color: var(--green);
+  box-shadow: inset 0 -3px 0 var(--green);
+}
+
+.radio-option input[type="radio"]:checked + label i {
+  color: var(--green);
+}
+
+.radio-option label:hover {
+  color: var(--text);
   background: rgba(0,163,75,0.04);
 }
 
+.radio-option input[type="radio"]:focus-visible + label {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+
+/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 24px;
-  height: 42px;
-  font-size: 14px;
+  gap: 10px;
+  padding: 0 28px;
+  height: 48px;
+  font-size: 15px;
   font-weight: 600;
   font-family: inherit;
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-decoration: none;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.25s ease;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn:hover::before {
+  left: 100%;
 }
 
 .btn-primary {
   color: var(--white);
-  background: var(--green);
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
 }
 
 .btn-primary:hover {
-  background: var(--green-dark);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .btn-primary:active {
@@ -257,58 +402,51 @@ input[type=file]:hover {
 
 .btn-secondary {
   color: var(--white);
-  background: var(--red);
+  background: linear-gradient(135deg, var(--red) 0%, var(--red-dark) 100%);
 }
 
 .btn-secondary:hover {
-  background: var(--red-dark);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.btn-outline {
-  color: var(--dark-blue);
-  background: var(--white);
-  border: 1px solid var(--border);
-}
-
-.btn-outline:hover {
-  border-color: var(--dark-blue);
-  background: rgba(22,60,105,0.04);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
   transform: none !important;
 }
 
+.btn:disabled::before {
+  display: none;
+}
+
+/* Layout */
 .row {
   display: flex;
-  gap: 16px;
+  gap: 20px;
 }
 
 .row > div {
   flex: 1;
 }
 
-.hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 6px;
-  line-height: 1.5;
-}
-
+/* Log Card */
 .log-card {
-  background: #1a1d24;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-color: #334155;
+  position: relative;
+  overflow: hidden;
+  scroll-margin-top: 100px;
 }
 
 .log-card .card-title {
   color: var(--green);
-  border-bottom-color: #2d3139;
+  border-bottom-color: #334155;
 }
 
 .log-card .card-title i {
   color: var(--green);
+  background: rgba(0,163,75,0.15);
 }
 
 .log-card .card-title::before {
@@ -316,160 +454,421 @@ input[type=file]:hover {
 }
 
 #log {
-  background: #14171d;
-  color: #cfd8e3;
-  font-family: 'Consolas', 'Menlo', 'DejaVu Sans Mono', monospace;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
   font-size: 13px;
-  padding: 16px;
-  border-radius: 3px;
-  min-height: 140px;
-  max-height: 360px;
+  padding: 20px;
+  border-radius: var(--radius-sm);
+  min-height: 160px;
+  max-height: 400px;
   overflow: auto;
   white-space: pre-wrap;
-  line-height: 1.6;
-  border: 1px solid #2d3139;
+  line-height: 1.7;
+  border: 1px solid #334155;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
-#log .ok { color: #7ee2a8; }
-#log .err { color: #ff8f9d; }
-#log .warn { color: #f0c060; }
+#log .ok { color: #4ade80; font-weight: 500; }
+#log .err { color: #f87171; font-weight: 500; }
+#log .warn { color: #fbbf24; font-weight: 500; }
 
+#log > div:not(.log-empty) { animation: lineIn 0.22s ease both; }
+
+@keyframes lineIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.log-empty { color: #64748b; }
+.log-empty i { margin-right: 10px; color: #475569; }
+
+/* Result */
 .result {
   border-top: 1px solid var(--border);
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 20px;
+  padding-top: 20px;
   display: none;
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .result-meta {
   font-size: 13px;
   color: var(--text-muted);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 500;
 }
 
 .result-meta i {
   color: var(--green);
+  font-size: 16px;
 }
 
 .result-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
 .result a {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--white);
-  background: var(--green);
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
   text-decoration: none;
-  padding: 10px 18px;
-  border-radius: 3px;
-  font-size: 13px;
+  padding: 12px 24px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: all 0.2s ease;
+  box-shadow: var(--shadow);
+  transition: all 0.25s ease;
 }
 
 .result a:hover {
-  background: var(--green-dark);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .result a.btn-secondary-link {
-  background: var(--red);
+  background: linear-gradient(135deg, var(--red) 0%, var(--red-dark) 100%);
 }
 
 .result a.btn-secondary-link:hover {
-  background: var(--red-dark);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
+/* Error */
 .error-msg {
   color: var(--red);
   font-weight: 500;
-  padding: 12px 16px;
-  background: rgba(190,40,56,0.08);
-  border-radius: 3px;
+  padding: 14px 18px;
+  background: var(--red-light);
+  border-radius: var(--radius-sm);
   border-left: 4px solid var(--red);
-  margin-top: 12px;
-  font-size: 13px;
+  margin-top: 16px;
+  font-size: 14px;
   display: none;
+  animation: shake 0.4s ease;
 }
 
-@media (max-width: 640px) {
-  .row { flex-direction: column; gap: 12px; }
-  .header { padding: 0 16px; height: 60px; }
-  .header-title h1 { font-size: 15px; }
-  .hero { padding: 20px 16px; }
-  .hero h2 { font-size: 18px; }
-  main { padding: 16px 12px 32px; }
-  .card { padding: 16px; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Info boxes */
+.info-box {
+  display: none;
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--bg-light) 0%, #fff 100%);
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--dark-blue);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.info-box b {
+  color: var(--dark-blue);
+  font-weight: 600;
+}
+
+/* File summary chips */
+.file-summary { display: none; margin-top: 12px; }
+.file-summary.show { display: block; animation: fadeIn 0.3s ease; }
+
+.file-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--green-light);
+  border: 1px solid rgba(0,163,75,0.25);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green-dark);
+  max-width: 100%;
+}
+
+.file-chip i { font-size: 11px; flex: 0 0 auto; }
+.file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* "Click Generate Report" call-to-action */
+.run-cta {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, var(--green-light) 0%, #fff 100%);
+  border: 1.5px dashed var(--green);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--green-dark);
+}
+
+.run-cta.show { display: flex; animation: ctaIn 0.35s cubic-bezier(0.18, 1.25, 0.4, 1) both; }
+
+.run-cta .cta-hand {
+  font-size: 20px;
+  color: var(--green);
+  animation: pointDown 1s ease-in-out infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes pointDown {
+  0%, 100% { transform: translateY(-2px); }
+  50% { transform: translateY(4px); }
+}
+
+@keyframes ctaIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Button attention pulse */
+.btn-attention { animation: pulseGlow 1.6s ease-in-out infinite; }
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,163,75,0.45), var(--shadow); }
+  50% { box-shadow: 0 0 0 14px rgba(0,163,75,0), var(--shadow); }
+}
+
+/* Generation progress bar */
+.progress-wrap { display: none; margin-top: 16px; }
+.progress-wrap.show { display: block; animation: fadeIn 0.3s ease; }
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+
+.progress-label .stage i { color: var(--green); margin-right: 8px; }
+.progress-label .elapsed {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
+  font-size: 12px;
+  color: #94a3b8;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.progress-track {
+  height: 8px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--green-dark), var(--green), #86efac);
+  box-shadow: 0 0 10px rgba(0,163,75,0.5);
+  animation: crawl 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes crawl {
+  from { margin-left: -2%; width: 28%; }
+  to { margin-left: 74%; width: 28%; }
+}
+
+/* Result pop */
+.result.showing { animation: popIn 0.45s cubic-bezier(0.18, 1.25, 0.4, 1) both; }
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Confetti */
+.confetti-piece {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 14px;
+  opacity: 0.95;
+  pointer-events: none;
+  z-index: 5;
+  animation: confettiFall linear forwards;
+}
+
+@keyframes confettiFall {
+  to { transform: translateY(360px) rotate(720deg); opacity: 0; }
+}
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  top: 96px;
+  right: 20px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 40px));
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  animation: toastIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+}
+
+.toast.leaving { animation: toastOut 0.3s ease both; }
+
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.toast-success { border-color: rgba(0,163,75,0.35); }
+.toast-success::before { background: var(--green); }
+.toast-success .toast-icon { color: var(--green); }
+
+.toast-error { border-color: rgba(190,40,56,0.35); }
+.toast-error::before { background: var(--red); }
+.toast-error .toast-icon { color: var(--red); }
+
+.toast-icon { font-size: 18px; margin-top: 2px; flex: 0 0 auto; }
+
+.toast-body b { display: block; font-size: 13px; color: var(--text); }
+.toast-body span { display: block; font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-top: 2px; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(120%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  to { opacity: 0; transform: translateX(120%); }
+}
+
+@media (max-width: 768px) {
+  .toast-container { top: auto; bottom: 16px; right: 16px; left: 16px; width: auto; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .row { flex-direction: column; gap: 16px; }
+  .header-inner { flex-direction: column; text-align: center; gap: 12px; padding: 12px; min-height: auto; }
+  .header-emblem { padding: 8px; }
+  .header-emblem-img { height: 44px; }
+  .header-text { border-left: none; padding: 12px; border-top: 2px solid var(--red); justify-content: center; }
+  .header-meta { border-left: none; padding: 12px; text-align: center; }
+  main { padding: 20px 16px 32px; }
+  .card { padding: 20px; }
+  .btn { width: 100%; justify-content: center; }
+  .result-actions { flex-direction: column; }
+  .result a { width: 100%; justify-content: center; }
+  .radio-group { flex-wrap: wrap; }
+  .radio-option { flex: 1 1 50%; }
+  .radio-option label { font-size: 13px; padding: 10px 12px; }
+}
+
+@media (max-width: 480px) {
+  .header-tagline { font-size: 17px; }
+  .header-tagline small { font-size: 12px; }
+  .card { padding: 18px; }
+  .radio-option { flex: 1 1 100%; }
+  .radio-option label { font-size: 13px; padding: 12px; }
 }
 </style>
 </head>
 <body>
 
 <header class="header">
-  <div class="header-brand">
-    <div class="header-logo">TF</div>
-    <div class="header-title">
-      <h1>Trade Flow Report Generator</h1>
-      <p>KEPROBA &copy; Research &amp; Innovation. All rights reserved.</p>
+  <div class="header-inner">
+    <div class="header-emblem">
+      <img class="header-emblem-img" src="/static/keproba_letterhead.png" alt="KEPROBA Letterhead">
     </div>
-    <div class="header-accent"></div>
+    <div class="header-text">
+      <div class="header-tagline"><span class="flag-green">Trade</span> <span class="flag-black">Intelligence</span> <span class="flag-red">at Your Fingertips</span><small>Generate comprehensive trade flow reports with one click</small></div>
+    </div>
+    <div class="header-meta">
+      <p>KEPROBA</p>
+      <p>&copy; Research &amp; Innovation (RI)</p>
+      <p>All rights reserved</p>
+    </div>
   </div>
 </header>
 
-<div class="hero">
-  <h2><i class="fas fa-chart-line"></i> &nbsp;Trade Intelligence at Your Fingertips</h2>
-  <p>Generate comprehensive trade flow reports with one click</p>
-</div>
-
 <main>
   <div class="card">
-    <div class="card-title"><i class="fas fa-sliders-h"></i> Report Configuration</div>
+    <div class="card-title"><i class="fas fa-sliders-h"></i> Analysis Configuration</div>
 
-    <label>Report Type</label>
-    <div style="display:flex;gap:24px;margin:8px 0 16px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">
-        <input type="radio" name="report_type" value="goods" checked
-               style="width:auto;height:auto;accent-color:var(--green);">
-        <i class="fas fa-box" style="color:var(--dark-blue);font-size:13px;"></i>
-        Goods Trade Flow
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">
-        <input type="radio" name="report_type" value="services"
-               style="width:auto;height:auto;accent-color:var(--green);">
-        <i class="fas fa-concierge-bell" style="color:var(--dark-blue);font-size:13px;"></i>
-        Services Trade Flow
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">
-        <input type="radio" name="report_type" value="quarterly"
-               style="width:auto;height:auto;accent-color:var(--green);">
-        <i class="fas fa-calendar-alt" style="color:var(--dark-blue);font-size:13px;"></i>
-        Quarterly Performance
-      </label>
+    <label>Analysis Type</label>
+    <div class="radio-group">
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="goods" checked id="rt-goods">
+        <label for="rt-goods"><i class="fas fa-box"></i> Goods Trade Flow</label>
+      </div>
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="services" id="rt-services">
+        <label for="rt-services"><i class="fas fa-concierge-bell"></i> Services Trade Flow</label>
+      </div>
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="quarterly" id="rt-quarterly">
+        <label for="rt-quarterly"><i class="fas fa-calendar-alt"></i> Quarterly Performance</label>
+      </div>
     </div>
 
-    <div id="cfg-wrapper">
-      <label for="cfg">Country / Report Configuration</label>
+    <div id="cfg-wrapper" style="display:none;" aria-hidden="true">
       <select id="cfg"><option value="">Loading configs...</option></select>
-      <div class="hint" id="cfg-hint">Select a country configuration, or choose "Auto-detect country from data" to automatically create the config from your uploaded files.</div>
     </div>
 
-    <div id="services-info" style="display:none; margin-top:14px; padding:12px; background:var(--bg-light); border-radius:3px; border-left:3px solid var(--dark-blue);">
+    <div id="services-info" class="info-box">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
-      <b>Services Mode:</b> Config is automatically set to <b>services_world</b> (global services trade). No manual config selection needed.
+      &nbsp;<b>Services Mode:</b> Config is automatically set to <b>services_world</b> (global services trade).
     </div>
 
-    <div id="quarterly-info" style="display:none; margin-top:14px; padding:12px; background:var(--bg-light); border-radius:3px; border-left:3px solid var(--dark-blue);">
+    <div id="quarterly-info" class="info-box">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
-      <b>Quarterly Mode:</b> Upload the raw KRA extracts (<i>&hellip;Exports by HS Destination&hellip;</i> and <i>&hellip;Imports by HS Origin&hellip;</i>) &mdash; for both years if you want the year-on-year comparison (up to 4 files, or a .zip) &mdash; or the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. No config selection needed. Top N controls rows per market/product table (markets default to 25).
+      &nbsp;<b>Quarterly Mode:</b> Upload the raw KRA extracts (<i>&hellip;Exports by HS Destination&hellip;</i> and <i>&hellip;Imports by HS Origin&hellip;</i>) &mdash; for both years if you want the year-on-year comparison (up to 4 files, or a .zip) &mdash; or the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. Top N controls rows per market/product table (markets default to 25).
     </div>
 
     <div class="row">
@@ -481,16 +880,22 @@ input[type=file]:hover {
       <div>
         <label for="files">Upload Files</label>
         <input type="file" id="files" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.csv,.zip">
+        <div id="file-summary" class="file-summary"></div>
       </div>
     </div>
 
-    <div class="hint" id="upload-hint" style="margin-top:14px;">
+    <div class="hint" id="upload-hint" style="margin-top:16px;">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       &nbsp;
       Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: <b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. <b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.
     </div>
 
-    <button id="run" class="btn btn-primary" type="button">
+    <div id="run-cta" class="run-cta" role="status">
+      <i class="fas fa-hand-point-down cta-hand"></i>
+      <span>Files loaded &mdash; now click&nbsp;<b>Generate Report</b>&nbsp;below!</span>
+    </div>
+
+    <button id="run" class="btn btn-primary" type="button" style="margin-top:20px;">
       <i class="fas fa-play"></i> Generate Report
     </button>
     <div class="error-msg" id="error-msg"></div>
@@ -498,7 +903,14 @@ input[type=file]:hover {
 
   <div class="card log-card">
     <div class="card-title"><i class="fas fa-terminal"></i> Progress</div>
-    <div id="log">Waiting for files...</div>
+    <div id="log"><div class="log-empty"><i class="fas fa-inbox"></i>Waiting for files &mdash; pick your Excel files above, then hit Generate Report.</div></div>
+    <div id="progress-wrap" class="progress-wrap">
+      <div class="progress-label">
+        <span class="stage"><i class="fas fa-spinner fa-spin"></i><span id="progress-stage-text">Uploading files&hellip;</span></span>
+        <span class="elapsed" id="progress-elapsed">0s</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill"></div></div>
+    </div>
     <div class="result" id="result">
       <div class="result-meta" id="result-meta"></div>
       <div class="result-actions">
@@ -509,12 +921,45 @@ input[type=file]:hover {
   </div>
 </main>
 
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+
 <script>
   const $ = id => document.getElementById(id);
   const logEl = $('log');
   const errorMsg = $('error-msg');
+  const hint = $('upload-hint');
+  const cfgSelect = $('cfg');
+  const cfgWrapper = $('cfg-wrapper');
+  const servicesInfo = $('services-info');
+  const quarterlyInfo = $('quarterly-info');
+  const filesInput = $('files');
+  const runBtn = $('run');
+  const runCta = $('run-cta');
+  const fileSummary = $('file-summary');
+  const progressWrap = $('progress-wrap');
+  const progressStageText = $('progress-stage-text');
+  const progressElapsed = $('progress-elapsed');
+  const toastContainer = $('toast-container');
+
+  const STAGES = [
+    'Uploading files\u2026',
+    'Reading spreadsheets\u2026',
+    'Auto-detecting country from data\u2026',
+    'Computing trade statistics\u2026',
+    'Building tables & figures\u2026',
+    'Formatting the Word report\u2026',
+    'Polishing final touches\u2026'
+  ];
+  let stageTimer = null;
+  let elapsedTimer = null;
+
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const shortenName = n => n.length > 26 ? n.slice(0, 15) + '\u2026' + n.slice(-8) : n;
+  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
 
   function appendLog(text, cls) {
+    const emptyEl = logEl.querySelector('.log-empty');
+    if (emptyEl) emptyEl.remove();
     const line = document.createElement('div');
     line.textContent = text;
     if (cls) line.className = cls;
@@ -531,6 +976,102 @@ input[type=file]:hover {
     errorMsg.style.display = 'none';
   }
 
+  function showToast(type, title, body) {
+    const t = document.createElement('div');
+    t.className = 'toast toast-' + type;
+    const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
+    t.innerHTML = '<i class="fas ' + icon + ' toast-icon"></i>' +
+      '<div class="toast-body"><b>' + esc(title) + '</b><span>' + esc(body || '') + '</span></div>';
+    const dismiss = () => {
+      if (!t.parentNode) return;
+      t.classList.add('leaving');
+      setTimeout(() => t.remove(), 320);
+    };
+    if (type === 'success') {
+      t.addEventListener('click', () => {
+        document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        dismiss();
+      });
+    } else {
+      t.addEventListener('click', dismiss);
+    }
+    toastContainer.appendChild(t);
+    setTimeout(dismiss, 7000);
+  }
+
+  function flashTitle(msg) {
+    const orig = document.title;
+    let flip = false, n = 0;
+    const timer = setInterval(() => {
+      document.title = flip ? orig : msg;
+      flip = !flip;
+      if (++n >= 8) { clearInterval(timer); document.title = orig; }
+    }, 900);
+  }
+
+  function confetti() {
+    const card = document.querySelector('.log-card');
+    if (!card || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const colors = ['#00a34b', '#be2838', '#F3801C', '#212062', '#4ade80', '#ffffff'];
+    for (let i = 0; i < 36; i++) {
+      const p = document.createElement('div');
+      p.className = 'confetti-piece';
+      p.style.left = Math.random() * card.clientWidth + 'px';
+      p.style.background = colors[i % colors.length];
+      p.style.width = (6 + Math.random() * 5) + 'px';
+      p.style.height = (10 + Math.random() * 6) + 'px';
+      p.style.animationDuration = (1.2 + Math.random() * 1.1) + 's';
+      p.style.animationDelay = (Math.random() * 0.35) + 's';
+      if (Math.random() < 0.4) p.style.borderRadius = '50%';
+      card.appendChild(p);
+      setTimeout(() => p.remove(), 3200);
+    }
+  }
+
+  function startProgress() {
+    progressWrap.classList.add('show');
+    let si = 0;
+    progressStageText.textContent = STAGES[0];
+    stageTimer = setInterval(() => {
+      si = (si + 1) % STAGES.length;
+      progressStageText.textContent = STAGES[si];
+    }, 2600);
+    const t0 = Date.now();
+    progressElapsed.textContent = '0s';
+    elapsedTimer = setInterval(() => {
+      progressElapsed.textContent = Math.floor((Date.now() - t0) / 1000) + 's';
+    }, 1000);
+  }
+
+  function stopProgress() {
+    clearInterval(stageTimer);
+    clearInterval(elapsedTimer);
+    stageTimer = elapsedTimer = null;
+    progressWrap.classList.remove('show');
+  }
+
+  filesInput.addEventListener('change', () => {
+    clearError();
+    const files = [...filesInput.files];
+    if (!files.length) {
+      fileSummary.classList.remove('show');
+      runCta.classList.remove('show');
+      runBtn.classList.remove('btn-attention');
+      return;
+    }
+    const totalSize = files.reduce((s, f) => s + f.size, 0);
+    let chips = '<span class="file-chip"><i class="fas fa-check-circle"></i>&nbsp;' +
+      files.length + ' file' + (files.length === 1 ? '' : 's') + ' &middot; ' + fmtSize(totalSize) + '</span>';
+    chips += files.slice(0, 4).map(f =>
+      '<span class="file-chip" title="' + esc(f.name) + '"><i class="fas fa-file-excel"></i><span>' + esc(shortenName(f.name)) + '</span></span>'
+    ).join('');
+    if (files.length > 4) chips += '<span class="file-chip">+' + (files.length - 4) + ' more</span>';
+    fileSummary.innerHTML = '<div class="file-chips">' + chips + '</div>';
+    fileSummary.classList.add('show');
+    runCta.classList.add('show');
+    runBtn.classList.add('btn-attention');
+  });
+
   async function loadConfigs() {
     try {
       const r = await fetch('/api/configs');
@@ -544,77 +1085,15 @@ input[type=file]:hover {
         sel.appendChild(o);
       }
       if (!cfgs.length) appendLog('No country configs found in config/.', 'err');
+      sel.value = '__auto__';
     } catch (e) {
       appendLog('Could not load configs: ' + e, 'err');
     }
   }
 
-  $('run').addEventListener('click', async () => {
-    clearError();
-    const files = $('files').files;
-    if (!files.length) {
-      showError('Please select files before generating the report.');
-      appendLog('Please choose files first.', 'err');
-      return;
-    }
-
-    const fd = new FormData();
-    fd.append('config', $('cfg').value);
-    fd.append('top', $('top').value);
-    fd.append('report_type', document.querySelector('input[name="report_type"]:checked').value);
-    let zips = 0, others = 0;
-    for (const f of files) {
-      if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
-      else { others++; fd.append('files', f); }
-    }
-
-    const btn = $('run');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-    logEl.innerHTML = '';
-    appendLog(`Uploading ${others} file(s), ${zips} zip(s)...`);
-
-    try {
-      const r = await fetch('/api/run', { method: 'POST', body: fd });
-      let data;
-      try { data = await r.json(); }
-      catch (err) {
-        appendLog('ERROR: the server answered with a non-JSON response (' + r.status + ').'
-          + ' It probably restarted mid-job — reload this page and try again.', 'err');
-        return;
-      }
-      if (!r.ok) {
-        appendLog('ERROR: ' + (data.detail || r.status), 'err');
-        showError(data.detail || 'Request failed with status ' + r.status);
-        return;
-      }
-      for (const line of data.log) appendLog(line, 'ok');
-      appendLog('Done.', 'ok');
-      $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
-        `${data.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'}` +
-        ` &middot; job ${data.job_id}`;
-      $('dl-report').href = data.report_url;
-      $('dl-tables').href = data.tables_url;
-      $('result').style.display = 'block';
-    } catch (e) {
-      appendLog('ERROR: ' + e + ' — the server did not respond. Reload this page'
-        + ' and try again. If it keeps happening, restart the app and reload.', 'err');
-      showError('Server did not respond. Please check the connection and try again.');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-play"></i> Generate Report';
-    }
-  });
-
-  loadConfigs();
-
   document.querySelectorAll('input[name="report_type"]').forEach(r => {
     r.addEventListener('change', () => {
-      const hint = document.getElementById('upload-hint');
-      const cfgSelect = document.getElementById('cfg');
-      const cfgWrapper = document.getElementById('cfg-wrapper');
-      const servicesInfo = document.getElementById('services-info');
-      const quarterlyInfo = document.getElementById('quarterly-info');
+      clearError();
       if (r.value === 'quarterly') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>raw KRA extracts</b> (&hellip;<b>Exports by HS Destination&hellip;</b> and &hellip;<b>Imports by HS Origin&hellip;</b>, or a .zip of them) &mdash; ' +
@@ -639,12 +1118,85 @@ input[type=file]:hover {
           '<b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. ' +
           '<b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.';
         cfgSelect.value = '__auto__';
-        cfgWrapper.style.display = 'block';
+        cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'none';
       }
     });
   });
+
+  $('run').addEventListener('click', async () => {
+    clearError();
+    const files = $('files').files;
+    if (!files.length) {
+      showError('Please select files before generating the report.');
+      appendLog('Please choose files first.', 'err');
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append('config', $('cfg').value);
+    fd.append('top', $('top').value);
+    fd.append('report_type', document.querySelector('input[name="report_type"]:checked').value);
+    let zips = 0, others = 0;
+    for (const f of files) {
+      if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
+      else { others++; fd.append('files', f); }
+    }
+
+    const btn = $('run');
+    btn.disabled = true;
+    btn.classList.remove('btn-attention');
+    runCta.classList.remove('show');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    logEl.innerHTML = '';
+    appendLog(`Uploading ${others} file(s), ${zips} zip(s)...`);
+    startProgress();
+
+    try {
+      const r = await fetch('/api/run', { method: 'POST', body: fd });
+      let data;
+      try { data = await r.json(); }
+      catch (err) {
+        appendLog('ERROR: the server answered with a non-JSON response (' + r.status + ').'
+          + ' It probably restarted mid-job — reload this page and try again.', 'err');
+        showToast('error', 'Server restarted mid-job', 'Reload this page and try again.');
+        return;
+      }
+      if (!r.ok) {
+        appendLog('ERROR: ' + (data.detail || r.status), 'err');
+        showError(data.detail || 'Request failed with status ' + r.status);
+        showToast('error', 'Generation failed', data.detail || 'Request failed with status ' + r.status);
+        return;
+      }
+      for (const line of data.log) appendLog(line, 'ok');
+      appendLog('Done.', 'ok');
+      $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
+        `${data.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'}` +
+        ` &middot; job ${data.job_id}`;
+      $('dl-report').href = data.report_url;
+      $('dl-tables').href = data.tables_url;
+      $('result').style.display = 'block';
+      $('result').classList.add('showing');
+      confetti();
+      showToast('success', 'Your report is ready!', 'Word report and tables ZIP are waiting below — click here to jump to them.');
+      flashTitle('\u2714 Report ready!');
+      setTimeout(() => {
+        document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 400);
+    } catch (e) {
+      appendLog('ERROR: ' + e + ' — the server did not respond. Reload this page'
+        + ' and try again. If it keeps happening, restart the app and reload.', 'err');
+      showError('Server did not respond. Please check the connection and try again.');
+      showToast('error', 'Server did not respond', 'Please check the connection and try again.');
+    } finally {
+      stopProgress();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-play"></i> Generate Report';
+    }
+  });
+
+  loadConfigs();
 </script>
 </body>
 </html>
