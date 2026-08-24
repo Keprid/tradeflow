@@ -54,16 +54,28 @@ the launcher; no command prompt needed.
 ### Option A: build the tables from raw ITC downloads
 
 Put the six raw downloads in one folder (the `sourcefiles` folder is
-pre-loaded with the Saudi Arabia files). Files are located by keywords:
+pre-loaded with the Saudi Arabia files). Files are located by keywords —
+both Trade Map download styles are accepted, the **beta** interface slugs
+and the **previous** interface names (`Trade_Map_-_List_of_supplying_
+markets_for_a_product_imported_by_<Partner>.xls`,
+`Trade_Map_-_List_of_products_imported_by_<Partner>.xls`,
+`Trade_Map_-_List_of_importing_markets_for_a_product_exported_by_<Partner>.xls`,
+`Trade_Map_-_List_of_products_exported_by_<Partner>.xls` and the two
+`Trade_Map_-_Bilateral_trade_between_Kenya_and_<Partner>` workbooks, which
+are told apart by their content):
 
-| Raw file keyword                     | Builds                        | Units       |
-|--------------------------------------|-------------------------------|-------------|
-| `imports-from-world-by-exporter`     | Table 1 import source markets | USD billion |
-| `imports-from-world-by-product`      | Table 2 import products       | USD billion |
-| `exports-to-world-by-importer`       | Table 3 export destinations   | USD billion |
-| `exports-to-world-by-product`        | Table 4 export products       | USD billion |
-| `kenyas-exports-to-<country>-by-product` | Table 5 Kenya exports    | USD million |
-| `kenyas-imports-from-<country>-by-product` | Table 6 Kenya imports  | USD million |
+| Raw file keyword (beta)              | Classic "previous" download            | Builds                        | Units       |
+|--------------------------------------|----------------------------------------|-------------------------------|-------------|
+| `imports-from-world-by-exporter`     | List of supplying markets … imported   | Table 1 import source markets | USD billion |
+| `imports-from-world-by-product`      | List of products imported              | Table 2 import products       | USD billion |
+| `exports-to-world-by-importer`       | List of importing markets … exported   | Table 3 export destinations   | USD billion |
+| `exports-to-world-by-product`        | List of products exported              | Table 4 export products       | USD billion |
+| `kenyas-exports-to-<country>-by-product` | Bilateral trade (Kenya's exports)  | Table 5 Kenya exports         | USD million |
+| `kenyas-imports-from-<country>-by-product` | Bilateral trade (Kenya's imports)| Table 6 Kenya imports         | USD million |
+
+All tables in one report share a common year set: with mixed coverage the
+overlap is used (e.g. classic bilateral files covering 2023–2025 yield
+three-year tables).
 
 ```bash
 python3 make_tables.py --excel-dir sourcefiles --out-dir output/tables
@@ -92,9 +104,10 @@ filename:
 | `Figure 1` / `Balance` | Kenya–country bilateral trade balance (annual series) | USD million |
 
 Expected layout inside each workbook: one worksheet containing a header row
-with a run of 4 to 10 consecutive years (2021–2025 for Saudi Arabia,
-2021–2024 for the UAE files — any consecutive range from 4 to 10 years
-works), a code column (header contains "code"), rank rows followed by
+with a run of 2 to 10 consecutive years (2021–2025 for Saudi Arabia,
+2021–2024 for the UAE files — any consecutive range from 2 to 10 years
+works, including the short 2023–2025 windows the previous Trade Map
+interface produces), a code column (header contains "code"), rank rows followed by
 trailing `All other …` and `All products`/`World` rows, and a
 `Share in <latest year> %` column. The balance sheet has an
 `Exports`/`Imports`/`Balance of Trade` label block on the row above the year
@@ -233,6 +246,12 @@ set. The app runs `make_tables.py` (when raw files are given), builds the
 report, and offers the `.docx` for download plus a zip of the generated
 tables. Generated jobs are stored under `webapp/jobs/` and cleaned up after
 24 hours.
+
+**Background processing:** the heavy build runs server-side in a background
+job — the browser receives an immediate acknowledgement and follows live
+progress by polling, so even multi-minute quarterly builds (large KRA
+extracts) or slow hosts no longer kill the request mid-way. If the server
+does restart during a job, the page says so instead of hanging.
 
 **Auto-detecting the country:** the dropdown's first option is *Auto-detect
 country from data*. The server reads the country name and report years

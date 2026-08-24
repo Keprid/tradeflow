@@ -227,11 +227,12 @@ def _cell_grid(ws):
 
 def _find_year_run(grid):
     """Return (row_index, start_col, [years]) for the longest run of
-    consecutive year integers (between 4 and 10 years) anywhere in the grid,
+    consecutive year integers (between 2 and 10 years) anywhere in the grid,
     else (None, None, []).
 
     This lets the parser accept any consecutive year range (e.g. 2021..2025,
-    2021..2024 or 2015..2024), not just a fixed five-year block.
+    2021..2024, 2015..2024 or a short 2023..2025 window as produced by the
+    classic Trade Map interface), not just a fixed five-year block.
     """
     best = None
     for ri, row in enumerate(grid):
@@ -243,13 +244,13 @@ def _find_year_run(grid):
                 if prev is not None and iv == prev + 1:
                     cur.append((ci, iv))
                 else:
-                    if 4 <= len(cur) <= 10 and (best is None or len(cur) > len(best[2])):
+                    if 2 <= len(cur) <= 10 and (best is None or len(cur) > len(best[2])):
                         best = (ri, cur[0][0], [y for _, y in cur])
                     cur = [(ci, iv)]
                 prev = iv
             else:
                 prev = None
-        if 4 <= len(cur) <= 10 and (best is None or len(cur) > len(best[2])):
+        if 2 <= len(cur) <= 10 and (best is None or len(cur) > len(best[2])):
             best = (ri, cur[0][0], [y for _, y in cur])
     return best if best else (None, None, [])
 

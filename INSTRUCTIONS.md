@@ -20,8 +20,9 @@ The pipeline has two steps:
 Layout and wording follow the reviewed reference
 `KENYA-SAUDI ARABIA TRADE FLOW_Reviewed 1.docx` (e.g. "Compiled by KEPROBA",
 the imports bullets in section 3.1, "Source: Google map", split References).
-The report year range adapts to the data: any run of **4 to 10 consecutive
-years** (2021-2025 for Saudi Arabia, 2021-2024 for the UAE) is accepted.
+The report year range adapts to the data: any run of **2 to 10 consecutive
+years** (2021-2025 for Saudi Arabia, 2021-2024 for the UAE, or the short
+2023-2025 windows produced by the previous Trade Map interface) is accepted.
 
 If you already have the seven ready-made Excel files you can skip straight to
 step 2. For full details on building the tables, see `MAKE_TABLES.md`.
@@ -91,7 +92,13 @@ Press `Ctrl+C` in the terminal to stop the web app.
 
 If you only have the six **raw ITC downloads** (not the ready-made Table 1-6
 files), put them in one folder (the `sourcefiles` folder is pre-loaded with
-the Saudi Arabia files):
+the Saudi Arabia files). Both Trade Map interfaces are accepted — the beta
+slugs below and the previous-interface names (`Trade_Map_-_List_of_
+supplying_markets_for_a_product_imported_by_<Partner>.xls`, `..._List_of_
+products_imported_by_...`, `..._List_of_importing_markets_for_a_product_
+exported_by_...`, `..._List_of_products_exported_by_...` and the two
+`Trade_Map_-_Bilateral_trade_between_Kenya_and_<Partner>` workbooks, which
+are told apart by their content):
 
 | File name contains...        | Table built             | Units      |
 |------------------------------|-------------------------|------------|

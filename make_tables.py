@@ -50,13 +50,16 @@ totals (Kenya's exports minus imports with the partner country).
 import argparse
 import os
 import re
+import shutil
 import sys
+import tempfile
 import zipfile
 
 import openpyxl
 from lxml import etree
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import coordinate_to_tuple
 
 from country_names import display_name, short_product_name
 from xlsx_compat import convert_to_xlsx, is_spreadsheet
@@ -155,34 +158,74 @@ def truncate_label(label, limit=80):
 
 
 def find_source_files(excel_dir):
-    """Locate the six raw source files by filename keywords."""
+    """Locate the six raw source files by filename keywords.
+
+    Both Trade Map download styles are recognised:
+
+    * **beta** slugs -- ``kenyas-exports-to-malaysia-by-product_all.xlsx``,
+      ``malaysias-imports-from-world-by-product_all.xlsx`` ...
+    * **classic ("previous") names** -- ``Trade_Map_-_List_of_supplying_
+      markets_for_a_product_imported_by_Malaysia.xls``,
+      ``Trade_Map_-_List_of_products_imported_by_Malaysia.xls``,
+      ``Trade_Map_-_List_of_importing_markets_for_a_product_exported_by_...``,
+      ``Trade_Map_-_List_of_products_exported_by_Malaysia.xls`` and the two
+      ``Trade_Map_-_Bilateral_trade_between_Kenya_and_<Partner>`` workbooks.
+      The bilateral pair share one filename (browser " (1)" copies), so they
+      are told apart by peeking at the trade-flow title inside each file.
+    """
     found = {}
+    bilaterals = []
     for fname in sorted(os.listdir(excel_dir)):
         if not is_spreadsheet(fname):
             continue
-        low = fname.lower()
-        if "imports-from-world" in low and "by-exporter" in low:
-            found["table1"] = fname
-        elif "imports-from-world" in low and "by-product" in low:
-            found["table2"] = fname
-        elif "exports-to-world" in low and "by-importer" in low:
-            found["table3"] = fname
-        elif "exports-to-world" in low and "by-product" in low:
-            found["table4"] = fname
+        low = fname.lower().replace(" ", "_")
+        if "bilateral_trade_between_kenya_and" in low:
+            bilaterals.append(fname)
+        elif "list_of_supplying_markets_for_a_product_imported" in low \
+                or ("imports-from-world" in low and "by-exporter" in low):
+            found.setdefault("table1", fname)
+        elif "list_of_products_imported" in low \
+                or ("imports-from-world" in low and "by-product" in low):
+            found.setdefault("table2", fname)
+        elif "list_of_importing_markets_for_a_product_exported" in low \
+                or ("exports-to-world" in low and "by-importer" in low):
+            found.setdefault("table3", fname)
+        elif "list_of_products_exported" in low \
+                or ("exports-to-world" in low and "by-product" in low):
+            found.setdefault("table4", fname)
         elif "imports-from" in low and "by-product" in low:
-            found["table6"] = fname
+            found.setdefault("table6", fname)
         elif "exports-to" in low and "by-product" in low:
-            found["table5"] = fname
+            found.setdefault("table5", fname)
+
+    # Classic bilateral downloads: same filename for both directions, so
+    # classify each by the flow named inside the workbook.
+    for fname in bilaterals:
+        try:
+            kind = _bilateral_direction(os.path.join(excel_dir, fname))
+        except Exception:
+            continue
+        if kind == "exports":
+            found.setdefault("table5", fname)
+        elif kind == "imports":
+            found.setdefault("table6", fname)
+
     missing = [k for k in ("table1", "table2", "table3", "table4", "table5", "table6")
                if k not in found]
     if missing:
         expected = {
-            "table1": "imports-from-world-by-exporter",
-            "table2": "imports-from-world-by-product",
-            "table3": "exports-to-world-by-importer",
-            "table4": "exports-to-world-by-product",
-            "table5": "kenyas-exports-to-*-by-product",
-            "table6": "kenyas-imports-from-*-by-product",
+            "table1": "imports-from-world-by-exporter (or 'List of supplying "
+                      "markets for a product imported by <Partner>')",
+            "table2": "imports-from-world-by-product (or 'List of products "
+                      "imported by <Partner>')",
+            "table3": "exports-to-world-by-importer (or 'List of importing "
+                      "markets for a product exported by <Partner>')",
+            "table4": "exports-to-world-by-product (or 'List of products "
+                      "exported by <Partner>')",
+            "table5": "kenyas-exports-to-*-by-product (or 'Bilateral trade "
+                      "between Kenya and <Partner>' holding Kenya's exports)",
+            "table6": "kenyas-imports-from-*-by-product (or 'Bilateral trade "
+                      "between Kenya and <Partner>' holding Kenya's imports)",
         }
         missing_detail = []
         for k in missing:
@@ -197,35 +240,119 @@ def find_source_files(excel_dir):
     return {k: os.path.join(excel_dir, v) for k, v in found.items()}
 
 
+def _bilateral_direction(path):
+    """Classify a classic 'Bilateral trade between A and B' workbook.
+
+    Returns ``'exports'`` when it holds Kenya's exports to the partner,
+    ``'imports'`` when it holds Kenya's imports from the partner, else
+    ``None``. The first non-World flow title in the header row decides.
+    """
+    tmpdir = tempfile.mkdtemp(prefix="tradeflow_peek_")
+    try:
+        wb, _ = convert_to_xlsx(path, out_dir=tmpdir)
+        try:
+            ws = wb[wb.sheetnames[0]]
+            titles = next(ws.iter_rows(max_row=1, values_only=True))
+        finally:
+            wb.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    for t in titles:
+        tl = str(t or "").strip().lower()
+        if not tl or "world" in tl:
+            continue
+        if re.search(r"exports?\s+to", tl):
+            return "exports"
+        if re.search(r"imports?\s+from", tl):
+            return "imports"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Source parsing
 # ---------------------------------------------------------------------------
-def parse_source(path, years=None):
-    """Read an ITC workbook. Return (rows, year_columns, years, labels).
+_YEAR_RE = re.compile(r"(?:19|20)\d{2}")
+_VALUE_IN_RE = re.compile(r"value\s+in\s+((?:19|20)\d{2})", re.IGNORECASE)
 
-    year_columns is a list of (column_index, year) for the years shown.
-    When `years` is given, only those years' columns are kept (all tables in
-    one report must share the same year set); otherwise the years are chosen
-    automatically via _pick_years.
+
+def _cell_text(v):
+    return str(v).strip() if v is not None else ""
+
+
+def _clean_code(v):
+    """Strip the leading apostrophe / stray whitespace Trade Map puts on
+    product codes ('1511 -> 1511)."""
+    return _cell_text(v).lstrip("'").replace("\u00a0", " ").strip()
+
+
+def _select_year_cols(ycols, years):
+    """Apply the caller's year restriction (or auto-pick when None)."""
+    if years is None:
+        return _pick_year_cols(ycols)
+    allowed = set(years)
+    return [(i, y) for i, y in ycols if y in allowed]
+
+
+def _norm_ycols(chosen):
+    """Year columns of a normalised row: values start right after the six
+    beta metadata columns."""
+    return [(6 + k, y) for k, (_, y) in enumerate(chosen)]
+
+
+def _country_from_download_name(path):
+    """Best-effort country label from a Trade Map download filename.
+
+    '..._by_Malaysia.xls' -> 'Malaysia'; '..._between_Kenya_and_Malaysia'
+    -> 'Malaysia'. Browser '(1)' copies and the beta '_all' suffix are
+    ignored; multi-word slugs become Title Case before the SHORT_NAMES
+    lookup in display_name.
+    """
+    stem = os.path.splitext(os.path.basename(str(path)))[0].lower()
+    stem = stem.replace(" ", "_")
+    stem = re.sub(r"_*\(\d+\)$", "", stem)
+    stem = re.sub(r"_all$", "", stem)
+    m = re.search(r"(?:^|_)by_([a-z0-9_]+)$", stem) \
+        or re.search(r"_and_([a-z0-9_]+)$", stem)
+    if not m:
+        return ""
+    return display_name(m.group(1).replace("_", " ").strip().title())
+
+
+def parse_source(path, years=None):
+    """Read an ITC workbook (either Trade Map layout).
+
+    Returns ``(rows, year_columns, years, labels)`` where rows/ycols are
+    normalised to the beta shape -- six leading metadata columns
+    (reporterCd, reporterLabel, partnerCd, partnerLabel, code, label)
+    followed by one column per selected year -- so ``extract_markets`` /
+    ``extract_products`` / ``extract_kenya`` stay layout-agnostic.
+
+    ``year_columns`` is a list of (column_index, year); when ``years`` is
+    given only those years are kept (all tables in one report must share
+    the same year set), otherwise they are chosen via _pick_years.
     """
     wb, _used = convert_to_xlsx(path)
     ws = wb[wb.sheetnames[0]]
-    grid = list(ws.iter_rows(values_only=True))
+    grid = [[c for c in row] for row in ws.iter_rows(values_only=True)]
     wb.close()
 
-    header = [str(c).strip() if c is not None else "" for c in grid[0]]
+    kind = _detect_classic_layout(grid)
+    if kind == "markets":
+        return _parse_classic_markets(grid, path, years)
+    if kind == "products":
+        return _parse_classic_products(grid, path, years)
+    if kind == "bilateral":
+        return _parse_classic_bilateral(grid, path, years)
+
+    # ---- beta layout (flat header: reporterCd ... productLabel, years) ----
+    header = [_cell_text(c) for c in grid[0]]
     ycols = []
     for i, h in enumerate(header):
         m = re.match(r"^(\d{4})", h)
         if m:
             ycols.append((i, int(m.group(1))))
     ycols.sort(key=lambda t: t[1])
-
-    if years is None:
-        chosen = _pick_year_cols(ycols)
-    else:
-        allowed = set(years)
-        chosen = [(i, y) for i, y in ycols if y in allowed]
+    chosen = _select_year_cols(ycols, years)
     years_out = [y for _, y in chosen]
 
     rows = [r for r in grid[1:]
@@ -235,6 +362,172 @@ def parse_source(path, years=None):
         "partner": str(grid[1][3]).strip() if len(grid) > 1 and grid[1][3] else "",
     }
     return rows, chosen, years_out, labels
+
+
+def _detect_classic_layout(grid):
+    """Classify a classic ('previous version') Trade Map sheet.
+
+    'markets'   -- single header 'Exporters/Importers | value in YYYY ...'
+    'products'  -- single header 'Code | Product label | value in YYYY ...'
+    'bilateral' -- two-row header ('Product code' over 'Value in YYYY'),
+                   several side-by-side data blocks
+    None        -- not recognisably classic (assume the beta layout)
+    """
+    if not grid or not grid[0]:
+        return None
+    first = _cell_text(grid[0][0]).lower().lstrip("'")
+    if first in ("exporters", "importers"):
+        return "markets"
+    if first in ("code", "product code"):
+        second = [_cell_text(c).lower() for c in grid[1]] if len(grid) > 1 else []
+        if any(_VALUE_IN_RE.match(t) for t in second):
+            return "bilateral"
+        return "products"
+    return None
+
+
+def _classic_year_cols(header_row):
+    """(col, year) pairs from header cells like 'Imported value in 2021'."""
+    ycols = []
+    for i, c in enumerate(header_row):
+        m = _YEAR_RE.search(_cell_text(c))
+        if m:
+            ycols.append((i, int(m.group(0))))
+    ycols.sort(key=lambda t: t[1])
+    return ycols
+
+
+def _parse_classic_markets(grid, path, years):
+    """Classic Table 1/3 source: one column of market names + year columns;
+    the 'World' row carries the total."""
+    chosen = _select_year_cols(_classic_year_cols(grid[0]), years)
+    partner = _country_from_download_name(path)
+
+    rows = []
+    for r in grid[1:]:
+        if not any(_cell_text(c) for c in r):
+            continue
+        label = _cell_text(r[0])
+        vals = [r[i] if i < len(r) else None for i, _ in chosen]
+        cd = "000" if label.lower() == "world" else "---"
+        rows.append(["", "", cd, label, "TOTAL", label] + vals)
+
+    labels = {"reporter": partner or "Partner", "partner": "World"}
+    return rows, _norm_ycols(chosen), [y for _, y in chosen], labels
+
+
+def _parse_classic_products(grid, path, years):
+    """Classic Table 2/4 source: Code | Product label | value columns;
+    the 'TOTAL' code row carries the world total."""
+    chosen = _select_year_cols(_classic_year_cols(grid[0]), years)
+    partner = _country_from_download_name(path)
+
+    rows = []
+    for r in grid[1:]:
+        if not any(_cell_text(c) for c in r):
+            continue
+        code = _clean_code(r[0])
+        label = _cell_text(r[1])
+        vals = [r[i] if i < len(r) else None for i, _ in chosen]
+        rows.append(["", "", "000", "", code, label] + vals)
+
+    labels = {"reporter": partner or "Partner", "partner": "World"}
+    return rows, _norm_ycols(chosen), [y for _, y in chosen], labels
+
+
+def _parse_classic_bilateral(grid, path, years):
+    """Classic bilateral source ('Trade Map - Bilateral trade between A and
+    B'): a two-row header whose sub-row reads 'Value in YYYY' once per data
+    block. Block 0 holds Kenya<->partner trade by product (Tables 5/6);
+    later blocks repeat the partners' world-trade series and are ignored.
+
+    The 'Value in YYYY' sub-row sits two columns left of its data (the
+    'Product code'/'Product label' headers only span the first header row),
+    so year columns are re-anchored onto the first data row before use.
+    """
+    hdr_idx = None
+    for ri, row in enumerate(grid[:6]):
+        if any(_VALUE_IN_RE.search(_cell_text(c)) for c in row):
+            hdr_idx = ri
+            break
+    if hdr_idx is None:
+        raise ValueError(f"No 'Value in <year>' header row found in {path}")
+
+    sub_row = grid[hdr_idx]
+    sub_years = {}
+    for i, c in enumerate(sub_row):
+        m = _VALUE_IN_RE.search(_cell_text(c))
+        if m:
+            sub_years[i] = int(m.group(1))
+
+    # first non-empty data row anchors the real value columns
+    data_row = None
+    for r in grid[hdr_idx + 1:]:
+        if any(_cell_text(c) for c in r):
+            data_row = r
+            break
+    if data_row is None:
+        raise ValueError(f"No data rows under the header of {path}")
+    data_cols = [i for i, c in enumerate(data_row)
+                 if i >= 2 and _cell_text(c) != ""]
+    sub_blocks = _column_runs(sorted(sub_years))
+    data_blocks = _column_runs(data_cols)
+    if len(sub_blocks) != len(data_blocks) \
+            or any(len(s) != len(d)
+                   for s, d in zip(sub_blocks, data_blocks)):
+        raise ValueError(f"Mismatched header/data blocks in {path}")
+
+    # block 0 is the Kenya<->partner flow; shift its year columns by the
+    # header-to-data offset observed on the anchor row
+    off = data_blocks[0][0] - sub_blocks[0][0]
+    block0 = [(i + off, sub_years[i]) for i in sub_blocks[0]]
+    chosen = _select_year_cols(block0, years)
+
+    krep, kpartner = _bilateral_parties(grid[hdr_idx - 1], path)
+    rows = []
+    for r in grid[hdr_idx + 1:]:
+        if not any(_cell_text(c) for c in r):
+            continue
+        code = _clean_code(r[0])
+        label = _cell_text(r[1])
+        vals = [r[i] if i < len(r) else None for i, _ in chosen]
+        rows.append(["", "", "000", "", code, label] + vals)
+
+    labels = {"reporter": krep or "Kenya", "partner": kpartner}
+    return rows, _norm_ycols(chosen), [y for _, y in chosen], labels
+
+
+def _column_runs(cols):
+    """Split a sorted column-index list into runs of consecutive indexes."""
+    runs, cur = [], []
+    for i in cols:
+        if cur and i != cur[-1] + 1:
+            runs.append(cur)
+            cur = []
+        cur.append(i)
+    if cur:
+        runs.append(cur)
+    return runs
+
+
+def _bilateral_parties(title_row, path):
+    """(reporter, partner) from a bilateral workbook.
+
+    Prefers the flow title cell ("Kenya's exports to Malaysia" /
+    "Kenya's imports from Malaysia"); falls back to the filename
+    ('..._between_Kenya_and_<Partner>').
+    """
+    for c in title_row:
+        t = _cell_text(c)
+        if not t or "world" in t.lower():
+            continue
+        m = re.match(r"^(.+?)['\u2019]s\s+exports?\s+to\s+(.+?)\s*$", t,
+                     re.IGNORECASE) \
+            or re.match(r"^(.+?)['\u2019]s\s+imports?\s+from\s+(.+?)\s*$", t,
+                        re.IGNORECASE)
+        if m:
+            return display_name(m.group(1)), display_name(m.group(2))
+    return "Kenya", _country_from_download_name(path) or "Partner"
 
 
 def _pick_years(years):
@@ -573,6 +866,38 @@ def _inject_cached_values(path, cache):
             zout.writestr(n, blobs[n])
 
 
+def _missing_cached_refs(path, refs):
+    """Verify patched-in formula caches without paying a full workbook load.
+
+    Streams the file in read-only mode and skips raw record sheets ('Data…')
+    -- they never hold formulas but dominate the quarterly workbooks' size.
+    Returns [(sheet, ref)] for every cached ref still reading as None.
+    """
+    wb2 = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    try:
+        bad = []
+        for sh, m in refs.items():
+            if sh not in wb2.sheetnames:
+                continue
+            want = {coordinate_to_tuple(r): r for r, v in m.items()
+                    if v is not None}
+            if not want or sh.lower().startswith("data"):
+                continue
+            ws2 = wb2[sh]
+            seen = set()
+            for row in ws2.iter_rows():
+                for c in row:
+                    key = (c.row, c.column)
+                    if key in want and c.value is not None:
+                        seen.add(key)
+                if len(seen) == len(want):
+                    break
+            bad.extend((sh, want[k]) for k in want.keys() - seen)
+        return bad
+    finally:
+        wb2.close()
+
+
 def _save_workbook(wb, path, cache):
     """Save the workbook, patch in cached formula values, and fall back to
     plain values if anything goes wrong so the pipeline never breaks."""
@@ -583,17 +908,9 @@ def _save_workbook(wb, path, cache):
     wb.save(path)
     try:
         _inject_cached_values(path, cache)
-        wb2 = openpyxl.load_workbook(path, data_only=True)
         refs = cache if isinstance(cache, dict) else \
             {"Sheet1": {r: v for r, v in cache if v is not None}}
-        bad = []
-        for sh, m in refs.items():
-            if sh not in wb2.sheetnames:
-                continue
-            ws2 = wb2[sh]
-            for ref, val in m.items():
-                if ws2[ref].value is None:
-                    bad.append((sh, ref))
+        bad = _missing_cached_refs(path, refs)
         if bad:
             raise RuntimeError(f"cached values missing for {bad}")
     except Exception:

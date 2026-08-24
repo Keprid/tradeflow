@@ -27,6 +27,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 import traceback
 import uuid
@@ -695,6 +696,93 @@ def _run_quarterly_pipeline(job_dir, top_n, mode, logs):
     return report_path, manifest
 
 
+_SERVER_START = time.time()
+# One pipeline at a time: the builds are CPU/RAM heavy (quarterly KRA
+# extracts peak around 400 MB), so parallel jobs on a small host would
+# exhaust memory and get the service killed mid-request.
+_PIPELINE_LOCK = threading.Lock()
+
+
+class _JobLog(list):
+    """A list that also appends every line to the job's log.txt so the
+    browser can follow progress through /api/status while the worker runs."""
+
+    def __init__(self, job_dir):
+        super().__init__()
+        self._path = Path(job_dir) / "log.txt"
+
+    def append(self, line):
+        super().append(line)
+        with self._path.open("a", encoding="utf-8") as f:
+            f.write(str(line) + "\n")
+
+
+def _read_job_log(job_dir):
+    p = Path(job_dir) / "log.txt"
+    if not p.exists():
+        return []
+    return p.read_text(encoding="utf-8", errors="replace").splitlines()
+
+
+def _job_worker(job_dir, job_fn):
+    logs = _JobLog(job_dir)
+    try:
+        with _PIPELINE_LOCK:
+            report_path, manifest = job_fn(logs)
+        (job_dir / "manifest.json").write_text(
+            json.dumps(manifest), encoding="utf-8")
+        logs.append(f"Report ready: {manifest['report_name']}")
+        LOG.info("Background job %s finished -> %s",
+                 job_dir.name, manifest["report_name"])
+    except HTTPException as e:
+        LOG.error("Background job %s failed: %s", job_dir.name, e.detail)
+        (job_dir / "error.txt").write_text(str(e.detail), encoding="utf-8")
+    except SystemExit as e:
+        LOG.error("Background job %s aborted: %s", job_dir.name, e)
+        (job_dir / "error.txt").write_text(f"Pipeline aborted: {e}",
+                                           encoding="utf-8")
+    except Exception as e:
+        LOG.error("Background job %s failed:", job_dir.name)
+        LOG.error("%s", traceback.format_exc())
+        (job_dir / "error.txt").write_text(f"Pipeline failed: {e}",
+                                           encoding="utf-8")
+
+
+@app.get("/api/status/{job_id}")
+def api_status(job_id: str):
+    """Poll a background job started by POST /api/run.
+
+    States: running | done | error. A job whose meta.json predates this
+    server process must have been interrupted by a restart -> error.
+    """
+    job_dir = JOBS_DIR / job_id
+    if not re.fullmatch(r"[0-9a-f]{32}", job_id or "") or not job_dir.is_dir():
+        raise HTTPException(404, "Job not found (or expired).")
+
+    log_lines = _read_job_log(job_dir)
+    err_path = job_dir / "error.txt"
+    man_path = job_dir / "manifest.json"
+    if err_path.exists():
+        return {"state": "error", "detail": err_path.read_text(encoding="utf-8"),
+                "log": log_lines}
+    if man_path.exists():
+        m = json.loads(man_path.read_text(encoding="utf-8"))
+        return {"state": "done", "job_id": job_id,
+                "report_name": m.get("report_name"),
+                "report_url": f"/api/download/{job_id}",
+                "tables_url": f"/api/tables/{job_id}",
+                "mode": m.get("mode"), "log": log_lines}
+    try:
+        started = json.loads((job_dir / "meta.json").read_text())["started"]
+    except Exception:
+        started = None
+    if started is not None and started < _SERVER_START - 2:
+        return {"state": "error", "log": log_lines,
+                "detail": "The server restarted while this job was "
+                          "running. Please upload the files again."}
+    return {"state": "running", "log": log_lines}
+
+
 @app.post("/api/run")
 async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                   report_type: str = Form("goods"),
@@ -726,38 +814,37 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         LOG.info("POST /api/run config=%s top=%s mode=%s report_type=%s job=%s",
                  config, top, mode, report_type, job_dir.name)
 
-        logs = []
         if report_type == "quarterly":
-            report_path, manifest = _run_quarterly_pipeline(
+            job_fn = lambda logs: _run_quarterly_pipeline(   # noqa: E731
                 job_dir, top, mode, logs)
         elif report_type == "services":
-            report_path, manifest = _run_services_pipeline(
+            job_fn = lambda logs: _run_services_pipeline(    # noqa: E731
                 job_dir, config, top, logs)
         else:
-            report_path, manifest = _run_pipeline(
+            job_fn = lambda logs: _run_pipeline(             # noqa: E731
                 job_dir, config, top, mode, logs)
+
+        # The heavy build runs in a background thread; the request answers
+        # immediately and the page polls /api/status/<job>. Long synchronous
+        # responses are what got killed by proxies / restarts before.
+        (job_dir / "meta.json").write_text(
+            json.dumps({"started": time.time()}), encoding="utf-8")
+        threading.Thread(target=_job_worker, args=(job_dir, job_fn),
+                         daemon=True).start()
         return {
             "job_id": job_dir.name,
-            "report_name": manifest["report_name"],
-            "report_url": f"/api/download/{job_dir.name}",
-            "tables_url": f"/api/tables/{job_dir.name}",
+            "status_url": f"/api/status/{job_dir.name}",
             "mode": mode,
-            "log": logs,
         }
     except HTTPException:
         shutil.rmtree(job_dir, ignore_errors=True)
         raise
-    except SystemExit as e:
-        LOG.error("Pipeline aborted (SystemExit) config=%s job=%s: %s",
-                  config, job_dir.name, e)
-        shutil.rmtree(job_dir, ignore_errors=True)
-        raise HTTPException(400, f"Pipeline aborted: {e}")
     except Exception as e:
-        LOG.error("Pipeline failed for config=%s top=%s job=%s",
+        LOG.error("Upload handling failed for config=%s top=%s job=%s",
                   config, top, job_dir.name)
         LOG.error("%s", traceback.format_exc())
         shutil.rmtree(job_dir, ignore_errors=True)
-        raise HTTPException(500, f"Pipeline failed: {e}")
+        raise HTTPException(500, f"Upload failed: {e}")
 
 
 @app.get("/api/download/{job_id}")

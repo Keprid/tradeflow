@@ -58,6 +58,7 @@ Dependencies: pandas, numpy, openpyxl, xlrd (for legacy .xls).
 """
 
 import argparse
+import gc
 import os
 import sys
 
@@ -451,17 +452,28 @@ def _putf(ws, cache, row, col, formula, cached, **kw):
 # Sheet writers
 # ---------------------------------------------------------------------------
 def write_data_sheet(wb, frame, title):
-    """Flattened record sheet (Year | Month | Partner | Product | Value)."""
+    """Flattened record sheet (Year | Month | Partner | Product | Value).
+
+    Raw extracts run to tens of thousands of rows, so the records are
+    written as plain cells -- no fonts/fills/borders/formats. Styling every
+    cell costs minutes of CPU and hundreds of MB of RAM inside openpyxl's
+    style registry (which made web jobs die mid-request), and buys nothing
+    on a raw data dump. Only the header row is styled.
+    """
     ws = wb.create_sheet(title[:31])
     heads = ["Year", "Month", "Partner", "Product", KSH_BILLION]
     for c, h in enumerate(heads, start=1):
         header_cell(ws, 1, c, h)
-    for r, rec in enumerate(frame.itertuples(index=False), start=2):
-        put_val(ws, r, 1, int(rec.Year), fmt="0")
-        put_val(ws, r, 2, int(rec.Month), fmt="0")
-        put_text(ws, r, 3, rec.Partner)
-        put_text(ws, r, 4, rec.Product, wrap=True)
-        put_val(ws, r, 5, float(rec.Value))
+    cell = ws.cell
+    r = 2
+    for rec in frame.itertuples(index=False):
+        cell(row=r, column=1, value=int(rec.Year))
+        cell(row=r, column=2, value=int(rec.Month))
+        cell(row=r, column=3, value=rec.Partner)
+        cell(row=r, column=4, value=rec.Product)
+        # rounded so the default General format still reads cleanly
+        cell(row=r, column=5, value=round(float(rec.Value), 4))
+        r += 1
     set_widths(ws, {"A": 7, "B": 8, "C": 26, "D": 70, "E": 18})
     ws.freeze_panes = "A2"
     return ws
@@ -835,8 +847,14 @@ def generate_quarterly_tables(excel_dir, out_dir,
 
     os.makedirs(out_dir, exist_ok=True)
 
-    # ---------------- exports workbook ----------------
+    # slice out the review quarter from both sides, then drop the full
+    # extracts -- everything below works on the quarter frames only
     exp_q = frames["exports"][frames["exports"]["Month"].isin(months)]
+    imp_q = frames["imports"][frames["imports"]["Month"].isin(months)]
+    frames.clear()
+    gc.collect()
+
+    # ---------------- exports workbook ----------------
     exp_cur = exp_q[exp_q["Year"] == year]
     exp_prev = (exp_q[exp_q["Year"] == prev_year] if comparison else None)
 
@@ -870,7 +888,6 @@ def generate_quarterly_tables(excel_dir, out_dir,
         if comparison else rank_table(piv_et_cur, top_products,
                                       "All other products")
 
-    imp_q = frames["imports"][frames["imports"]["Month"].isin(months)]
     imp_cur = imp_q[imp_q["Year"] == year]
     imp_prev = (imp_q[imp_q["Year"] == prev_year] if comparison else None)
     piv_ip_cur = pivot_by(imp_cur, "Partner")
@@ -898,6 +915,8 @@ def generate_quarterly_tables(excel_dir, out_dir,
                "Table 2 Top Export Products", "Product label")
     wb_e.properties.title = "Kenya Export Performance %s %d" % (qlabel, year)
     _save_workbook(wb_e, os.path.join(out_dir, "Exports.xlsx"), cache_e)
+    del wb_e, cache_e
+    gc.collect()   # release the exports cells before the imports build
 
     # ---------------- imports workbook ----------------
     wb_i = openpyxl.Workbook()
@@ -941,6 +960,8 @@ def generate_quarterly_tables(excel_dir, out_dir,
                                   "Product Label", cache_i)
     wb_i.properties.title = "Kenya Import Performance %s %d" % (qlabel, year)
     _save_workbook(wb_i, os.path.join(out_dir, "Imports.xlsx"), cache_i)
+    del wb_i, cache_i
+    gc.collect()
 
     return {"months": months, "year": year, "prev_year": prev_year,
             "quarter": qlabel, "month_names": month_names,

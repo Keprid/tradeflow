@@ -1159,8 +1159,8 @@ input[type=file]::file-selector-button:hover {
       try { data = await r.json(); }
       catch (err) {
         appendLog('ERROR: the server answered with a non-JSON response (' + r.status + ').'
-          + ' It probably restarted mid-job — reload this page and try again.', 'err');
-        showToast('error', 'Server restarted mid-job', 'Reload this page and try again.');
+          + ' Reload this page and try again.', 'err');
+        showToast('error', 'Server error', 'Reload this page and try again.');
         return;
       }
       if (!r.ok) {
@@ -1169,13 +1169,37 @@ input[type=file]::file-selector-button:hover {
         showToast('error', 'Generation failed', data.detail || 'Request failed with status ' + r.status);
         return;
       }
-      for (const line of data.log) appendLog(line, 'ok');
+
+      // The server accepted the upload and builds the report in the
+      // background; follow progress by polling the job status.
+      appendLog(`Job accepted (${data.job_id}) &mdash; building in the background...`);
+      const final = await new Promise(resolve => {
+        let shown = 0;
+        const timer = setInterval(async () => {
+          let s = null;
+          try { s = await (await fetch(data.status_url)).json(); }
+          catch (e) { return; }          // transient hiccup: keep polling
+          const lines = s.log || [];
+          for (; shown < lines.length; shown++) appendLog(lines[shown], 'ok');
+          if (s.state === 'done' || s.state === 'error') {
+            clearInterval(timer);
+            resolve(s);
+          }
+        }, 2000);
+      });
+
+      if (final.state === 'error') {
+        appendLog('ERROR: ' + (final.detail || 'unknown error'), 'err');
+        showError(final.detail || 'The job failed.');
+        showToast('error', 'Generation failed', final.detail || 'The job failed.');
+        return;
+      }
       appendLog('Done.', 'ok');
       $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
-        `${data.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'}` +
-        ` &middot; job ${data.job_id}`;
-      $('dl-report').href = data.report_url;
-      $('dl-tables').href = data.tables_url;
+        `${final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'}` +
+        ` &middot; job ${final.job_id}`;
+      $('dl-report').href = final.report_url;
+      $('dl-tables').href = final.tables_url;
       $('result').style.display = 'block';
       $('result').classList.add('showing');
       confetti();

@@ -307,19 +307,25 @@ def parse_rank_sheet(ws):
 
 
 def pick_sheet(wb, prefer, keywords):
-    """Find the best-matching rank sheet by name, then by content."""
-    for name in wb.sheetnames:
+    """Find the best-matching rank sheet by name, then by content.
+
+    Raw-record sheets ('Data') are skipped: they hold the whole extract
+    (tens of thousands of rows), can never be rank tables, and streaming
+    them repeatedly is what made report builds slow / memory-hungry.
+    """
+    candidates = [n for n in wb.sheetnames if not n.lower().startswith("data")]
+    for name in candidates:
         if prefer and prefer in name.lower():
             parsed = parse_rank_sheet(wb[name])
             if parsed:
                 return parsed
-    for name in wb.sheetnames:
+    for name in candidates:
         low = name.lower()
         if any(k in low for k in keywords):
             parsed = parse_rank_sheet(wb[name])
             if parsed:
                 return parsed
-    for name in wb.sheetnames:
+    for name in candidates:
         parsed = parse_rank_sheet(wb[name])
         if parsed:
             return parsed
@@ -374,29 +380,37 @@ class QuarterAnalysis:
     # -- loading ------------------------------------------------------------
     def load(self, excel_dir):
         files = find_workbooks(excel_dir)
-        wb_e = openpyxl.load_workbook(files["exports"], data_only=True)
-        wb_i = openpyxl.load_workbook(files["imports"], data_only=True)
-        self.t1 = pick_sheet(wb_e, "table 1", ("destination", "partner"))
-        self.t2 = pick_sheet(wb_e, "table 2", ("product",))
-        self.a1 = pick_sheet(wb_i, "annex 1", ("partner",))
-        self.a2 = pick_sheet(wb_i, "annex 2", ("product",))
-        for name, t in (("Table 1", self.t1), ("Table 2", self.t2),
-                        ("Annex 1", self.a1), ("Annex 2", self.a2)):
-            if t is None:
-                sys.exit("[ERROR] Could not locate %s in the quarterly "
-                         "workbooks." % name)
-        comparison = bool(self.t1.get("comparison")
-                          and self.a1.get("comparison"))
-        if self.year is None:
-            years = [t["years"][1] for t in (self.t1, self.t2,
-                                             self.a1, self.a2)
-                     if t["years"][1]]
-            if len(years) == 4:
-                self.year = max(years)
-            else:
-                # single-year sheets: fall back to workbook metadata / data
-                self.year = detect_year([wb_e, wb_i],
-                                        fallback=date.today().year)
+        # read_only mode streams sheets instead of materialising every cell
+        # of the big raw Data sheets in RAM
+        wb_e = openpyxl.load_workbook(files["exports"], data_only=True,
+                                      read_only=True)
+        wb_i = openpyxl.load_workbook(files["imports"], data_only=True,
+                                      read_only=True)
+        try:
+            self.t1 = pick_sheet(wb_e, "table 1", ("destination", "partner"))
+            self.t2 = pick_sheet(wb_e, "table 2", ("product",))
+            self.a1 = pick_sheet(wb_i, "annex 1", ("partner",))
+            self.a2 = pick_sheet(wb_i, "annex 2", ("product",))
+            for name, t in (("Table 1", self.t1), ("Table 2", self.t2),
+                            ("Annex 1", self.a1), ("Annex 2", self.a2)):
+                if t is None:
+                    sys.exit("[ERROR] Could not locate %s in the quarterly "
+                             "workbooks." % name)
+            comparison = bool(self.t1.get("comparison")
+                              and self.a1.get("comparison"))
+            if self.year is None:
+                years = [t["years"][1] for t in (self.t1, self.t2,
+                                                 self.a1, self.a2)
+                         if t["years"][1]]
+                if len(years) == 4:
+                    self.year = max(years)
+                else:
+                    # single-year sheets: fall back to workbook metadata / data
+                    self.year = detect_year([wb_e, wb_i],
+                                            fallback=date.today().year)
+        finally:
+            wb_e.close()
+            wb_i.close()
         self.has_comparison = comparison
         self.year_prev = (self.year - 1) if comparison else None
         self.month_names = self.t1["months"]
