@@ -63,6 +63,12 @@ JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
 RAW_KEYWORDS = ("imports-from-world", "exports-to-world",
                 "kenyas-imports-from", "kenyas-exports-to")
+# classic ("previous") Trade Map download names -- same data, other naming
+CLASSIC_RAW_KEYWORDS = ("list_of_supplying_markets_for_a_product_imported",
+                        "list_of_products_imported",
+                        "list_of_importing_markets_for_a_product_exported",
+                        "list_of_products_exported",
+                        "bilateral_trade_between_kenya_and")
 SERVICE_RAW_KEYWORDS = ("exported_services_for", "imported_services_for",
                         "services_exported_by", "services_imported_by",
                         "services_commercialized", "list_of_exporters_for",
@@ -438,12 +444,13 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Could not recognise the services upload set.\n"
             f"Uploaded files: {uploaded}\n"
             f"Expected filenames containing any of: {kw_list}")
-    if any(any(k in n for k in RAW_KEYWORDS) for n in names):
+    if any(any(k in n for k in RAW_KEYWORDS + CLASSIC_RAW_KEYWORDS)
+           for n in names):
         return "raw", ""
     if sum(1 for n in names if re.search(r"table\s*\d", n)) >= 6:
         return "ready", ""
     uploaded = ", ".join(sorted(names))
-    raw_kw = ", ".join(RAW_KEYWORDS)
+    raw_kw = ", ".join(RAW_KEYWORDS + CLASSIC_RAW_KEYWORDS)
     return None, (
         f"Could not recognise the upload set.\n"
         f"Uploaded files: {uploaded}\n"
