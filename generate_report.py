@@ -130,11 +130,12 @@ def fit_widths(widths, n, prefix=3):
 
 
 def short_label(label, maxlen=42):
-    """Shorten a label for use inside charts/legends."""
-    lbl = clean_label(label)
-    if len(lbl) <= maxlen:
-        return lbl
-    return lbl[: maxlen - 1].rstrip() + "..."
+    """Shorten a label for use inside narrative text.
+
+    Delegates to the shared ``short_product_name`` so labels are cut at
+    whole words (at least four kept) without any trailing '...'.
+    """
+    return short_product_name(label, maxlen=maxlen)
 
 
 def lighten(hex_color, amount=0.55):
@@ -1183,7 +1184,8 @@ class ReportBuilder:
         """Shorten long product labels so no cell wraps past MAX_LABEL_LINES.
 
         Only invoked when a table cannot fit even at the minimum font; keeps
-        the first run's formatting and appends an ellipsis.
+        the first run's formatting and cuts at a whole word -- no trailing
+        ellipsis.
         """
         for row in table.rows:
             seen = set()
@@ -1200,12 +1202,12 @@ class ReportBuilder:
                     continue
                 eff = max(0.4, w - self.SIDE_MARGIN_IN)
                 cpl = max(1, int(eff * 144.0 / size_pt))
-                keep = max(1, cpl * self.MAX_LABEL_LINES - 3)
+                keep = max(1, cpl * self.MAX_LABEL_LINES - 1)
                 cut = text[:keep]
                 sp = cut.rfind(" ")
-                if sp > int(keep * 0.6):
+                if sp > int(keep * 0.4):
                     cut = cut[:sp]
-                cut = cut.rstrip(" ,;") + "..."
+                cut = cut.rstrip(" ,;")
                 first = p.runs[0] if p.runs else None
                 for r in list(p.runs):
                     r._r.getparent().remove(r._r)

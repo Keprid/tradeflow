@@ -333,6 +333,14 @@ PRODUCT_SHORT_NAMES = {
 _CLAUSE_SPLIT = re.compile(r"[;,]\s*")
 _CODE_STRIP = re.compile(r"[^0-9]")
 
+# Shortened labels must keep at least this many whole words (when the full
+# label has them) so a stub like "Animals,..." never hides the meaning.
+MIN_SHORT_WORDS = 4
+
+# Do not leave a shortened label dangling on one of these connectors.
+_TRAILING_STOPWORDS = {"and", "&", "of", "the", "for", "with", "in", "to",
+                       "or", "other", "from"}
+
 
 def _tidy_label(label):
     """Collapse whitespace and drop trailing ellipsis / punctuation."""
@@ -345,11 +353,12 @@ def short_product_name(label=None, code=None, maxlen=None):
     Resolution order:
 
     1. Exact HS-code lookup in PRODUCT_SHORT_NAMES.
-    2. Clean fallback: the label is tidied up, standalone 'and' compressed to
-       '&', and - when ``maxlen`` forces truncation - whole clauses are kept
-       wherever they fit. Elided content is marked with ``,...``; if not even
-       one clause fits, the first clause is cut at a word boundary with
-       '...'.
+    2. Clean fallback: the label is tidied up and standalone 'and' compressed
+       to '&'. When ``maxlen`` forces truncation, whole words are kept --
+       always at least ``MIN_SHORT_WORDS`` of them (unless the label itself
+       is shorter), extended only while they fit -- and the result never ends
+       on a connector word. No '...' marker is appended: endings are complete
+       words.
     """
     if code is not None:
         mapped = PRODUCT_SHORT_NAMES.get(_CODE_STRIP.sub("", str(code)))
@@ -363,18 +372,15 @@ def short_product_name(label=None, code=None, maxlen=None):
     if not maxlen or len(text) <= maxlen:
         return text
 
-    out = ""
-    for part in _CLAUSE_SPLIT.split(text):
-        candidate = part if not out else out + ", " + part
-        if len(candidate) > maxlen:
+    words = text.split()
+    out = words[0]
+    for word in words[1:]:
+        candidate = f"{out} {word}"
+        if len(candidate) > maxlen and out.count(" ") + 1 >= MIN_SHORT_WORDS:
             break
-        out = candidate.rstrip(" ,;:")
-    if out:
-        if out.count('"') % 2:
-            out = out[:-1].rstrip(" ,;:")
-        return out + ",..."
-    head = text[: maxlen - 1]
-    cut = head.rsplit(" ", 1)[0].rstrip(" ,;:")
-    if cut.count('"') % 2:
-        cut = cut[: cut.rindex('"')].rstrip(" ,;:")
-    return (cut or head).rstrip(" ,;:") + "..."
+        out = candidate
+    # A label must not end on a dangling connector ("... fresh or").
+    while " " in out and out.rsplit(" ", 1)[1].strip(",").lower() \
+            in _TRAILING_STOPWORDS:
+        out = out.rsplit(" ", 1)[0].rstrip(" ,;:")
+    return out
