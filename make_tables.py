@@ -1319,9 +1319,13 @@ def compute_bilateral_alignment(kenya_items, kenya_total, partner_items,
     """Compare Kenya's export products to the partner vs partner's import demand.
 
     Matches by HS code. For each Kenya product, computes:
-    - Kenya's share of its total exports
+    - The product's share within Kenya's exports to the partner
     - Partner's import share for the same product
     - Alignment score: how well Kenya's exports match partner's import demand
+
+    Inputs must already be scaled to USD Million (prepare() rescales the
+    extracted structures in place, so the "raw" references below are in
+    millions by the time this is called).
     """
     partner_by_code = {}
     for it in partner_items:
@@ -1357,6 +1361,8 @@ def compute_bilateral_alignment(kenya_items, kenya_total, partner_items,
                 and kit["vals"][-2] is not None and kit["vals"][-2] != 0):
             growth = (kit["vals"][-1] - kit["vals"][-2]) / abs(kit["vals"][-2])
 
+        # Values arrive in USD Million (prepare() rescales the extracted
+        # items in place before this runs), matching Tables 5 and 6.
         results.append({
             "code": code,
             "label": kit["label"],
@@ -1396,7 +1402,7 @@ def write_bilateral_table(ws, items, years, krep, kpartner,
     h = 1 + title_rows
     cols = ["Rank", "HS Code", "Product",
             f"Kenya Value USD M ({latest})",
-            f"Kenya Share (%)",
+            f"Share in Kenya's Exports to {kpartner} (%)",
             f"{kpartner} Import Share (%)",
             "Annual Growth %"]
     for c, hdr in enumerate(cols, 1):
@@ -1470,8 +1476,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     rows, ycols, years, labels = parse_source(files["table2"], years=table_years)
     total, items = extract_products(rows, ycols)
     d2 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
-    p_total_raw = total   # partner import total (raw, USD Thousand)
-    p_items_raw = items   # partner import items (raw, USD Thousand)
+    p_total_raw = total   # NOTE: USD Million -- prepare() rescaled in place
+    p_items_raw = items   # (same object), not raw USD Thousand
 
     # ---- Table 4: export products ---------------------------------------
     rows, ycols, years, labels = parse_source(files["table4"], years=table_years)
@@ -1484,8 +1490,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     krep = labels["reporter"] or "Kenya"
     kpartner = labels["partner"]
     d5 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
-    k_total_raw = total   # Kenya export total (raw, USD Thousand)
-    k_items_raw = items   # Kenya export items (raw, USD Thousand)
+    k_total_raw = total   # NOTE: USD Million -- prepare() rescaled in place
+    k_items_raw = items   # (same object), not raw USD Thousand
 
     # ---- Table 6: Kenya imports from partner ----------------------------
     rows, ycols, years, labels = parse_source(files["table6"], years=table_years)

@@ -192,6 +192,8 @@ def find_excel_files(excel_dir):
             found["table5"] = path
         elif "table 6" in low:
             found["table6"] = path
+        elif "table 7" in low:
+            found["table7"] = path          # optional: bilateral alignment
         elif "balance" in low or "figure 1" in low:
             found["balance"] = path
     missing = [k for k in
@@ -350,6 +352,58 @@ def parse_trade_balance(path):
     raise ValueError(f"Could not parse bilateral trade series from {path}")
 
 
+def parse_bilateral_table(path):
+    """Parse the optional Table 7 workbook (export composition & alignment).
+
+    Layout as written by ``make_tables.write_bilateral_table``:
+        row 1: "Table 7:" | merged title
+        row 2: Rank | HS Code | Product | Kenya Value USD M (YYYY) |
+               Kenya Share (%) | <Partner> Import Share (%) | Annual Growth %
+        rows 3+: one row per product; shares/growth stored as fractions.
+    """
+    wb = openpyxl.load_workbook(path, data_only=True)
+    try:
+        ws = wb.worksheets[0]
+        grid = _cell_grid(ws)
+    finally:
+        wb.close()
+
+    hdr_idx = None
+    year = None
+    for ri, row in enumerate(grid[:5]):
+        for v in row[:4]:
+            if isinstance(v, str):
+                m = re.search(r"\((20\d{2})\)", v)
+                if m:
+                    year, hdr_idx = int(m.group(1)), ri
+                    break
+        if hdr_idx is not None:
+            break
+    if hdr_idx is None:
+        raise ValueError(f"Could not locate the Table 7 header row in {path}")
+
+    items = []
+    for row in grid[hdr_idx + 1:]:
+        if len(row) < 7:
+            continue
+        rank = row[0]
+        if not isinstance(rank, (int, float)) or isinstance(rank, bool):
+            continue
+        label = str(row[2]).strip() if row[2] is not None else ""
+        if not label:
+            continue
+        items.append({
+            "rank": int(rank),
+            "code": str(row[1]).strip() if row[1] is not None else "",
+            "label": clean_label(label),
+            "value": to_float(row[3]),
+            "kenya_share": to_float(row[4]),
+            "partner_share": to_float(row[5]),
+            "growth": to_float(row[6]),
+        })
+    return {"year": year, "items": items}
+
+
 # ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
@@ -375,6 +429,11 @@ class Analysis:
         self.table5 = parse_rank_table(files["table5"])   # Kenya exports to country
         self.table6 = parse_rank_table(files["table6"])   # Kenya imports from country
         self.balance = parse_trade_balance(files["balance"])
+        try:
+            self.table7 = (parse_bilateral_table(files["table7"])
+                           if "table7" in files else None)
+        except Exception:
+            self.table7 = None
         if self.table1["years"]:
             self.years = self.table1["years"]
         if self.year not in self.years:
@@ -1377,6 +1436,92 @@ class ReportBuilder:
                     self._cell_text(table.cell(ri, ci), val)
         return table
 
+    def add_bilateral_table(self, a: Analysis):
+        """Table 7 (Kenya's export composition & market alignment).
+
+        Styled like Tables 1-6: bold header, one decimal for values,
+        percentages as '12.3%', widths fitted to the page.
+        """
+        c = self.c
+        t7 = a.table7
+        y = t7.get("year") or self.a.year
+        items = t7["items"]
+        table = self.doc.add_table(rows=1 + len(items), cols=7)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._set_table_widths(
+            table, [640, 900, 3100, 1560, 1130, 1230, 930])
+
+        headers = [
+            f"Rank in {y}",
+            "HS Code",
+            "Product label",
+            f"Kenya's exports to {c['name']}\nValue in USD Million",
+            f"Share of Kenya's Exports to {c['name']}",
+            f"Share in {c['name']}'s Imports",
+            "Annual Growth %",
+        ]
+        for ci, text in enumerate(headers):
+            self._cell_text(table.cell(0, ci), text, bold=True, wrap=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+
+        for ri, it in enumerate(items):
+            r = 1 + ri
+            self._cell_text(table.cell(r, 0), str(it["rank"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(r, 1), str(it["code"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(r, 2), it["label"], wrap=True)
+            self._cell_text(table.cell(r, 3), num(it["value"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(r, 4), pct(it["kenya_share"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(r, 5), pct(it["partner_share"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(r, 6), pct(it["growth"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
+        return table
+
+
+def bilateral_bullets(a):
+    """Interpretation bullets for Table 7 (export composition & alignment)."""
+    t7 = getattr(a, "table7", None)
+    if not t7 or not t7["items"]:
+        return []
+    y = t7.get("year") or a.year
+    items = [it for it in t7["items"] if it["value"] is not None]
+    if not items:
+        return []
+    bullets = []
+
+    top = items[:10]
+    top_val = sum(it["value"] for it in top)
+    top_share = sum(it["kenya_share"] for it in top if it["kenya_share"] is not None)
+    bullets.append(
+        f"Kenya's top {len(top)} export products to {a.country} were worth "
+        f"USD {top_val:,.1f} million in {y}, together representing "
+        f"{pct(top_share)} of Kenya's exports to {a.country}.")
+
+    aligned = [it for it in top if it["partner_share"] is not None
+               and it["partner_share"] > 0]
+    if aligned:
+        best = max(aligned, key=lambda it: it["partner_share"])
+        bullets.append(
+            f"{best['label']} shows the strongest market alignment: it takes "
+            f"{pct(best['kenya_share'])} of Kenya's exports to {a.country} "
+            f"while accounting for {pct(best['partner_share'])} of "
+            f"{a.country}'s import demand in {y}.")
+
+    growing = [it for it in items if it["growth"] is not None]
+    if growing:
+        fastest = max(growing, key=lambda it: it["growth"])
+        bullets.append(
+            f"Fastest growing export to {a.country} was {fastest['label']} "
+            f"({pct(fastest['growth'])} year-on-year), suggesting momentum "
+            "worth consolidating.")
+    return bullets
+
 
 # ---------------------------------------------------------------------------
 # Main report assembly
@@ -1531,13 +1676,15 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
 
     # 3.5 Kenya's export composition and market alignment
     b.add_heading(f"3.5 Kenya's Export Composition and Market Alignment with {c['name']}", level=2)
-    t7_path = os.path.join(excel_dir, "Table 7 Kenya Export Composition and Market Alignment.xlsx")
-    if os.path.exists(t7_path):
+    if getattr(a, "table7", None) and a.table7["items"]:
         b.add_table_caption(f"Table 7: Kenya's Export Products – Market Alignment with {c['name']} in {Y}")
-        b.add_table_from_excel(t7_path, "Table 7")
+        b.add_bilateral_table(a)
+        b.add_source()
+        for line in bilateral_bullets(a):
+            b.add_bullet(line)
     else:
         b.add_para("[Table 7 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
-    b.add_source()
+        b.add_source()
     b.add_para(
         f"This table compares Kenya's export products to {c['name']} against "
         f"{c['name']}'s overall import demand. Products where Kenya has a significant "
