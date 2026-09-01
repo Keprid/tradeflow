@@ -61,6 +61,62 @@ CONFIG_DIR = BASE_DIR / "config"
 JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
+
+# The six raw ITC Trade Map downloads the Goods pipeline needs, in the order
+# make_tables expects (table1..table6).  Trade Map has no public API (it is an
+# Angular SPA), so "auto-fetch" means: we describe the exact per-partner query
+# to run and the file-naming patterns auto-detection will pick up once the
+# analyst downloads each workbook.
+ITC_GOODS_QUERIES = [
+    {
+        "role": "table1",
+        "query": "Imports from World, by Market, for {partner} "
+                 "(all products, top supplying markets)",
+        "short": "Partner's imports from world - by market",
+        "patterns": ("imports-from-world-by-exporter",
+                     "list_of_supplying_markets_for_a_product_imported_by_{p}"),
+    },
+    {
+        "role": "table2",
+        "query": "Imports from World, by Product, for {partner} "
+                 "(all products imported by {partner})",
+        "short": "Partner's imports from world - by product",
+        "patterns": ("imports-from-world-by-product",
+                     "list_of_products_imported_by_{p}"),
+    },
+    {
+        "role": "table3",
+        "query": "Exports to World, by Market, for {partner} "
+                 "(all products, top importing markets)",
+        "short": "Partner's exports to world - by market",
+        "patterns": ("exports-to-world-by-importer",
+                     "list_of_importing_markets_for_a_product_exported_by_{p}"),
+    },
+    {
+        "role": "table4",
+        "query": "Exports to World, by Product, for {partner} "
+                 "(all products exported by {partner})",
+        "short": "Partner's exports to world - by product",
+        "patterns": ("exports-to-world-by-product",
+                     "list_of_products_exported_by_{p}"),
+    },
+    {
+        "role": "table5",
+        "query": "Bilateral trade between Kenya and {partner} - Kenya's "
+                 "EXPORTS to {partner}, by product",
+        "short": "Kenya's exports to {partner} - by product (bilateral)",
+        "patterns": ("kenyas-exports-to-{p}-by-product",
+                     "bilateral_trade_between_kenya_and_{p}"),
+    },
+    {
+        "role": "table6",
+        "query": "Bilateral trade between Kenya and {partner} - Kenya's "
+                 "IMPORTS from {partner}, by product",
+        "short": "Kenya's imports from {partner} - by product (bilateral)",
+        "patterns": ("kenyas-imports-from-{p}-by-product",
+                     "bilateral_trade_between_kenya_and_{p}"),
+    },
+]
 RAW_KEYWORDS = ("imports-from-world", "exports-to-world",
                 "kenyas-imports-from", "kenyas-exports-to")
 # classic ("previous") Trade Map download names -- same data, other naming
@@ -416,6 +472,86 @@ def api_configs():
             "year": cfg["report"].get("year", 0),
         })
     return out
+
+
+def _partner_slug(name):
+    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+
+
+def _build_goods_checklist(partner):
+    """Return the six ITC download steps for a partner (see ITC_GOODS_QUERIES)."""
+    slug = _partner_slug(partner)
+    items = []
+    for q in ITC_GOODS_QUERIES:
+        p = re.sub(r"[^a-z0-9]+", "_", (partner or "").lower()).strip("_")
+        items.append({
+            "role": q["role"],
+            "query": q["query"].format(partner=partner),
+            "short": q["short"].format(partner=partner),
+            "patterns": [pat.format(p=p) for pat in q["patterns"]],
+        })
+    return items
+
+
+@app.get("/api/goods/partner-setup")
+def api_goods_partner_setup(partner: str = "", year: int = 0):
+    """Prep a Goods flow for a partner by name (e.g. 'Saudi Arabia').
+
+    Because ITC Trade Map has no public API (it is an Angular SPA), this does
+    not download anything.  Instead it returns: (1) a ready-to-use config for
+    the partner (created from the name, or the existing one reused) and (2) the
+    exact six Trade Map queries to run plus the file-name patterns auto-detection
+    expects of the downloaded workbooks.  Remaining requirement is a manual
+    download from trademap.org."""
+
+    partner = (partner or "").strip()
+    if not partner:
+        raise HTTPException(400, "Partner name is required (e.g. 'Saudi Arabia').")
+
+    slug = _partner_slug(partner)
+    cfg_path = CONFIG_DIR / f"{slug}.json"
+    created = False
+    if not cfg_path.exists():
+        try:
+            cfg, s = make_config.build_config_from_name(
+                partner, year or None)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
+                            encoding="utf-8")
+        created = True
+
+    cfg = gr.load_config(str(cfg_path))
+    checklist = _build_goods_checklist(partner)
+
+    # Best-effort: which of the six files already exist in the sample-data dir.
+    sample_dir = BASE_DIR / "sample_data"
+    found = {}
+    if sample_dir.is_dir():
+        lowlist = [f.lower().replace(" ", "_") for f in os.listdir(sample_dir)]
+        for it in checklist:
+            hit = next(
+                (f for f in lowlist
+                 if any(pat in f and _partner_slug(partner) not in f
+                        for pat in it["patterns"])
+                 or any(pat.format(p=_partner_slug(partner)) in f
+                        for pat in it["patterns"])),
+                None)
+            found[it["role"]] = bool(hit)
+
+    return {
+        "ok": True,
+        "partner": cfg["country"]["name"],
+        "config": {"id": slug, "path": str(cfg_path), "created": created,
+                   "year": cfg["report"].get("year", 0)},
+        "checklist": checklist,
+        "sample_found": found,
+        "note": (
+            "ITC Trade Map has no public API. Run each query below in the "
+            "Trade Map web app, download the workbook, then upload them together "
+            "for Goods Trade Flow. Filenames matching the patterns below are "
+            "auto-detected and the partner config is reused automatically."),
+    }
 
 
 def _detect_mode(uploads_dir, report_type="goods"):

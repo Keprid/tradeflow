@@ -1,0 +1,111 @@
+{
+  "country": {
+    "name": "Nigeria",
+    "short": "Nigeria",
+    "title": "NIGERIA",
+    "adjective": "Nigeria",
+    "possessive": "Nigeria's",
+    "capital": "Abuja (Federal Capital Territory); Lagos is the largest city and economic hub"
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2026,
+    "title_line1": "KENYA- NIGERIA TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_nigeria.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to Nigeria are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_nigeria.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    [
+      "Official name",
+      "Federal Republic of Nigeria"
+    ],
+    [
+      "Head of state",
+      "President Bola Ahmed Tinubu (since 29 May 2023)"
+    ],
+    [
+      "Head of government",
+      "President Bola Ahmed Tinubu holds both head-of-state and head-of-government posts"
+    ],
+    [
+      "Capital",
+      "Abuja (Federal Capital Territory); Lagos is the largest city and economic hub"
+    ],
+    [
+      "Form of government",
+      "Federal presidential republic (36 states + FCT)"
+    ],
+    [
+      "Official language",
+      "English (official); Hausa, Yoruba, Igbo and over 500 other languages"
+    ],
+    [
+      "Total area (sq km)",
+      "about 923,768 sq km (UN/World Bank)"
+    ],
+    [
+      "Population",
+      "about 232.7 million (2024, UN/World Bank); about 237.5 million (2025, UN)"
+    ],
+    [
+      "Population rank",
+      "about 6th worldwide (2025, UN); most populous country in Africa"
+    ],
+    [
+      "Population projection 2030",
+      "about 262 million (UN WPP 2024, medium variant)"
+    ],
+    [
+      "Population density",
+      "about 261 people per sq km (2025, UN)"
+    ],
+    [
+      "Urban / rural population",
+      "about 55% urban / 45% rural (2025, UN); Lagos metro over 12 million"
+    ],
+    [
+      "Life expectancy at birth",
+      "about 55 years at birth (2024, UN/World Bank)"
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "about 70.4% of adults 15+ (2024, UNESCO/World Bank)"
+    ],
+    [
+      "Monetary unit",
+      "Nigerian naira (NGN; subdivided into 100 kobo)"
+    ],
+    [
+      "Currency exchange rate",
+      "about 1,520 NGN per US$ (2025 annual average); about 1,440 per US$ (end-2025)"
+    ],
+    [
+      "GNI",
+      "about US$395 billion (2024, World Bank, Atlas method)"
+    ],
+    [
+      "GNI per capita",
+      "about US$1,700 (2024, World Bank, Atlas method)"
+    ]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
+    "WTO (member information, tariff and trade data)",
+    "National statistics office of the country, if applicable"
+  ]
+}

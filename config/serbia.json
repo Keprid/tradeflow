@@ -1,0 +1,111 @@
+{
+  "country": {
+    "name": "Serbia",
+    "short": "Serbia",
+    "title": "SERBIA",
+    "adjective": "Serbia",
+    "possessive": "Serbia's",
+    "capital": "Belgrade"
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2026,
+    "title_line1": "KENYA- SERBIA TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_serbia.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to Serbia are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_serbia.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    [
+      "Official name",
+      "Republic of Serbia"
+    ],
+    [
+      "Head of state",
+      "President Aleksandar Vučić (since 2017)"
+    ],
+    [
+      "Head of government",
+      "Prime Minister (2025)"
+    ],
+    [
+      "Capital",
+      "Belgrade"
+    ],
+    [
+      "Form of government",
+      "Unitary parliamentary republic"
+    ],
+    [
+      "Official language",
+      "Serbian"
+    ],
+    [
+      "Total area (sq km)",
+      "about 88,361 sq km (incl. Kosovo); 77,474 sq km excl."
+    ],
+    [
+      "Population",
+      "about 6.6 million (2024, World Bank)"
+    ],
+    [
+      "Population rank",
+      "about 111th worldwide (2024)"
+    ],
+    [
+      "Population projection 2030",
+      "about 6.5 million (UN WPP 2024, medium variant)"
+    ],
+    [
+      "Population density",
+      "about 85 people per sq km (excluding Kosovo)"
+    ],
+    [
+      "Urban / rural population",
+      "about 57% urban / 43% rural (2024, World Bank)"
+    ],
+    [
+      "Life expectancy at birth",
+      "about 76 years at birth (2024, World Bank)"
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "99.3% (2023, World Bank)"
+    ],
+    [
+      "Monetary unit",
+      "Serbian dinar (RSD)"
+    ],
+    [
+      "Currency exchange rate",
+      "US$1 = RSD 101 (August 2026)"
+    ],
+    [
+      "GNI",
+      "about US$76 billion (2024, World Bank)"
+    ],
+    [
+      "GNI per capita",
+      "about US$11,610 (Atlas method, 2024, World Bank)"
+    ]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
+    "WTO (member information, tariff and trade data)",
+    "National statistics office of the country, if applicable"
+  ]
+}

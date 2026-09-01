@@ -1,0 +1,50 @@
+{
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2025,
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "hs_level": 4,
+  "markets": [
+    {
+      "name": "Saudi Arabia",
+      "excel_dir": "sample_data",
+      "config": "config/saudi_arabia.json",
+      "output": "KENYA-Saudi Arabia TRADE FLOW.docx"
+    }
+  ],
+  "deliverables": [
+    {
+      "type": "trade_brief",
+      "markets": ["Saudi Arabia"]
+    },
+    {
+      "type": "regional_brief",
+      "region": "EAC",
+      "markets": ["Saudi Arabia"]
+    },
+    {
+      "type": "secondary_research",
+      "markets": ["Saudi Arabia"]
+    },
+    {
+      "type": "performance_brief",
+      "markets": ["Saudi Arabia"]
+    },
+    {
+      "type": "market_intelligence",
+      "name": "Horticulture",
+      "hs_regex": "^(06|07|08)",
+      "markets": ["Saudi Arabia"]
+    },
+    {
+      "type": "tariff_ntb",
+      "name": "Horticulture",
+      "hs_regex": "^(06|07|08)"
+    },
+    {
+      "type": "prefeasibility",
+      "markets": ["Saudi Arabia"]
+    }
+  ]
+}

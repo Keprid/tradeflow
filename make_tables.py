@@ -157,6 +157,89 @@ def truncate_label(label, limit=80):
     return out
 
 
+def _hs_granularity(path, limit=400):
+    """Probe a Trade Map workbook and return the granularity of its product
+    codes (2, 4, 6 or None when not a product table / undetectable).
+
+    The product-code column is located by header text (`code`, `product code`,
+    `hs code` -- but *not* reporter/partner/country codes), then the leading
+    digit-strings of its data cells are sampled and the modal length returned.
+    Trade Map ships product tables at HS2 by default, so callers use this to
+    prefer the HS4 copy when several versions of the same table are present.
+    """
+    try:
+        wb, _used = convert_to_xlsx(path)
+        ws = wb[wb.sheetnames[0]]
+        grid = [[_cell_text(c) for c in row]
+                for row in ws.iter_rows(values_only=True, max_row=120)]
+        wb.close()
+    except Exception:
+        return None
+
+    if not grid:
+        return None
+    header = grid[0]
+    code_col = None
+    for i, h in enumerate(header):
+        hl = h.lower().replace(" ", "_")
+        # product code column: mentions a code ('cd'/'code'/'product code') but
+        # is not a partner/reporter/market one
+        if ("cd" in hl or "code" in hl) and not any(k in hl for k in
+                                                    ("reporter", "partner", "country",
+                                                     "importer", "exporter", "market",
+                                                     "destination", "origin", "supplier")):
+            code_col = i
+            break
+    # fallback: classic layouts often name it "Product code" or just "Code"
+    if code_col is None:
+        for i, h in enumerate(header):
+            if h.lower().replace(" ", "_") in ("product_code", "code", "hs_code",
+                                               "harmonized_system_code", "productcd"):
+                code_col = i
+                break
+    if code_col is None:
+        return None
+
+    lengths = []
+    for row in grid[1:]:
+        if code_col >= len(row):
+            continue
+        raw = row[code_col].lstrip("'").replace("\u00a0", " ").strip()
+        if raw.isdigit():
+            lengths.append(len(raw))
+    if not lengths:
+        return None
+    # modal non-zero length
+    from collections import Counter
+    counts = Counter(l for l in lengths if l > 0)
+    if not counts:
+        return None
+    return counts.most_common(1)[0][0]
+
+
+_PRODUCT_ROLES = ("table2", "table4", "table5", "table6")
+
+
+def _prefer_hs4(candidates, excel_dir):
+    """Given a list of candidate filenames for a product-table role, prefer
+    the HS4 copy when several are present (Trade Map offers HS2 by default but
+    users often also download HS4).  Falls back to first alphabetic match."""
+    if len(candidates) < 2:
+        return candidates[0]
+    scanned = []
+    for fname in candidates:
+        lvl = _hs_granularity(os.path.join(excel_dir, fname))
+        scanned.append((lvl, fname))
+    best = None
+    for lvl, fname in scanned:
+        if lvl == 4:
+            return fname                       # exact HS4 match wins
+        if lvl is not None:
+            if best is None or lvl > best[0]:
+                best = (lvl, fname)
+    return best[1] if best else candidates[0]
+
+
 def find_source_files(excel_dir):
     """Locate the six raw source files by filename keywords.
 
@@ -174,6 +257,7 @@ def find_source_files(excel_dir):
       are told apart by peeking at the trade-flow title inside each file.
     """
     found = {}
+    _cands = {r: [] for r in _PRODUCT_ROLES}
     bilaterals = []
     for fname in sorted(os.listdir(excel_dir)):
         if not is_spreadsheet(fname):
@@ -186,17 +270,17 @@ def find_source_files(excel_dir):
             found.setdefault("table1", fname)
         elif "list_of_products_imported" in low \
                 or ("imports-from-world" in low and "by-product" in low):
-            found.setdefault("table2", fname)
+            _cands["table2"].append(fname)
         elif "list_of_importing_markets_for_a_product_exported" in low \
                 or ("exports-to-world" in low and "by-importer" in low):
             found.setdefault("table3", fname)
         elif "list_of_products_exported" in low \
                 or ("exports-to-world" in low and "by-product" in low):
-            found.setdefault("table4", fname)
+            _cands["table4"].append(fname)
         elif "imports-from" in low and "by-product" in low:
-            found.setdefault("table6", fname)
+            _cands["table6"].append(fname)
         elif "exports-to" in low and "by-product" in low:
-            found.setdefault("table5", fname)
+            _cands["table5"].append(fname)
 
     # Classic bilateral downloads: same filename for both directions, so
     # classify each by the flow named inside the workbook.
@@ -206,9 +290,15 @@ def find_source_files(excel_dir):
         except Exception:
             continue
         if kind == "exports":
-            found.setdefault("table5", fname)
+            _cands["table5"].append(fname)
         elif kind == "imports":
-            found.setdefault("table6", fname)
+            _cands["table6"].append(fname)
+
+    # Product tables: when several versions are present (e.g. HS2 *and* HS4 of
+    # the same Tabel Map download), record the HS4 copy.
+    for role in _PRODUCT_ROLES:
+        if _cands[role]:
+            found[role] = _prefer_hs4(_cands[role], excel_dir)
 
     missing = [k for k in ("table1", "table2", "table3", "table4", "table5", "table6")
                if k not in found]
@@ -932,15 +1022,6 @@ def _finalize(ws, path, cache):
                                                 if v is not None}})
 
 
-def _set_table_filter(ws, first_row, last_row, last_col):
-    """Add Excel AutoFilter (column dropdown arrows) over the data range.
-    AutoFilter is used instead of a native Excel Table object because the
-    header rows contain merged cells, which Excel Tables reject."""
-    try:
-        ws.auto_filter.ref = f"A{first_row}:{_cell_ref(last_row, last_col)}"
-    except Exception:
-        pass
-
 
 # ---------------------------------------------------------------------------
 # Table writers
@@ -1066,7 +1147,6 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
         put_val(ws, r, c, val, bold=True, fill=total_fill, use_row_fill=False)
     put_share(ws, r, share_col, total["share"] if total else None, bold=True, fill=total_fill, use_row_fill=False)
     ws.freeze_panes = f"A{row0}"
-    _set_table_filter(ws, h, r_world, share_col)
 
 
 def write_product_table(ws, data, hdr, unit_row,
@@ -1188,7 +1268,6 @@ def write_product_table(ws, data, hdr, unit_row,
         put_val(ws, r, c, val, bold=True, fill=total_fill, use_row_fill=False)
     put_share(ws, r, 4 + n, total["share"] if total else None, bold=True, fill=total_fill, use_row_fill=False)
     ws.freeze_panes = f"A{row0}"
-    _set_table_filter(ws, h, r_total, 4 + n)
 
 
 def write_balance(ws, krep, kpartner, years, exports, imports, cache=None, skip_chart=False):
@@ -1232,7 +1311,6 @@ def write_balance(ws, krep, kpartner, years, exports, imports, cache=None, skip_
                          e - i, fill=BAND_FILL)
         else:
             put_val(ws, r, c, (e - i) if (e is not None and i is not None) else None, fill=BAND_FILL, use_row_fill=False)
-    _set_table_filter(ws, 3, 6, 2 + len(years))
     if not skip_chart:
         _add_balance_chart(ws, krep, kpartner, years)
 

@@ -29,24 +29,78 @@
     "source": "Google map"
   },
   "quick_facts": [
-    ["Official name", "United Arab Emirates (Al-Imarat al-Arabiya al-Muttahida)"],
-    ["Head of state", "..."],
-    ["Head of government", "..."],
-    ["Capital", "Abu Dhabi"],
-    ["Form of government", "Federal presidential elective monarchy (federation of seven emirates)"],
-    ["Official language", "Arabic"],
-    ["Total area (sq km)", "about 83,600 sq km"],
-    ["Population", "..."],
-    ["Population rank", "..."],
-    ["Population projection 2030", "..."],
-    ["Population density", "..."],
-    ["Urban / rural population", "..."],
-    ["Life expectancy at birth", "..."],
-    ["Literacy (age 15 and over)", "..."],
-    ["Monetary unit", "UAE dirham (AED); 1 dirham = 100 fils"],
-    ["Currency exchange rate", "US$1 = AED 3.6725 (peg against the US dollar)"],
-    ["GNI", "..."],
-    ["GNI per capita", "..."]
+    [
+      "Official name",
+      "United Arab Emirates (Al-Imarat al-Arabiya al-Muttahida)"
+    ],
+    [
+      "Head of state",
+      "President Sheikh Mohamed bin Zayed Al Nahyan (also Ruler of Abu Dhabi, since May 2022)"
+    ],
+    [
+      "Head of government",
+      "Prime Minister Sheikh Mohammed bin Rashid Al Maktoum (also Ruler of Dubai, since 2006)"
+    ],
+    [
+      "Capital",
+      "Abu Dhabi"
+    ],
+    [
+      "Form of government",
+      "Federal presidential elective monarchy (federation of seven emirates)"
+    ],
+    [
+      "Official language",
+      "Arabic"
+    ],
+    [
+      "Total area (sq km)",
+      "about 83,600 sq km"
+    ],
+    [
+      "Population",
+      "about 11.5 million (2025, World Bank; about 88-90% are expatriates)"
+    ],
+    [
+      "Population rank",
+      "roughly 88th-90th in the world (UN/WPP, 2025-26)"
+    ],
+    [
+      "Population projection 2030",
+      "about 12 million projected for 2030 (UN World Population Prospects)"
+    ],
+    [
+      "Population density",
+      "about 138-150 people per sq km (2023-25, UN/World Bank estimate)"
+    ],
+    [
+      "Urban / rural population",
+      "about 87% urban / 13% rural (2025, UN Urbanization Prospects)"
+    ],
+    [
+      "Life expectancy at birth",
+      "about 83 years at birth (2024, World Bank)"
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "about 99% of adults aged 15+ literate (World Bank/UNESCO, 2024)"
+    ],
+    [
+      "Monetary unit",
+      "UAE dirham (AED); 1 dirham = 100 fils"
+    ],
+    [
+      "Currency exchange rate",
+      "US$1 = AED 3.6725 (peg against the US dollar)"
+    ],
+    [
+      "GNI",
+      "about US$590 billion (World Bank Atlas method, 2024)"
+    ],
+    [
+      "GNI per capita",
+      "about US$51,550 (World Bank Atlas method, 2024)"
+    ]
   ],
   "references": [
     "Google Maps",

@@ -861,6 +861,21 @@ input[type=file]::file-selector-button:hover {
       <select id="cfg"><option value="">Loading configs...</option></select>
     </div>
 
+    <div id="goods-partner-wrap" class="info-box">
+      <i class="fas fa-id-card" style="color:var(--dark-blue);"></i>
+      &nbsp;<b>Partner (Goods):</b> enter the market (e.g. <i>Saudi Arabia</i>, <i>UAE</i>, <i>Uganda</i>)
+      to prepare its ITC Trade Map download checklist and a matching config.
+      <div class="row" style="margin-top:10px;gap:8px;">
+        <input type="text" id="partner" placeholder="e.g. Saudi Arabia"
+               style="flex:1;min-width:0;" value="">
+        <button id="prep-checklist" class="btn btn-secondary" type="button"
+                style="flex:0 0 auto;padding:8px 12px;">
+          <i class="fas fa-list-check"></i> Prep checklist
+        </button>
+      </div>
+      <div id="checklist" style="display:none;margin-top:12px;"></div>
+    </div>
+
     <div id="services-info" class="info-box">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       &nbsp;<b>Services Mode:</b> Config is automatically set to <b>services_world</b> (global services trade).
@@ -940,6 +955,10 @@ input[type=file]::file-selector-button:hover {
   const progressStageText = $('progress-stage-text');
   const progressElapsed = $('progress-elapsed');
   const toastContainer = $('toast-container');
+  const partnerWrap = $('goods-partner-wrap');
+  const partnerInput = $('partner');
+  const prepBtn = $('prep-checklist');
+  const checklistBox = $('checklist');
 
   const STAGES = [
     'Uploading files\u2026',
@@ -1091,6 +1110,49 @@ input[type=file]::file-selector-button:hover {
     }
   }
 
+  prepBtn.addEventListener('click', async () => {
+    const p = (partnerInput.value || '').trim();
+    if (!p) {
+      appendLog('Enter a partner first, e.g. Saudi Arabia.', 'err');
+      showToast('error', 'Partner required', 'Type a market name, e.g. Saudi Arabia.');
+      return;
+    }
+    prepBtn.disabled = true;
+    prepBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing\u2026';
+    try {
+      const r = await fetch('/api/goods/partner-setup?partner=' + encodeURIComponent(p));
+      const data = await r.json();
+      if (!r.ok) { throw new Error(data.detail || data.ok); }
+
+      const created = data.config.created ? ' (config created)' : ' (config reused)';
+      let html = '<div style="font-size:13px;line-height:1.6;">' +
+        '<b style="color:var(--green);">Checklist ready for ' + esc(data.partner) + '</b> &mdash; ' +
+        'config <b>config/' + esc(data.config.id) + '.json</b>' + created + ' (report year ' + data.config.year + ').<br>' +
+        '<i class="fas fa-circle-info" style="color:var(--dark-blue);"></i> &nbsp;<span style="opacity:.9">' +
+        esc(data.note) + '</span></div>';
+      html += '<ol style="margin:10px 0 0 18px;font-size:13px;line-height:1.55;">';
+      for (const it of data.checklist) {
+        const pats = it.patterns.map(esc).join(' &nbsp;or&nbsp; ');
+        html += '<li><b>' + esc(it.short) + '</b><div style="opacity:.85">' +
+          '<i class="fas fa-magnifying-glass" style="color:var(--dark-blue);"></i> ' + esc(it.query) +
+          '<div class="hint" style="font-size:12px;"><b>Filename:</b> <code>' + pats + '</code></div>' +
+          '</div></li>';
+      }
+      html += '</ol>';
+      checklistBox.innerHTML = html;
+      checklistBox.style.display = 'block';
+      appendLog('Prepared ITC checklist for ' + data.partner + ' (config/' + data.config.id + '.json) ' +
+        (data.config.created ? 'created' : 'reused') + '.');
+      showToast('success', 'Checklist ready', 'Download the 6 Trade Map files, then upload them together.');
+    } catch (e) {
+      appendLog('Prep checklist failed: ' + e, 'err');
+      showToast('error', 'Could not prepare checklist', String(e));
+    } finally {
+      prepBtn.disabled = false;
+      prepBtn.innerHTML = '<i class="fas fa-list-check"></i> Prep checklist';
+    }
+  });
+
   document.querySelectorAll('input[name="report_type"]').forEach(r => {
     r.addEventListener('change', () => {
       clearError();
@@ -1103,6 +1165,7 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'block';
+        partnerWrap.style.display = 'none';
       } else if (r.value === 'services') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them). ' +
@@ -1112,6 +1175,7 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'block';
         quarterlyInfo.style.display = 'none';
+        partnerWrap.style.display = 'none';
       } else {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
@@ -1121,6 +1185,7 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'none';
+        partnerWrap.style.display = 'block';
       }
     });
   });

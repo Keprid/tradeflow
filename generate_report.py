@@ -59,7 +59,8 @@ from docx.oxml.ns import qn
 from docx.shared import Emu, Inches, Pt, RGBColor
 
 from charts import draw_share_pie, series_shares, slice_callouts, new_fig, finish
-from country_names import display_name, narrative_ref, short_product_name, title_partner
+from country_names import (display_name, is_africa, narrative_ref,
+                           short_product_name, title_partner)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -75,7 +76,10 @@ THEME_ACCENTS = ["#156082", "#E97132", "#196B24", "#0F9ED5", "#A02B93", "#4EA72E
 # identical Liberation Serif.
 FONT_PREFERENCE = ["Times New Roman", "Liberation Serif", "DejaVu Serif", "Arial"]
 
-SRC = "Source: International Trade Centre (ITC) Database; Compiled by KEPROBA"
+SRC = ("Source: International Trade Centre (ITC) Trade Map database. "
+       "Macroeconomic indicators are drawn from official sources (World Bank, "
+       "IMF World Economic Outlook and WTO). Compiled by KEPROBA - Research "
+       "and Innovation Directorate (RID).")
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +199,8 @@ def find_excel_files(excel_dir):
             found["table6"] = path
         elif "table 7" in low:
             found["table7"] = path          # optional: bilateral alignment
+        elif "product by partner" in low or "table 8" in low:
+            found["product_partner"] = path  # optional: per-product origin detail
         elif "balance" in low or "figure 1" in low:
             found["balance"] = path
     missing = [k for k in
@@ -242,8 +248,17 @@ def _find_year_run(grid):
         cur = []
         prev = None
         for ci, v in enumerate(row):
-            iv = int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
-            if iv is not None and 1990 <= iv <= 2100 and abs(v - iv) < 1e-9:
+            iv = None
+            if isinstance(v, bool):
+                iv = None
+            elif isinstance(v, (int, float)):
+                iv = int(v)
+            elif isinstance(v, str):
+                s = v.strip().strip("'\"").replace(",", "")
+                if re.fullmatch(r"\d{4}", s) and 1990 <= int(s) <= 2100:
+                    iv = int(s)
+            if iv is not None and 1990 <= iv <= 2100 and (not isinstance(v, str) and abs(v - iv) < 1e-9
+                                                          or isinstance(v, str)):
                 if prev is not None and iv == prev + 1:
                     cur.append((ci, iv))
                 else:
@@ -327,6 +342,70 @@ def parse_rank_table(path):
     return {"has_code": has_code, "data": data, "items": items,
             "total": total, "all_other": all_other,
             "year_start_col": year_start_col, "years": year_header}
+
+
+def parse_product_partner(path):
+    """Parse an optional ITC "trade by product and partner" download into
+    rows of {product_code, partner, value_usd}.
+
+    ITC structurally varies this export across interfaces; we keep the parser
+    tolerant: scan the header row for a product-code column, a partner-country
+    column and a numeric trade-value column, then emit one row per line.
+    Returns [] when the shape is not recognised (caller treats it as optional).
+    """
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+    grid = _cell_grid(ws)
+    rows = []
+    prod_col = partner_col = value_col = None
+    # find a header row (a row with >=2 string cells mentioning code/partner/value)
+    for ri, row in enumerate(grid[:40]):
+        cells = [str(c).strip().lower() for c in row if isinstance(c, str)]
+        joined = " ".join(cells)
+        has_code = any("code" in c or "hs" in c or "product" in c for c in cells)
+        has_part = any("partner" in c or "country" in c or "report" in c for c in cells)
+        has_val = any(("value" in c or "usd" in c or "amount" in c) for c in cells)
+        if has_code and has_val and has_part:
+            for ci, c in enumerate(row):
+                if not isinstance(c, str):
+                    continue
+                cc = c.strip().lower()
+                if prod_col is None and ("product code" in cc or "hs code" in cc
+                                         or cc.endswith("hs") or cc == "commodity code"):
+                    prod_col = ci
+                elif partner_col is None and ("partner" in cc
+                                              or ("country" in cc and "report" not in cc)):
+                    partner_col = ci
+                elif value_col is None and ("trade value" in cc or "import value"
+                                            in cc or cc.endswith("usd") or "value (usd" in cc
+                                            or "value usd" in cc or cc == "value"):
+                    value_col = ci
+            for rj in range(ri + 1, len(grid)):
+                r = grid[rj]
+                if not r:
+                    continue
+                if prod_col is None or prod_col >= len(r):
+                    continue
+                code = r[prod_col]
+                partner = r[partner_col] if (partner_col is not None and partner_col < len(r)) else None
+                val = None
+                try:
+                    # value may be spread over several year columns; take max = latest
+                    vals = []
+                    for c in range(value_col if value_col is not None else 0, len(r)):
+                        if isinstance(r[c], (int, float)):
+                            vals.append(float(r[c]))
+                    if vals:
+                        val = max(vals)
+                except Exception:
+                    val = None
+                if code is None or val is None:
+                    continue
+                rows.append({"product_code": str(code).replace("'", "").strip(),
+                             "partner": str(partner).strip() if partner else "",
+                             "value_usd": val})
+            break
+    return rows
 
 
 def parse_trade_balance(path):
@@ -435,13 +514,47 @@ class Analysis:
                            if "table7" in files else None)
         except Exception:
             self.table7 = None
+        try:
+            if "product_partner" in files:
+                pp = parse_product_partner(files["product_partner"])
+                self.set_africa_import_share(self.load_africa_import_share(pp))
+        except Exception:
+            self.set_africa_import_share({})
         if self.table1["years"]:
             self.years = self.table1["years"]
         if self.year not in self.years:
             self.year = self.years[-1]     # e.g. 2024 when the data stops in 2024
         self.iy = self.years.index(self.year)
         self.i5 = len(self.years) - 1
+        self._warn_hs_level()
         return self
+
+    def _warn_hs_level(self):
+        """Heads-up when a product table appears to be at HS2 rather than the
+        required HS4 detail (ITC's Trade Map defaults to a coarser or finer
+        level depending on how the download was configured).  This is a
+        warning only -- the report still builds and the tables remain valid."""
+        def _prod_codes(parsed):
+            return [str(d.get("code") or "") for d in (parsed or {}).get("items", [])]
+
+        def _digits(codes):
+            digs = [len(c.strip().strip("'"))
+                    for c in codes if c.strip().strip("'").isdigit()]
+            return digs[0] if digs else None
+
+        for tag, parsed in (("Table 4 (export products)", self.table4),
+                            ("Table 5 (exports to market)", self.table5),
+                            ("Table 6 (imports from market)", self.table6)):
+            lvl = _digits(_prod_codes(parsed))
+            if lvl is not None and lvl != 4:
+                why = "" if lvl in (2, 6) else \
+                    f" (looks like a mix/malformed: HS{lvl})"
+                print(f"[WARN] {tag}: product codes look like HS{lvl}"
+                      f"{why}. This report requires HS4 (4-digit Harmonized "
+                      f"System) product detail for consistent analysis. "
+                      f"Re-download from ITC Trade Map at 4-digit level for "
+                      f"the correct product granularity.",
+                      file=sys.stderr)
 
     # ---- country aggregates ------------------------------------------------
     def imports_years(self):
@@ -484,6 +597,16 @@ class Analysis:
         a, b = self.exports_2024(), self.exports_2025()
         return (b / a - 1) if a and b else None
 
+    def exports_cagr(self):
+        """Compound annual growth of Kenya's bilateral exports across the
+        full series present in the data (may be more than 5 years)."""
+        yrs = self.kenya_exports_years()
+        vals = [v for v in yrs if v is not None]
+        if len(vals) < 2 or vals[0] in (0, None) or vals[-1] is None:
+            return None
+        n = len(yrs) - 1
+        return (vals[-1] / vals[0]) ** (1.0 / n) - 1 if n else None
+
     def top(self, table, n):
         return table["items"][:n]
 
@@ -496,6 +619,60 @@ class Analysis:
         vals = [d["share"] for d in self.table6["items"][:10]]
         vals = [v for v in vals if v is not None]
         return sum(vals) if vals else None
+
+    @staticmethod
+    def _hhi(shares):
+        """Herfindahl-Hirschman Index over a set of (normalised-to-1) shares.
+        Returns None when there is insufficient data."""
+        shares = [s for s in shares if s is not None and s > 0]
+        if not shares:
+            return None
+        return sum(s * s for s in shares)
+
+    def exports_hhi(self, items=None):
+        """HHI of the partner market's top export-product share basket
+        (Table 4) in the latest year."""
+        items = items if items is not None else self.table4["items"]
+        return self._hhi([d.get("share") for d in items])
+
+    def imports_hhi(self, items=None):
+        """HHI of the partner market's top import-product share basket
+        (Table 2) in the latest year."""
+        items = items if items is not None else self.table2["items"]
+        return self._hhi([d.get("share") for d in items])
+
+    def kenya_exports_concentration(self):
+        """HHI of Kenya's bilateral export-product shares to the partner
+        (Table 5) - a measure of how concentrated Kenya's exports are."""
+        items = self.table5["items"]
+        shares = [d.get("share") for d in items]
+        if all(s is None for s in shares):
+            return None
+        return self._hhi(shares)
+
+    def kenya_imports_concentration(self):
+        """HHI of Kenya's bilateral import-product shares from the partner
+        (Table 6)."""
+        items = self.table6["items"]
+        shares = [d.get("share") for d in items]
+        if all(s is None for s in shares):
+            return None
+        return self._hhi(shares)
+
+    @staticmethod
+    def _cagr(items):
+        """Compound annual growth over a full series of yearly values."""
+        vals = [v for v in items if v is not None]
+        if len(vals) < 2 or not vals[0] or not vals[-1]:
+            return None
+        n = len(items) - 1
+        return (vals[-1] / vals[0]) ** (1.0 / n) - 1 if n else None
+
+    def exports_product_cagr(self):
+        return self._cagr(self.kenya_exports_years())
+
+    def imports_product_cagr(self):
+        return self._cagr(self.kenya_imports_years())
 
     def kenya_exports_5yr(self):
         return self.kenya_exports_years()
@@ -544,6 +721,130 @@ class Analysis:
             if d["rank"] is not None and d["name"].lower() != "kenya":
                 n += 1
         return n
+
+    # ---- Africa / Kenya destination focus (from the partner's export market
+    #      table, Table 3) ----------------------------------------------------
+    def africa_destinations(self, table=None):
+        """Rows of `table` (Table 3 export destinations by default) whose
+        destination is an African country.  Returns the subset of the items
+        list (so callers can reuse .name / .share / .years)."""
+        table = table or self.table3
+        return [d for d in table["items"] if is_africa(d["name"])]
+
+    def africa_export_share(self, table=None):
+        """Share (fraction 0..1) of the partner's exports destined to Africa in
+        the latest year, summed over the African destination rows present."""
+        rows = self.africa_destinations(table)
+        vals = [d["share"] for d in rows if d.get("share") is not None]
+        return sum(vals) if vals else None
+
+    def kenya_destination(self, table=None):
+        """The Kenya row in the partner's export-destination table, if any."""
+        table = table or self.table3
+        for d in table["items"]:
+            if is_africa(d["name"]) and d["name"].lower() == "kenya":
+                return d
+        return None
+
+    def kenya_destination_share(self, table=None):
+        k = self.kenya_destination(table)
+        return k.get("share") if k else None
+
+    def africa_import_sources(self, table=None):
+        """Rows of `table` (Table 1 import source markets) whose origin is an
+        African country."""
+        table = table or self.table1
+        return [d for d in table["items"] if is_africa(d["name"])]
+
+    def kenya_import_source(self, table=None):
+        """The Kenya row in the partner's import source-market table (Table 1)."""
+        table = table or self.table1
+        for d in table["items"]:
+            if is_africa(d["name"]) and d["name"].lower() == "kenya":
+                return d
+        return None
+
+    def africa_import_share(self, table=None):
+        """Share (fraction 0..1) of the partner's imports sourced from Africa
+        groups (Table 1) in the latest year."""
+        table = table or self.table1
+        vals = [d["share"] for d in self.africa_import_sources(table)
+                if d.get("share") is not None]
+        return sum(vals) if vals else None
+
+    # ---- Top-N imported products: worldwide vs Africa vs Kenya -------------
+    @staticmethod
+    def _hs(item):
+        """Normalise an item's HS code to a bare str (dropping a leading ')."""
+        c = str((item or {}).get("code") or "").replace("'", "").strip()
+        return c
+
+    def top_import_products(self, n=20):
+        """For the partner market's top ``n`` imported products (Table 2,
+        worldwide, USD billion) return a list of dicts per product with:
+
+          code, name,        HS4 code + label
+          worldwide_val_bin  partner's total world imports of the product (USD bn)
+          kenya_val_bin      partner's imports of the product from Kenya (USD bn,
+                             from Table 5 which is in USD million -- converted)
+          kenya_share        Kenya's share (0..1) of that product's world imports
+
+        ``africa_share`` is only populated when a per-product source-partner
+        breakdown is supplied (see ``africa_import_products``); otherwise None.
+        """
+        t2 = {self._hs(d): d for d in self.table2["items"]}
+        t5 = {self._hs(d): d for d in self.table5["items"]}
+        out = []
+        for d in self.table2["items"][:n]:
+            c = self._hs(d)
+            ww = d["years"][-1] if d.get("years") else None          # USD bn
+            kd = t5.get(c)
+            kv = (kd["years"][-1] if kd and kd.get("years") else None)  # USD mn
+            kv_bn = (kv / 1000.0) if kv is not None else None        # -> USD bn
+            kshare = None
+            if kv_bn is not None and ww:
+                kshare = kv_bn / ww
+            out.append({
+                "rank": d.get("rank"),
+                "code": c,
+                "name": d.get("name") or d.get("label"),
+                "worldwide_val_bin": ww,
+                "kenya_val_bin": kv_bn,
+                "kenya_share": kshare,
+                "africa_share": None,
+            })
+        if hasattr(self, "_africa_import_share"):
+            for row in out:
+                row["africa_share"] = self._africa_import_share.get(row["code"])
+        return out
+
+    def set_africa_import_share(self, mapping):
+        """Attach per-HS4 ``{code: africa_share}`` (0..1) so ``top_import_products``
+        can report the 'imports from Africa' share.  Provided by an optional
+        product-by-partner breakdown (Trade Map download)."""
+        self._africa_import_share = mapping or {}
+        return self
+
+    # ---- Optional per-product Africa import origin ------------------------
+    def load_africa_import_share(self, product_partner_items):
+        """From an optional ITC 'trade by product and partner' breakdown
+        (list of {product_code, partner, value_usd}), compute the Africa share
+        of the partner's world imports per HS4 product."""
+        africa = {}
+        world = {}
+        for row in product_partner_items or []:
+            code = str(row.get("product_code") or "").replace("'", "").strip()[:4]
+            val = row.get("value_usd")
+            if not code or val is None:
+                continue
+            world[code] = world.get(code, 0.0) + val
+            if is_africa(str(row.get("partner") or "")):
+                africa[code] = africa.get(code, 0.0) + val
+        mapping = {}
+        for code, w in world.items():
+            a = africa.get(code, 0.0)
+            mapping[code] = (a / w) if w else 0.0
+        return mapping
 
 
 # ---------------------------------------------------------------------------
@@ -603,8 +904,8 @@ def build_narratives(a: Analysis, cfg):
             return f"{names[0]} and {names[1]}"
         return ", ".join(names[:-1]) + f", and {names[-1]}"
 
-    wex_s = f", about {exp_2025 / wex * 100:.1f}% of world exports" if wex else ""
-    wim_s = f", roughly {round(imp_2025 / wim * 100)}% of world imports" if wim else ""
+    wex_s = f", equivalent to {exp_2025 / wex * 100:.1f}% of world exports" if wex else ""
+    wim_s = f", or {imp_2025 / wim * 100:.1f}% of world imports" if wim else ""
 
     t["background"] = [
         [  # 1) country overview
@@ -633,8 +934,8 @@ def build_narratives(a: Analysis, cfg):
     ]
 
     # ---- Section 2 intro --------------------------------------------------
-    exp_world = f", which represented {exp_2025 / wex * 100:.1f}% of world exports" if wex else ""
-    imp_world = f", which represented roughly {round(imp_2025 / wim * 100)}% of world imports" if wim else ""
+    exp_world = f", equivalent to {exp_2025 / wex * 100:.1f}% of world exports" if wex else ""
+    imp_world = f", or {imp_2025 / wim * 100:.1f}% of world imports" if wim else ""
 
     dest1 = a.top(a.table3, 1)[0]
     prod1 = a.top(a.table4, 1)[0]
@@ -643,20 +944,20 @@ def build_narratives(a: Analysis, cfg):
 
     t["exports_bullets"] = [
         f"{c['name']} exports in {Y} were valued at USD {usd_auto(exp_2025)}{exp_world}.",
-        f"The lead export destination market in {Y} was {dest1['name']} with exports valued at "
-        f"USD {usd_auto(dest1['years'][a.iy])}, accounting for {pct(dest1['share'])} of "
+        f"The lead export destination market in {Y} was {dest1['name']}, with exports of "
+        f"USD {usd_auto(dest1['years'][a.iy])}. This represented {pct(dest1['share'])} of "
         f"{a.possessive} total exports.",
-        f"The main export product was {clean_label(prod1['label']) or prod1['name']} valued at "
-        f"USD {usd_auto(prod1['years'][a.iy])} and was ranked as the 1st world export product "
-        f"from {c['name']}.",
+        f"The principal export product was {clean_label(prod1['label']) or prod1['name']}, "
+        f"valued at USD {usd_auto(prod1['years'][a.iy])}. It ranked first among "
+        f"{c['name']}'s export products.",
     ]
     t["imports_bullets"] = [
         f"In {Y}, {c['name']} imports were valued at USD {usd_auto(imp_2025)}{imp_world}.",
-        f"The main import product was {clean_label(imp1['label']) or imp1['name']} at "
-        f"USD {usd_auto(imp1['years'][a.iy])} accounting for {pct(imp1['share'])} of "
+        f"The main import product was {clean_label(imp1['label']) or imp1['name']}, worth "
+        f"USD {usd_auto(imp1['years'][a.iy])}. It accounted for {pct(imp1['share'])} of "
         f"the country's imports.",
-        f"The leading import source market for {c['name']} was {src1['name']} exporting products "
-        f"worth USD {usd_auto(src1['years'][a.iy])}, with {pct(src1['share'])} share of "
+        f"The leading import source market was {src1['name']}, which supplied products worth "
+        f"USD {usd_auto(src1['years'][a.iy])}. This represented {pct(src1['share'])} of "
         f"{c['name']} imports.",
     ]
 
@@ -666,12 +967,37 @@ def build_narratives(a: Analysis, cfg):
     s21_mkts = top_phrase(
         a.top(a.table1, 3),
         lambda d: f"{d['name']} (USD {usd_auto(d['years'][a.iy])}; {pct(d['share'])})")
+    src3 = a.top(a.table1, 3)
+    top3_import_share = sum((d.get("share") or 0) for d in src3)
+    s21_analysis = (
+        f"The three leading source markets together supplied {pct(top3_import_share)} "
+        f"of total imports. This concentration indicates that supply is heavily "
+        f"dependent on a few partners, so diversifying import sources would reduce risk."
+        if top3_import_share and top3_import_share >= 25 else "")
     t["s21"] = [
         f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}, "
-        f"representing an increase of {pct(growth)} from {Y - 1}, which was USD {usd_auto(a.imports_2024())}.",
-        f"Between {a.years[0]} and {a.years[-1]}, imports had an average growth rate of {round(cagr * 100)}%." if cagr else "",
-        f"The lead source markets in {Y} were: {s21_mkts}." if s21_mkts else "",
+        f"an increase of {pct(growth)} on the previous year's USD {usd_auto(a.imports_2024())}.",
+        f"Between {a.years[0]} and {a.years[-1]}, imports grew at an average of "
+        f"{round(cagr * 100)}% a year." if cagr else "",
+        f"The lead source markets in {Y} were {s21_mkts}." if s21_mkts else "",
+        s21_analysis if s21_analysis else "",
     ]
+
+    # ---- Section 2.1a: Africa / peer benchmark of import sources ----------
+    afr_imp_share = a.africa_import_share()
+    kenya_src = a.kenya_import_source()
+    src_benchmark = []
+    if afr_imp_share is not None:
+        src_benchmark.append(
+            f"Of {a.country}'s total goods imports in {Y}, {pct(afr_imp_share)} "
+            f"originated from Africa.")
+    if kenya_src and kenya_src.get("share") is not None:
+        rank_txt = (f" (ranking {kenya_src['rank']} among source markets)"
+                    if kenya_src.get("rank") else "")
+        src_benchmark.append(
+            f"Kenya supplied {pct(kenya_src['share'])} of the country's imports{rank_txt}.")
+    t["s21_kenya"] = src_benchmark
+
 
     # ---- Section 2.2 ------------------------------------------------------
     s22_prods = top_phrase(
@@ -681,16 +1007,68 @@ def build_narratives(a: Analysis, cfg):
         f"In {Y}, the leading import products were: {s22_prods}." if s22_prods else "",
     ]
 
+    # ---- Section 2.2a: Kenya's share of the partner's top imports --------
+    ke_insights = []
+    kimp = a.top_import_products(n=6)
+    kimp_rows = [r for r in kimp if r.get("kenya_share") is not None]
+    if kimp_rows:
+        best = max(kimp_rows, key=lambda r: r["kenya_share"])
+        ks = top_phrase(
+            sorted(kimp_rows, key=lambda r: r["kenya_share"], reverse=True)[:3],
+            lambda r: f"{clean_label(r['name'])} ({pct(r['kenya_share'])})")
+        ke_insights.append(
+            f"Within the partner's top imported products, Kenya's largest shares were "
+            f"in {ks}.")
+        gap = best["kenya_share"]
+        ke_insights.append(
+            f"Kenya's single biggest foothold was in {clean_label(best['name'])} at "
+            f"{pct(gap)} of that product's world imports, showing room to scale "
+            f"bilateral supply.")
+    afr_rows = [r for r in kimp if r.get("africa_share") is not None]
+    if afr_rows:
+        top_afr = max(afr_rows, key=lambda r: r["africa_share"])
+        if top_afr.get("africa_share") is not None and top_afr.get("kenya_share") is not None:
+            ke_insights.append(
+                f"Africa supplies {pct(top_afr['africa_share'])} of world imports of "
+                f"{clean_label(top_afr['name'])}, of which Kenya provides "
+                f"{pct(top_afr['kenya_share'])}, pointing to a broader regional "
+                f"sourcing opportunity.")
+    t["s22_kenya"] = ke_insights
+
     # ---- Section 2.3 ------------------------------------------------------
     eg = a.exports_growth_2024_25()
     s23_dsts = top_phrase(
         a.top(a.table3, 4),
         lambda d: f"{d['name']} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
+    dest3 = a.top(a.table3, 3)
+    top3_export_share = sum((d.get("share") or 0) for d in dest3)
+    s23_analysis = (
+        f"The three leading destinations took {pct(top3_export_share)} of total exports. "
+        f"Such concentration means export earnings depend heavily on a small set of "
+        f"markets, underlining the value of market diversification."
+        if top3_export_share and top3_export_share >= 25 else "")
+    afr_share = a.africa_export_share()
+    kenya_dest = a.kenya_destination()
+    afr_bullet = ""
+    if afr_share is not None:
+        afr_countries = ", ".join(
+            display_name(d["name"]) for d in a.africa_destinations() if d.get("share"))
+        msg = (f"Of {a.country}'s total exports in {Y}, "
+               f"{pct(afr_share)} were destined to Africa"
+               + (f" ({afr_countries})." if afr_countries else "."))
+        if kenya_dest and kenya_dest.get("share") is not None:
+            rank_txt = (f" (ranking {kenya_dest['rank']} among destinations)"
+                        if kenya_dest.get("rank") else "")
+            msg += (f" Exports to Kenya accounted for {pct(kenya_dest['share'])}"
+                    f" of the total{rank_txt}.")
+        afr_bullet = msg
     t["s23"] = [
-        f"In {Y}, {a.possessive} exports were valued at USD {usd_auto(a.exports_2025())} "
-        f"having an average growth rate of {round(eg * 100)}% from {Y - 1} which was "
-        f"USD {usd_auto(a.exports_2024())}." if eg else "",
-        f"The leading destination markets were; {s23_dsts}." if s23_dsts else "",
+        (f"In {Y}, {a.possessive} exports were valued at USD {usd_auto(a.exports_2025())}, "
+         f"up {round(eg * 100)}% from USD {usd_auto(a.exports_2024())} in {Y - 1}."
+         if eg else ""),
+        f"The leading destination markets were {s23_dsts}." if s23_dsts else "",
+        afr_bullet if afr_bullet else "",
+        s23_analysis if s23_analysis else "",
     ]
 
     # ---- Section 2.4 ------------------------------------------------------
@@ -707,41 +1085,127 @@ def build_narratives(a: Analysis, cfg):
     mx, mxy = a.kenya_exports_max()
     t["s31"] = [
         f"In {Y}, Kenya's exports to {c['name']} were valued at USD {usd_auto(ke, unit='million')}.",
-        f"Kenya's exports to {c['name']} have been rising steadily over the last {wn} years "
-        f"({a.years[0]}-{a.years[-1]}), but with significant fluctuations year-on-year, with an average value "
-        f"of USD {usd_auto(avg, unit='million')}. The highest export value was USD {usd_auto(mx, unit='million')} in {mxy}.",
+        f"Across {a.years[0]}-{a.years[-1]}, exports to {c['name']} averaged "
+        f"USD {usd_auto(avg, unit='million')} a year. The peak value was "
+        f"USD {usd_auto(mx, unit='million')}, recorded in {mxy}.",
+        (f"Exports in {Y} stood {('above' if ke >= avg else 'below')} the {wn}-year average, "
+         f"indicating a {('favourable' if ke >= avg else 'softening')} short-term trend."
+         if avg else ""),
         f"In {Y}, Kenya's imports from {c['name']} were valued at "
         f"USD {usd_auto(a.kenya_imports_years()[a.iy], unit='million')}.",
     ]
     fluct = a.balance_imports_fluct()
     if fluct:
-        msg = (f"On the other hand, imports from {c['name']} have recorded significant fluctuations. "
-               f"The highest value was USD {usd_auto(fluct['max'], unit='million')} in {fluct['max_year']}, "
-               f"while the lowest value was USD {usd_auto(fluct['min'], unit='million')} in {fluct['min_year']}")
+        msg = (f"Imports from {c['name']} have fluctuated markedly. "
+               f"The highest value was USD {usd_auto(fluct['max'], unit='million')}, "
+               f"recorded in {fluct['max_year']}.")
         if fluct.get("next_growth") is not None:
-            msg += f" before rising by {fluct['next_growth'] * 100:.1f}% in {fluct['next_year']}."
+            msg += (f" After a low of USD {usd_auto(fluct['min'], unit='million')} in "
+                    f"{fluct['min_year']}, imports rose by {fluct['next_growth'] * 100:.1f}% "
+                    f"in {fluct['next_year']}.")
         else:
-            msg += "."
+            msg += (f" The lowest value was USD {usd_auto(fluct['min'], unit='million')}, "
+                    f"recorded in {fluct['min_year']}.")
         t["s31"].append(msg)
     t["s31"].append(
-        f"The bilateral trade between the two countries has consistently been in favor of "
-        f"{c['name']} over the past decade." if a.balance_always_negative() else "")
+        (f"The bilateral balance has consistently favoured {c['name']}, with Kenya "
+         f"importing more than it exports.") if a.balance_always_negative() else "")
 
     # ---- Section 3.2 / 3.3 / figure notes --------------------------------
     s32_prods = top_phrase(
         a.top(a.table5, 5),
         lambda d: f"{clean_label(d['label'])} ({pct(d['share'])})")
-    t["s32"] = [s32_prods + "."] if s32_prods else []
+    t["s32"] = ([f"The leading products in Kenya's exports to {c['name']} were {s32_prods}."]
+                if s32_prods else [])
 
     s33_prods = top_phrase(
         a.top(a.table6, 5),
         lambda d: f"{clean_label(d['label'])} ({pct(d['share'])})")
-    t["s33"] = [f"The top import products in {Y} included {s33_prods}."] if s33_prods else []
+    t["s33"] = ([f"Kenya's principal imports from {c['name']} were {s33_prods}."]
+                if s33_prods else [])
 
-    t["fig2_note"] = (f"Top 10 export products accounted for {pct(a.top10_export_share())} "
-                      f"of Kenya's total exports to {narrative_ref(c['name'])} in {Y}.")
-    t["fig3_note"] = (f"Top 10 import products accounted for {pct(a.top10_import_share())} "
-                      f"of Kenya's total imports from {narrative_ref(c['name'])} in {Y}.")
+    # ---- Section 3.3a: Goods export/import concentration & diversity -----
+    conc = []
+    hx = a.kenya_exports_concentration()
+    hi = a.kenya_imports_concentration()
+    if hx is not None:
+        effx = 1.0 / hx if hx else None
+        concer = "highly concentrated" if hx >= 0.25 else \
+                 ("moderately concentrated" if hx >= 0.15 else "well diversified")
+        conc.append(
+            f"On the trade basket with {narrative_ref(c['name'])}, the HHI of Kenya's "
+            f"export products was {hx:.3f}, a {concer} structure; the effective number "
+            f"of distinct product lines was {effx:.0f}." if effx else
+            f"On the trade basket with {narrative_ref(c['name'])}, the HHI of Kenya's "
+            f"export products was {hx:.3f}, a {concer} structure.")
+    if hi is not None:
+        effi = 1.0 / hi if hi else None
+        conceri = "highly concentrated" if hi >= 0.25 else \
+                  ("moderately concentrated" if hi >= 0.15 else "well diversified")
+        conc.append(
+            f"For imports from {narrative_ref(c['name'])}, the product HHI was {hi:.3f} "
+            f"({conceri}), implying an effective import basket of about {effi:.0f} "
+            f"products." if effi else
+            f"For imports from {narrative_ref(c['name'])}, the product HHI was {hi:.3f} "
+            f"({conceri}).")
+    if hx is not None and hi is not None:
+        conc.append(
+            ("Kenya's export basket is more concentrated than its import basket, "
+             "indicating greater dependence on a few export lines."
+             if hx > hi else
+             "Kenya's import basket is the more concentrated of the two, indicating "
+             "less symmetric sourcing across products."))
+    # Coverage of the partner's top imported products already supplied by Kenya
+    kimp_all = a.top_import_products(n=20)
+    covered = [r for r in kimp_all if r.get("kenya_share") is not None and r["kenya_share"] > 0]
+    if covered:
+        conc.append(
+            f"Kenya already supplies {len(covered)} of the partner's top 20 imported "
+            f"products, showing existing lines to build on for deeper market penetration.")
+    t["s33_conc"] = conc
+
+    _t10x = a.top10_export_share()
+    _hhix = a.kenya_exports_concentration()
+    _cagrx = a.exports_product_cagr()
+    note_x = []
+    if _t10x:
+        note_x.append(
+            f"Top 10 export products accounted for {pct(_t10x)} "
+            f"of Kenya's total exports to {narrative_ref(c['name'])} in {Y}, "
+            f"underlining a {('concentrated' if _t10x >= 0.70 else 'fairly diversified')} "
+            f"export basket.")
+    if _hhix is not None:
+        note_x.append(
+            f"Measured across Kenya's bilateral export products, the Herfindahl-Hirschman "
+            f"index (HHI) stood at {_hhix:.3f}, "
+            f"indicating {'high' if _hhix >= 0.25 else ('moderate' if _hhix >= 0.15 else 'low')} "
+            f"concentration.")
+    if _cagrx is not None:
+        note_x.append(
+            f"Kenya's bilateral exports to {narrative_ref(c['name'])} recorded a "
+            f"{_cagrx*100:,.1f}% compound annual growth rate over the series.")
+    t["fig2_note"] = " ".join(note_x) if note_x else ""
+
+    _t10i = a.top10_import_share()
+    _hhii = a.kenya_imports_concentration()
+    _cagri = a.imports_product_cagr()
+    note_i = []
+    if _t10i:
+        note_i.append(
+            f"Top 10 import products accounted for {pct(_t10i)} "
+            f"of Kenya's total imports from {narrative_ref(c['name'])} in {Y}, "
+            f"reflecting a {('concentrated' if _t10i >= 0.70 else 'fairly diversified')} "
+            f"import mix.")
+    if _hhii is not None:
+        note_i.append(
+            f"The Herfindahl-Hirschman index (HHI) of Kenya's bilateral import products was "
+            f"{_hhii:.3f}, indicating {'high' if _hhii >= 0.25 else ('moderate' if _hhii >= 0.15 else 'low')} "
+            f"concentration.")
+    if _cagri is not None:
+        note_i.append(
+            f"Kenya's bilateral imports from {narrative_ref(c['name'])} recorded a "
+            f"{_cagri*100:,.1f}% compound annual growth rate over the series.")
+    t["fig3_note"] = " ".join(note_i) if note_i else ""
 
     return t
 
@@ -1345,6 +1809,45 @@ class ReportBuilder:
         self._fit_table_on_page(table)
         return table
 
+    def add_africa_focus_table(self, a: Analysis, table=None):
+        """Compact Table showing the partner's exports destined to Africa,
+        with the Kenya row highlighted.  Backs the 'Africa / Kenya' insight."""
+        table = table or a.table3
+        afr = a.africa_destinations(table)
+        kenya = a.kenya_destination(table)
+        if kenya and kenya not in afr:
+            afr = afr + [kenya]
+        # order by rank, Kenya last labelled
+        afr = [d for d in afr if d.get("share") is not None]
+        afr = sorted(afr, key=lambda d: (d["name"].lower() != "kenya", d.get("rank") or 0))
+        if not afr:
+            return None
+        n = len(afr) + 2                      # header + data rows + total row
+        t = self.doc.add_table(rows=n, cols=3)
+        t.style = "Table Grid"
+        t.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._set_table_widths(t, [730, 3600, 2440])
+        self._cell_text(t.cell(0, 0), f"Rank in {a.year}", bold=True)
+        self._cell_text(t.cell(0, 1), "African destination", bold=True)
+        self._cell_text(t.cell(0, 2), f"Share of {a.country} exports in {a.year} %", bold=True)
+        afr_total = a.africa_export_share(table)
+        for ri, d in enumerate(afr, start=1):
+            is_kenya = d["name"].lower() == "kenya"
+            red = RED if is_kenya else None
+            self._cell_text(t.cell(ri, 0), str(d.get("rank") or ""),
+                            bold=is_kenya, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(t.cell(ri, 1), display_name(d["name"]), bold=is_kenya,
+                            color=red, wrap=True)
+            self._cell_text(t.cell(ri, 2), pct(d["share"]), bold=is_kenya, color=red,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        rsum = len(afr) + 1
+        self._cell_text(t.cell(rsum, 0), "", bold=True)
+        self._cell_text(t.cell(rsum, 1), "Total, Africa", bold=True)
+        self._cell_text(t.cell(rsum, 2), pct(afr_total), bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(t)
+        return t
+
     def add_product_table(self, a: Analysis, parsed, flow_label, unit="Value in USD Billion",
                           unit_row=False, widths=None):
         """Tables 2, 4, 5, 6 (product tables)."""
@@ -1594,6 +2097,9 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     for line in narr["s21"]:
         b.add_bullet(line)
+    for line in narr.get("s21_kenya", []):
+        if line:
+            b.add_bullet(line)
     b.page_break()
 
     # 2.2 Import products
@@ -1604,6 +2110,9 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     for line in narr["s22"]:
         b.add_bullet(line)
+    for line in narr.get("s22_kenya", []):
+        if line:
+            b.add_bullet(line)
     b.page_break()
 
     # 2.3 Export destinations
@@ -1614,6 +2123,11 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     for line in narr["s23"]:
         b.add_bullet(line)
+    if a.africa_destinations():
+        b.add_para("Focus: {name}'s exports to Africa & Kenya".format(name=c["name"]), bold=True)
+        b.add_table_caption(f"Table 3a: {a.country}'s exports destined to Africa in {Y}")
+        b.add_africa_focus_table(a)
+        b.add_source()
     b.page_break()
 
     # 2.4 Export products
@@ -1665,6 +2179,9 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     for line in narr["s33"]:
         b.add_bullet(line)
+    for line in narr.get("s33_conc", []):
+        if line:
+            b.add_bullet(line)
     b.page_break()
 
     # 3.4 Import share figure
@@ -1736,6 +2253,18 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_footer()
 
     doc.save(out_path)
+
+    # Companion editable Excel workbook: tables as plain editable ranges
+    # (no AutoFilter, thick outer borders) plus native editable charts.
+    try:
+        import excel_deliverable
+        xlsx_out = os.path.splitext(out_path)[0] + " TABLES.xlsx"
+        xdir = os.path.dirname(xlsx_out) or "."
+        os.makedirs(xdir, exist_ok=True)
+        excel_deliverable.build_deliverable(a, cfg, xlsx_out)
+        print(f"      Excel deliverable saved to   : {xlsx_out}")
+    except Exception as _e:  # additive; never break the report build
+        print(f"      [warn] Excel deliverable skipped: {_e}")
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,111 @@
+{
+  "country": {
+    "name": "China",
+    "short": "China",
+    "title": "CHINA",
+    "adjective": "China",
+    "possessive": "China's",
+    "capital": "..."
+  },
+  "report": {
+    "month_year": "AUGUST 2026",
+    "year": 2025,
+    "title_line1": "KENYA- CHINA TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_china.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to China are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_china.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    [
+      "Official name",
+      "..."
+    ],
+    [
+      "Head of state",
+      "..."
+    ],
+    [
+      "Head of government",
+      "..."
+    ],
+    [
+      "Capital",
+      "..."
+    ],
+    [
+      "Form of government",
+      "..."
+    ],
+    [
+      "Official language",
+      "..."
+    ],
+    [
+      "Total area (sq km)",
+      "..."
+    ],
+    [
+      "Population",
+      "..."
+    ],
+    [
+      "Population rank",
+      "..."
+    ],
+    [
+      "Population projection 2030",
+      "..."
+    ],
+    [
+      "Population density",
+      "..."
+    ],
+    [
+      "Urban / rural population",
+      "..."
+    ],
+    [
+      "Life expectancy at birth",
+      "..."
+    ],
+    [
+      "Literacy (age 15 and over)",
+      "..."
+    ],
+    [
+      "Monetary unit",
+      "..."
+    ],
+    [
+      "Currency exchange rate",
+      "..."
+    ],
+    [
+      "GNI",
+      "..."
+    ],
+    [
+      "GNI per capita",
+      "..."
+    ]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
+    "WTO (member information, tariff and trade data)",
+    "National statistics office of the country, if applicable"
+  ]
+}

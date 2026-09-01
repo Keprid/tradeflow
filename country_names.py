@@ -108,6 +108,39 @@ SHORT_NAMES = {
 }
 
 
+# Lowercase African country names as used by ITC Trade Map.  Used to compute
+# "share of exports destined to Africa" and to isolate Kenya within a market's
+# export-destination table.  Matches are attempted against the raw ITC label
+# AND its short form, so variants ("Congo, Democratic Republic of the",
+# "Tanzania, United Republic of") are all caught.
+AFRICA_COUNTRIES = {
+    "algeria", "angola", "benin", "botswana", "burkina faso",
+    "burundi", "cabo verde", "cape verde", "cameroon", "central african republic",
+    "chad", "comoros", "congo", "congo, democratic republic of the",
+    "democratic republic of the congo", "congo, republic of", "republic of the congo",
+    "cote d'ivoire", "côte d'ivoire", "ivory coast", "djibouti", "egypt",
+    "equatorial guinea", "eritrea", "eswatini", "swaziland", "ethiopia", "gabon",
+    "gambia", "ghana", "guinea", "guinea-bissau", "kenya", "lesotho", "liberia",
+    "libya", "libya, state of", "madagascar", "malawi", "mali", "mauritania",
+    "mauritius", "morocco", "mozambique", "namibia", "niger", "nigeria",
+    "rwanda", "sao tome and principe", "senegal", "seychelles", "sierra leone",
+    "somalia", "south africa", "south sudan", "sudan", "tanzania",
+    "tanzania, united republic of", "togo", "tunisia", "uganda", "zambia",
+    "zimbabwe", "saint helena",
+}
+
+
+def is_africa(name):
+    """Return True if ``name`` (raw ITC label or short form) is an African
+    country.  Handles the verbose ITC forms used for DR Congo and Tanzania."""
+    if name is None:
+        return False
+    text = " ".join(str(name).lower().split())
+    if text in AFRICA_COUNTRIES:
+        return True
+    return display_name(name).lower() in AFRICA_COUNTRIES
+
+
 def display_name(name, maxlen=None):
     """Professional display name for a country / market label.
 
@@ -347,31 +380,18 @@ def _tidy_label(label):
     return re.sub(r"\s+", " ", str(label)).strip().rstrip(" ,;:")
 
 
-def short_product_name(label=None, code=None, maxlen=None):
-    """Professional short name for a product label.
+def _truncate_words(text, maxlen):
+    """Keep whole words of ``text`` while they fit within ``maxlen`` chars.
 
-    Resolution order:
-
-    1. Exact HS-code lookup in PRODUCT_SHORT_NAMES.
-    2. Clean fallback: the label is tidied up and standalone 'and' compressed
-       to '&'. When ``maxlen`` forces truncation, whole words are kept --
-       always at least ``MIN_SHORT_WORDS`` of them (unless the label itself
-       is shorter), extended only while they fit -- and the result never ends
-       on a connector word. No '...' marker is appended: endings are complete
-       words.
+    Always keeps at least ``MIN_SHORT_WORDS`` of them (unless the label is
+    shorter), never ends on a dangling connector word, and appends no '...'
+    marker: endings are complete words.
     """
-    if code is not None:
-        mapped = PRODUCT_SHORT_NAMES.get(_CODE_STRIP.sub("", str(code)))
-        if mapped:
-            return mapped
-
-    text = _tidy_label(label)
     if not text:
         return ""
     text = re.sub(r"(?<=\w)\s+and\s+(?=\w)", " & ", text)
-    if not maxlen or len(text) <= maxlen:
+    if len(text) <= maxlen:
         return text
-
     words = text.split()
     out = words[0]
     for word in words[1:]:
@@ -384,3 +404,35 @@ def short_product_name(label=None, code=None, maxlen=None):
             in _TRAILING_STOPWORDS:
         out = out.rsplit(" ", 1)[0].rstrip(" ,;:")
     return out
+
+
+def short_product_name(label=None, code=None, maxlen=None):
+    """Professional short name for a product label.
+
+    Resolution order:
+
+    1. The informative first clause of the real label (everything up to the
+       first semicolon) is preferred.  This keeps the useful detail -- e.g.
+       "Coffee, whether or not roasted or decaffeinated" -- instead of
+       collapsing to a coarse heading like "Coffee".  A concise clause is
+       shown in full; only very long clauses are word-truncated.
+    2. Exact HS-code lookup in PRODUCT_SHORT_NAMES, used only as a fallback
+       when the label has no informative clause.
+    3. Otherwise the label is tidied and word-truncated if needed.
+    """
+    if label:
+        text = _tidy_label(label)
+        if text and len(re.split(r";", text, maxsplit=1)[0].split()) \
+                >= MIN_SHORT_WORDS:
+            clause = _tidy_label(re.split(r";", text, maxsplit=1)[0])
+            # keep a concise clause readable: truncate only beyond ~50 chars
+            effective = max(maxlen or 50, 50)
+            return _truncate_words(clause, effective)
+
+    if code is not None:
+        mapped = PRODUCT_SHORT_NAMES.get(_CODE_STRIP.sub("", str(code)))
+        if mapped:
+            return mapped
+
+    text = _tidy_label(label)
+    return _truncate_words(text, maxlen or 50) if text else ""

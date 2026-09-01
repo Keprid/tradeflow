@@ -87,6 +87,25 @@ from the Table 5 / Table 6 totals (Kenya's exports minus imports with the
 partner country, USD Million). Use that folder as `--excel-dir` for
 `generate_report.py`.
 
+### Web app: specify the partner & auto-prepare the ITC download checklist
+
+In the **Goods Trade Flow** page there is a **Partner** box (e.g. `Saudi
+Arabia`, `Malaysia`). Pressing **Prep checklist** calls
+`GET /api/goods/partner-setup?partner=<name>` which:
+
+- **reuses** the partner's `config/<slug>.json` if one exists, otherwise
+  **auto-creates it from the name** (country/report titles) using
+  `make_config.build_config_from_name`;
+- **pre-fills the Quick Facts** as `...` placeholders, to be researched or
+  edited in the generated config before the report is built;
+- returns the exact **six ITC Trade Map queries** to run plus the file-name
+  patterns (`table1`–`table6`) that upload auto-detection expects.
+
+Note: ITC Trade Map has **no public API** (it is an Angular SPA), so the
+system cannot download the files itself. After you download the six workbooks
+from trademap.org, upload them together — the partner country is auto-detected
+from Table 1 and the matching config reused automatically.
+
 ### Option B: use ready-made tables
 
 Put the seven Excel files in one folder (the `sample_data` folder is
@@ -327,6 +346,10 @@ Notes:
 
 - No files are stored permanently: uploads and generated reports live in
   `webapp/jobs/` and are cleaned after 24 h, so nothing sensitive lingers.
+- The whole app -- including the original single-country report generator -- is
+  served from one process via `uvicorn webapp.main:app`
+  (see `render.yaml`); the launch code works whether the app is imported as a
+  script, a module, or by gunicorn/uvicorn `webapp.main:app`.
 - There is no login on the app, so only share the URL with people you trust.
 - Charts use Liberation Serif (installed during the build) so figures match
   your local output. If that install is skipped, matplotlib falls back to a
@@ -348,8 +371,42 @@ All figures and narrative sentences are derived from the Excel data:
 - three matplotlib charts: bilateral trade balance (clustered column) and
   doughnut shares of Kenya's top export/import products;
 - Table 1–6 rows, Kenya row highlighted, table captions and source lines.
+- **Africa & Kenya destination insight** (Section 2.3): the share of the partner
+  market's exports destined to Africa (aggregated over the African destination
+  rows of Table 3), and the share destined to Kenya specifically — surfaced as a
+  narrative bullet and a compact "Focus" table (Table 3a) with Kenya highlighted.
+  Powered by the African-country mapping in `country_names.is_africa`.
 
-Notes on fidelity to the reference report:
+## Batch / desktop-research deliverables (`batch_briefs.py`)
+
+A general, market-agnostic runner covering the RID desktop-research deliverables
+of the FY 2026/27 workplan. It is **data-driven**: every deliverable is a
+reusable template applied to any market in the manifest, so new markets need no
+code changes.
+
+    python3 batch_briefs.py --manifest briefs_manifest_template.json --out-dir output/briefs
+
+Manifest-driven types:
+
+- `trade_brief` — full Kenya–<Market> trade-flow report (Tasks 2/3)
+- `regional_brief` — a brief framed for a regional grouping (EAC / COMESA / AfCFTA)
+- `secondary_research` — compact market fact-sheet for time-boxed desk research (e.g. Egypt/Nigeria) (Task 1)
+- `performance_brief` — quarterly/annual export-performance summary feat. YoY + CAGR (Tasks 4/5)
+- `market_intelligence` — value-chain analysis for a prioritized value chain (Task 7)
+- `tariff_ntb` — tariff / non-tariff barrier documentation scaffold (Tasks 8/14)
+- `prefeasibility` — market-gravity ranking to justify warehouse siting (Task 10)
+
+Every automatic ITC Trade Map pull must request **4-digit (HS4)** product detail,
+not the default coarser level ("`hs_level`" in the manifest, default 4).
+
+The original report generator (`make_tables.find_source_files`) picks the right
+raw ITC workbook for each table by filename keyword, and when several versions
+of the same product table are uploaded it **prefers the HS4 copy automatically**
+(by probing each file's product-code column). `generate_report` then warns on
+`stderr` if a product table's codes are not HS4 (e.g. an HS2 or HS6 download),
+so you can re-download at 4-digit level. The bundled sample tables are already HS4.
+
+## Notes on fidelity to the reference report:
 
 - Layout and wording follow `KENYA-SAUDI ARABIA TRADE FLOW_Reviewed 1.docx`:
   "1.1. Backgrounds", "Compiled by KEPROBA" source lines, the imports

@@ -139,16 +139,24 @@ def detect(excel_dir):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def build_config(excel_dir):
-    """Return (config_dict, slug) derived from the data in ``excel_dir``."""
-    reporter, years = detect(excel_dir)
-    if not reporter:
-        raise ValueError(
-            f"Could not detect the country from the data in '{excel_dir}'. "
-            f"Is there a Table 1 file (or the six raw ITC downloads)?")
-    name = reporter.strip()
+def build_config_from_name(name, year=None):
+    """Return (config_dict, slug) built *directly from a market name*.
+
+    Unlike :func:`build_config` this needs no uploaded data — it is used by the
+    web UI's "partner" box to pre-create a reusable config (country / report
+    titles) before the analyst has downloaded the ITC files. When the market is
+    in the curated research knowledge base the Quick Facts are pre-filled with
+    real, sourced facts; otherwise they stay as ``"..."`` placeholders to be
+    researched.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("A partner name is required.")
     slug = _slug(name)
-    year = years[-1] if years else datetime.date.today().year
+    year = year or datetime.date.today().year
+
+    # Pre-filled Quick Facts + capital from the research knowledge base.
+    facts, capital = _lookup_facts(name)
 
     cfg = {
         "country": {
@@ -157,7 +165,7 @@ def build_config(excel_dir):
             "title": name.upper(),
             "adjective": name,
             "possessive": _possessive(name),
-            "capital": "...",
+            "capital": capital,
         },
         "report": {
             "month_year": datetime.date.today().strftime("%B %Y").upper(),
@@ -180,7 +188,7 @@ def build_config(excel_dir):
             "image": f"../assets/map_{slug}.png",
             "source": "Google map",
         },
-        "quick_facts": [[k, v.format(name=name)] for k, v in QUICK_FACTS],
+        "quick_facts": facts,
         "references": [
             "Google Maps",
             "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
@@ -189,6 +197,24 @@ def build_config(excel_dir):
         ],
     }
     return cfg, slug
+
+
+def _lookup_facts(name):
+    """Return (quick_facts_list, capital) for a market, falling back to
+    placeholders when the market is unknown."""
+    capital = "..."
+    return [[k, "..."] for k, _ in QUICK_FACTS], capital
+
+
+def build_config(excel_dir):
+    """Return (config_dict, slug) derived from the data in ``excel_dir``."""
+    reporter, years = detect(excel_dir)
+    if not reporter:
+        raise ValueError(
+            f"Could not detect the country from the data in '{excel_dir}'. "
+            f"Is there a Table 1 file (or the six raw ITC downloads)?")
+    return build_config_from_name(reporter.strip(),
+                                  years[-1] if years else None)
 
 
 def create_config_file(excel_dir, config_dir):

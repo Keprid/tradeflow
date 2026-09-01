@@ -648,14 +648,15 @@ def build_narratives(a: QuarterAnalysis):
     if growth is not None:
         p1 += ("Exports grew steadily through the quarter (%+.1f%%, %s to "
                "%s). " % (growth * 100, m_first, m_last))
-    p1 += ("Trade remains regionally concentrated and agriculture led. "
-           "The top 10 markets taking %s of exports, led by %s (%s), %s (%s) "
-           "and %s (%s), with EAC partners absorbing approximately %s of the "
-           "total. " % (pct_s(top10_m),
-                        _mkt(mkts[0][0]), pct_s(mkts[0][2]),
-                        _mkt(mkts[1][0]), pct_s(mkts[1][2]),
-                        _mkt(mkts[2][0]), pct_s(mkts[2][2]),
-                        pct_s(eac_s)))
+    p1 += ("Trade remains regionally concentrated and agriculture-led. "
+           "The top 10 markets took %s of exports. The leading buyers were "
+           "%s (%s), %s (%s) and %s (%s). "
+           "EAC partners absorbed %s of the total. "
+           % (pct_s(top10_m),
+              _mkt(mkts[0][0]), pct_s(mkts[0][2]),
+              _mkt(mkts[1][0]), pct_s(mkts[1][2]),
+              _mkt(mkts[2][0]), pct_s(mkts[2][2]),
+              pct_s(eac_s)))
     if tea:
         p1 += ("%s is the top export at %s (%s)"
                % (short_prod(tea[0], 20), fmt_b(tea[1]), pct_s(tea[2])))
@@ -670,12 +671,12 @@ def build_narratives(a: QuarterAnalysis):
         else:
             p1 += ". "
     if agri_s:
-        p1 += ("Together horticulture and agriculture exports are about %s "
-               "of the total." % pct_s(agri_s, 0))
+        p1 += ("Together, horticulture and agriculture accounted for %s "
+               "of total exports." % pct_s(agri_s, 0))
     n["overview_p1"] = p1
 
-    p2 = ("The impressive export performance was, however, greatly offset by "
-          "%s in imports. " % fmt_b(imp_t))
+    p2 = ("Export gains in the quarter were, however, offset by %s in "
+          "imports. " % fmt_b(imp_t))
     if petro_imp:
         p2 += ("Imports are fuel-dominated. Petroleum oils alone are %s of "
                "imports" % pct_s(petro_imp[2]))
@@ -685,17 +686,19 @@ def build_narratives(a: QuarterAnalysis):
         if butane:
             parts.append("butanes %s" % pct_s(butane[2]))
         if fuel_s and parts:
-            p2 += (", and fuel-related goods (incl. %s) reached approximately "
-                   "%s" % (", ".join(parts), pct_s(fuel_s)))
-        p2 += ", "
+            p2 += (", and fuel-related goods (incl. %s) reached %s"
+                   % (", ".join(parts), pct_s(fuel_s)))
+        p2 += ". "
+    else:
+        p2 += " "
     food_bits = [x for x in (wheat, palm, rice) if x]
     if food_bits:
-        p2 += ("alongside large food (%s) and capital/consumer goods "
-               "sustaining a structurally large import bill."
+        p2 += ("Large food imports (%s) and capital and consumer goods "
+               "sustain a structurally large import bill."
                % ", ".join(short_product_name(x[0], 18).lower()
                            for x in food_bits))
     else:
-        p2 += "sustaining a structurally large import bill."
+        p2 += "Capital and consumer goods sustain a structurally large import bill."
     n["overview_p2"] = p2
 
     n["overview_p3"] = (
@@ -728,26 +731,26 @@ def build_narratives(a: QuarterAnalysis):
     # ---- Section 5: Deduction ----------------------------------------------
     d1 = ("Imports outpaced exports by a wide margin in the %s quarter. "
           "Merchandise exports earned %s against an import bill of %s, "
-          "yielding a trade deficit of about %s"
+          "yielding a trade deficit of %s"
           % (period, fmt_b(exp_t), fmt_b(imp_t), fmt_b(abs(def_t))))
     if multiple:
-        d1 += ", with imports exceeding exports roughly %.1f times. " \
+        d1 += ", so imports exceeded exports %.1f times. " \
               % multiple
-    d1 += ("The composition of the import bill underlines Kenya's continued "
+    d1 += ("The composition of the import bill confirms Kenya's continued "
            "reliance on foreign goods. ")
     if fuel_s:
-        d1 += ("Fuel-related products accounted for nearly %s of imports; "
+        d1 += ("Fuel-related products accounted for %s of imports. "
                % pct_s(fuel_s, 0))
     staple = [x for x in (wheat, palm, rice, maize) if x]
     if staple:
-        d1 += ("essential food items (%s) remain structural imports; "
+        d1 += ("Essential food items (%s) are structural imports. "
                % ", ".join(short_product_name(x[0], 16).lower()
                            for x in staple[:3]))
-    d1 += ("and machinery and capital goods point to dependence on imported "
-           "equipment for investment and production. This sustained reliance "
-           "on imported energy, food and capital goods exerts persistent "
-           "pressure on the shilling and on foreign exchange reserves, which "
-           "keeps the import bill large even as exports grow.")
+    d1 += ("Machinery and capital goods reflect a need for imported equipment "
+           "for investment and production. This reliance on imported energy, "
+           "food and capital goods weighs on the shilling and on foreign "
+           "exchange reserves. It keeps the import bill large even as "
+           "exports grow.")
     n["deduction"] = [d1]
 
     lead = ["%s was the single largest market with %s (%s)"
@@ -756,7 +759,7 @@ def build_narratives(a: QuarterAnalysis):
               for nm, vv, ss in mkts[1:6]]
     d2 = ("Kenya's export performance remains anchored on a few "
           "well-established destinations. %s, followed by %s, with EAC "
-          "partners together absorbing about %s of total exports. "
+          "partners together absorbing %s of total exports. "
           % (lead[0], ", ".join(follow), pct_s(eac_s, 0)))
     african = [(nm, vv, ss) for nm, vv, ss in mkts
                if nm.strip().lower() in AFRICA
@@ -787,7 +790,7 @@ def build_narratives(a: QuarterAnalysis):
         if comp:
             d3 += (" – reaffirm the sector's role as a leading "
                    "foreign-exchange earner, complementing %s to make "
-                   "agricultural and horticultural exports roughly %s of the "
+                   "agricultural and horticultural exports %s of the "
                    "total in the period under review. "
                    % (" and ".join("%s (%s)" % (short_prod(x[0], 12),
                                                 fmt_b(x[1])) for x in comp),
@@ -808,16 +811,16 @@ def build_narratives(a: QuarterAnalysis):
         n["deduction"].append(d3)
 
     n["deduction"].append(
-        "Several other issues merit attention. First, export concentration, "
-        "in both products (tea, coffee and horticulture) and markets, "
-        "exposes earnings to commodity price volatility and weather shocks, "
-        "underscoring the need to accelerate product and market "
-        "diversification. Second, the prominence of fuel in both the export "
-        "and import baskets ties Kenya's trade performance to global oil "
-        "prices, so rising prices widen the deficit even as re-exports of "
-        "refined petroleum support export values. These issues underscore "
-        "the need to diversify export products and address competitiveness "
-        "and supply-side constraints in key sectors.")
+        "Several other issues merit attention. First, concentration in both "
+        "products (tea, coffee and horticulture) and markets exposes "
+        "earnings to commodity price volatility and weather shocks. Kenya "
+        "should therefore speed up product and market diversification. "
+        "Second, the prominence of fuel in both the export and import "
+        "baskets ties trade performance to global oil prices. Rising prices "
+        "widen the deficit even as re-exports of refined petroleum support "
+        "export values. Together these issues point to the need to broaden "
+        "exports and to address competitiveness and supply-side constraints "
+        "in key sectors.")
 
     # ---- Annex 1: imports by supplying countries ---------------------------
     im3 = imp_mkts[:3]
@@ -833,14 +836,14 @@ def build_narratives(a: QuarterAnalysis):
            fmt_b(sum(x[1] for x in im3)), pct_s(sum(x[2] for x in im3))),
         "The top five suppliers accounted for %s of imports and the top ten "
         "for %s, leaving all other countries with less than an eighth of "
-        "the market. This concentration underscores Kenya's dependence on a "
+        "the market. This concentration shows how dependent Kenya is on a "
         "narrow group of supply markets, particularly in Asia and the Gulf."
         % (pct_s(a.cum_share(a1, 5)), pct_s(a.cum_share(a1, 10))),
     ]
     third_parts = []
     if west_items:
         wp = ("Traditional Western trading partners – %s – together supplied "
-              "roughly %s of imports"
+              "%s of imports"
               % (", ".join(_mkt(x[0]) for x in west_items[:9]),
                  pct_s(west_s)))
         singles = ["%s %s" % (_mkt(x[0]), pct_s(x[2]))
@@ -851,7 +854,7 @@ def build_narratives(a: QuarterAnalysis):
         wp += ". Import sourcing has therefore shifted decisively towards "
         if asia_s:
             wp += ("Asia, with China, India, Malaysia, Japan and others "
-                   "accounting for about %s of the bill" % pct_s(asia_s))
+                   "accounting for %s of the bill" % pct_s(asia_s))
             if gulf_s:
                 wp += ", while the Gulf states contribute a further %s" \
                       % pct_s(gulf_s)
@@ -865,12 +868,12 @@ def build_narratives(a: QuarterAnalysis):
     else:
         if asia_s or gulf_s:
             third_parts.append("Import sourcing is dominated by Asia and "
-                               "the Gulf, together accounting for about %s "
+                               "the Gulf, together accounting for %s "
                                "of the bill."
                                % pct_s(asia_s + gulf_s))
     if africa_items:
         third_parts.append("Intra-African supply remains limited – %s "
-                           "together provide only about %s of imports, "
+                           "together provide only %s of imports, "
                            "pointing to room for greater regional sourcing "
                            "under the AfCFTA."
                            % (", ".join("%s (%s)" % (_mkt(x[0]), pct_s(x[2]))
@@ -1479,6 +1482,17 @@ def main():
           % (a.quarter, a.year))
     doc.save(out)
     print("[3/3] Report saved to                  : %s" % out)
+
+    # Companion editable Excel workbook (additive; never breaks the build).
+    try:
+        import excel_deliverable
+        xlsx_out = os.path.splitext(out)[0] + " TABLES.xlsx"
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        excel_deliverable.build_quarterly_deliverable(
+            a, {"report": {"title_line2": ""}}, xlsx_out)
+        print("      Excel deliverable saved to   : %s" % xlsx_out)
+    except Exception as _e:
+        print("      [warn] Excel deliverable skipped: %s" % _e)
 
 
 if __name__ == "__main__":

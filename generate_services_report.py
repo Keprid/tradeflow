@@ -82,6 +82,7 @@ def find_service_excel_files(excel_dir):
             found["table4"] = path
         elif "balance" in low or "figure 1" in low:
             found["balance"] = path
+    _find_advanced_service_tables(excel_dir, found)
     # Fallback: try broader matching
     if "table1" not in found:
         for fname in sorted(os.listdir(excel_dir)):
@@ -99,6 +100,7 @@ def find_service_excel_files(excel_dir):
                 found.setdefault("table4", path)
             elif "balance" in low or "figure 1" in low:
                 found.setdefault("balance", path)
+    _find_advanced_service_tables(excel_dir, found)
     missing = [k for k in ("table1", "table2", "table3", "table4", "balance")
                if k not in found]
     if missing:
@@ -121,6 +123,25 @@ def find_service_excel_files(excel_dir):
                ", ".join(f"{k}={v}" for k, v in sorted(found_names.items())),
                len(missing), "\n".join(missing_detail)))
     return found
+
+
+def _find_advanced_service_tables(excel_dir, found):
+    """Locate the optional analytical service tables 9-13 by filename, without
+    failing if they are absent."""
+    rules = {
+        "table9": "table 9",
+        "table10": "table 10",
+        "table11": "table 11",
+        "table12": "table 12",
+        "table13": "table 13",
+    }
+    for fname in sorted(os.listdir(excel_dir)):
+        low = fname.lower()
+        if not low.endswith((".xlsx", ".xlsm")):
+            continue
+        for key, frag in rules.items():
+            if frag in low and key not in found:
+                found[key] = os.path.join(excel_dir, fname)
 
 
 def _cell_grid(ws):
@@ -236,6 +257,159 @@ def parse_balance(path):
 
 
 # ---------------------------------------------------------------------------
+# Advanced analytical tables (9-13): lightweight parsers for narrative use
+# ---------------------------------------------------------------------------
+def _norm_header(v):
+    return str(v).strip().lower().replace("\n", " ").replace("\r", "")
+
+
+def _find_header_col(grid, keywords):
+    """Return the column index whose header (row index 1) contains any of the
+    given keywords, or -1 if none match."""
+    if len(grid) < 2:
+        return -1
+    header = grid[1]
+    for ci, v in enumerate(header):
+        h = _norm_header(v)
+        for kw in keywords:
+            if kw in h:
+                return ci
+    return -1
+
+
+def parse_rca_table(path):
+    """Parse Table 9: Kenya's Revealed Comparative Advantage in services."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    grid = _cell_grid(wb.worksheets[0])
+    cat_col = _find_header_col(grid, ["service category", "service"])
+    rca_col = _find_header_col(grid, ["rca"])
+    cls_col = _find_header_col(grid, ["classification"])
+    rows = []
+    for row in grid[2:]:
+        if not any(v is not None and str(v).strip() != "" for v in row):
+            continue
+        if cat_col >= len(row) or not row[cat_col]:
+            continue
+        cat = str(row[cat_col]).strip()
+        rows.append({
+            "category": cat,
+            "rca": to_float(row[rca_col]) if 0 <= rca_col < len(row) else None,
+            "classification": str(row[cls_col]).strip() if 0 <= cls_col < len(row) and row[cls_col] else "",
+        })
+    return {"items": rows}
+
+
+def parse_concentration_table(path):
+    """Parse Table 10: Export Concentration Index (HHI)."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    grid = _cell_grid(wb.worksheets[0])
+    metric_col = _find_header_col(grid, ["metric"])
+    kenya_col = _find_header_col(grid, ["kenya"])
+    world_col = _find_header_col(grid, ["world"])
+    out = {}
+    for row in grid[2:]:
+        if not row or metric_col >= len(row) or not row[metric_col]:
+            continue
+        label = _norm_header(row[metric_col])
+        k = to_float(row[kenya_col]) if kenya_col < len(row) else None
+        w = to_float(row[world_col]) if world_col < len(row) else None
+        if k is None and w is None:
+            continue
+        if "effective" in label:
+            out["kenya_eff"], out["world_eff"] = k, w
+        elif "top-3" in label:
+            out["kenya_top3"], out["world_top3"] = k, w
+        elif "top-5" in label:
+            out["kenya_top5"], out["world_top5"] = k, w
+        elif "herfindahl" in label or "index (hhi)" in label:
+            out["kenya_hhi"], out["world_hhi"] = k, w
+    return out
+
+
+def parse_diversification_table(path):
+    """Parse Table 11: Diversification Potential in services."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    grid = _cell_grid(wb.worksheets[0])
+    cat_col = _find_header_col(grid, ["service category", "service"])
+    growth_col = _find_header_col(grid, ["global", "growth"])
+    score_col = _find_header_col(grid, ["opportunity"])
+    share_col = _find_header_col(grid, ["kenya", "global share"])
+    rows = []
+    for row in grid[2:]:
+        if not any(v is not None and str(v).strip() != "" for v in row):
+            continue
+        if cat_col >= len(row) or not row[cat_col]:
+            continue
+        rows.append({
+            "category": str(row[cat_col]).strip(),
+            "growth": to_float(row[growth_col]) if 0 <= growth_col < len(row) else None,
+            "score": to_float(row[score_col]) if 0 <= score_col < len(row) else None,
+            "share": to_float(row[share_col]) if 0 <= share_col < len(row) else None,
+        })
+    return {"items": rows}
+
+
+def parse_trajectory_table(path):
+    """Parse Table 12: Service Export Composition Trajectory."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    grid = _cell_grid(wb.worksheets[0])
+    year_cols = []
+    for ri, row in enumerate(grid[:3]):
+        for ci, v in enumerate(row):
+            iv = None
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                iv = int(v)
+            elif isinstance(v, str) and v.strip().isdigit():
+                iv = int(v.strip())
+            if iv is not None and 2000 <= iv <= 2100:
+                year_cols.append((ci, iv))
+        if year_cols:
+            break
+    if not year_cols:
+        return {"shares": {}, "years": []}
+    share_lines = {}
+    for row in grid:
+        if not any(v is not None and str(v).strip() != "" for v in row):
+            continue
+        label = _norm_header(row[0]) if row else ""
+        if "high-value services" in label:
+            vals = [to_float(row[ci]) if ci < len(row) else None for ci, _ in year_cols]
+            share_lines["high"] = [v for v in vals if v is not None and v > 0]
+        elif "traditional services" in label:
+            vals = [to_float(row[ci]) if ci < len(row) else None for ci, _ in year_cols]
+            share_lines["traditional"] = [v for v in vals if v is not None and v > 0]
+        elif label in ("other services", "other services "):
+            vals = [to_float(row[ci]) if ci < len(row) else None for ci, _ in year_cols]
+            share_lines["other"] = [v for v in vals if v is not None and v > 0]
+    return {"shares": share_lines, "years": [y for _, y in year_cols]}
+
+
+def parse_peer_table(path):
+    """Parse Table 13: Kenya vs Peer Countries - Service Exports."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    grid = _cell_grid(wb.worksheets[0])
+    country_col = _find_header_col(grid, ["country"])
+    exp_col = _find_header_col(grid, ["exports"])
+    cagr_col = _find_header_col(grid, ["5y cagr", "cagr"])
+    rank_col = _find_header_col(grid, ["rank"])
+    group_col = _find_header_col(grid, ["group"])
+    rows = []
+    for row in grid[2:]:
+        if not row or country_col >= len(row) or not row[country_col]:
+            continue
+        name = str(row[country_col]).strip()
+        group = str(row[group_col]).strip() if 0 <= group_col < len(row) and row[group_col] else ""
+        rows.append({
+            "country": name,
+            "group": group,
+            "exports": to_float(row[exp_col]) if 0 <= exp_col < len(row) else None,
+            "cagr": to_float(row[cagr_col]) if 0 <= cagr_col < len(row) else None,
+            "rank": int(row[rank_col]) if 0 <= rank_col < len(row) and isinstance(row[rank_col], (int, float)) else None,
+        })
+    return {"items": rows}
+
+
+# ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
 class ServicesAnalysis:
@@ -257,6 +431,11 @@ class ServicesAnalysis:
         self.table3 = parse_rank_table(files["table3"])
         self.table4 = parse_rank_table(files["table4"])
         self.balance = parse_balance(files["balance"])
+        self.rca = parse_rca_table(files["table9"]) if files.get("table9") else {"items": []}
+        self.concentration = parse_concentration_table(files["table10"]) if files.get("table10") else {}
+        self.diversification = parse_diversification_table(files["table11"]) if files.get("table11") else {"items": []}
+        self.trajectory = parse_trajectory_table(files["table12"]) if files.get("table12") else {"shares": {}}
+        self.peers = parse_peer_table(files["table13"]) if files.get("table13") else {"items": []}
         if self.table1["years"]:
             self.years = self.table1["years"]
         # Always use the latest year from the data, regardless of config
@@ -313,8 +492,8 @@ def build_narratives(a: ServicesAnalysis, cfg):
     # ---- Section 2: Global Services Trade ----
     exp1 = a.top(a.table1, 5)
     t["s2"] = [
-        f"Global services trade reached significant levels by {Y}, with the top "
-        f"service exporters continuing to dominate the market.",
+        f"Global services trade was large by {Y}. A small group of leading "
+        f"service exporters accounted for much of the world total.",
     ]
 
     def _fmt_billion(d):
@@ -381,6 +560,110 @@ def build_narratives(a: ServicesAnalysis, cfg):
         f"{top_phrase(ki_items, _fmt_million)}. " if ki_items else "",
     ]
 
+    # ---- Section 3.6: RCA ----
+    rca = a.rca["items"]
+    t["s3_6"] = []
+    if rca:
+        rated = [r for r in rca if r["rca"] is not None]
+        if rated:
+            strong = [r for r in rated if r["rca"] >= 2.5]
+            moderate = [r for r in rated if 1.0 <= r["rca"] < 2.5]
+            by_rca = sorted(rated, key=lambda r: r["rca"], reverse=True)
+            leaders = ", ".join(r["category"] for r in by_rca[:2])
+            t["s3_6"].append(
+                f"Kenya's strongest comparative advantages are in {leaders}. "
+                f"In {Y} Kenya held a revealed comparative advantage "
+                f"(RCA of {by_rca[0]['rca']:,.1f}) in {by_rca[0]['category']} relative to the world.")
+            if moderate:
+                mids = ", ".join(r["category"] for r in moderate[:2])
+                t["s3_6"].append(
+                    f"A further moderate advantage is seen in {mids}, while the "
+                    f"remaining categories recorded a comparative disadvantage.")
+    t["s3_6"].append(
+        "RCA > 2.5 indicates strong comparative advantage; RCA 1.0-2.5 moderate "
+        "advantage; and RCA < 1.0 comparative disadvantage.")
+
+    # ---- Section 3.7: Concentration ----
+    conc = a.concentration
+    t["s3_7"] = []
+    if conc.get("kenya_hhi") is not None and conc.get("world_hhi") is not None:
+        kh, wh = conc["kenya_hhi"], conc["world_hhi"]
+        if kh < wh:
+            verdict = "more diversified"
+            t["s3_7"].append(
+                f"With a Herfindahl-Hirschman Index (HHI) of {kh:.3f} versus the world's "
+                f"{wh:.3f}, Kenya's service export basket is {verdict} than the global average, "
+                f"implying exposure is spread across a wider set of categories.")
+        else:
+            verdict = "more concentrated"
+            t["s3_7"].append(
+                f"With a Herfindahl-Hirschman Index (HHI) of {kh:.3f} versus the world's "
+                f"{wh:.3f}, Kenya's service export basket is {verdict} than the global average.")
+    t["s3_7"].append(
+        "An HHI below 0.15 indicates low concentration (well-diversified); "
+        "0.15-0.25 moderate; above 0.25 high concentration.")
+
+    # ---- Section 3.8: Diversification ----
+    div = a.diversification["items"]
+    t["s3_8"] = []
+    scored = [d for d in div if d.get("score") is not None]
+    if scored:
+        by_score = sorted(scored, key=lambda d: d["score"], reverse=True)
+        top3 = ", ".join(d["category"] for d in by_score[:3])
+        g = by_score[0].get("growth")
+        gs = f" and a global growth rate of {g*100:,.1f}%" if g is not None else ""
+        t["s3_8"].append(
+            f"The highest diversification opportunities are in {top3}, led by "
+            f"{by_score[0]['category']} (opportunity score {by_score[0]['score']:.3f}"
+            f"{gs}).")
+    t["s3_8"].append(
+        "Opportunity scores combine global growth, Kenya's current global share, and "
+        "import penetration; higher scores indicate greater scope to expand exports.")
+
+    # ---- Section 3.9: Trajectory ----
+    traj = a.trajectory["shares"]
+    t["s3_9"] = []
+    if traj.get("high") and traj.get("traditional"):
+        h0, h1 = traj["high"][0], traj["high"][-1]
+        t0, t1 = traj["traditional"][0], traj["traditional"][-1]
+        if h1 is not None and h0 is not None and t1 is not None and t0 is not None:
+            if h1 > h0:
+                t["s3_9"].append(
+                    f"The share of high-value services rose from {h0*100:,.1f}% to "
+                    f"{h1*100:,.1f}% of Kenya's service exports over the period, while "
+                    f"traditional services moved from {t0*100:,.1f}% to {t1*100:,.1f}%.")
+            else:
+                t["s3_9"].append(
+                    f"The share of traditional services stood at {t1*100:,.1f}% by the latest "
+                    f"year, against {t0*100:,.1f}% at the start of the period, with high-value "
+                    f"services at {h1*100:,.1f}%.")
+    t["s3_9"].append(
+        "Categories are grouped into High-Value, Traditional, and Other services to "
+        "illustrate Kenya's structural transformation in services exports.")
+
+    # ---- Section 3.10: Peers ----
+    peers = a.peers["items"]
+    kenya_peer = next((p for p in peers if p["country"].strip().lower() == "kenya"), None)
+    t["s3_10"] = []
+    if kenya_peer and peers:
+        k_exp = kenya_peer.get("exports")
+        african = [p for p in peers if p["group"] and "african" in p["group"].lower()]
+        african = sorted(african, key=lambda p: p["exports"] or 0, reverse=True)
+        if african:
+            top_afr = african[0]
+            ratio = (top_afr["exports"] / k_exp) if k_exp else None
+            if ratio:
+                t["s3_10"].append(
+                    f"Among African peers, {top_afr['country']} leads with service exports of "
+                    f"USD {top_afr['exports']:,.1f} billion, around {ratio:,.0f}x {a.short}'s "
+                    f"level of USD {k_exp:,.1f} billion.")
+        asp = sorted([p for p in peers if p["group"] and "aspirational" in p["group"].lower()],
+                     key=lambda p: p["exports"] or 0, reverse=True)
+        if asp:
+            t["s3_10"].append(
+                f"Against aspirational peers, the largest is {asp[0]['country']} at "
+                f"USD {asp[0]['exports']:,.1f} billion, illustrating the scale gap {a.short} "
+                f"faces in scaling services exports.")
     return t
 
 
@@ -676,6 +959,9 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     else:
         b.add_para("[Table 9 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
+    for line in narr.get("s3_6", []):
+        if line:
+            b.add_bullet(line)
     b.add_para(
         "Revealed Comparative Advantage (RCA) is computed using the Balassa Index: "
         "RCA = (Kenya's share of exports in category i) / (World's share of exports in category i). "
@@ -703,6 +989,9 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     else:
         b.add_para("[Table 10 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
+    for line in narr.get("s3_7", []):
+        if line:
+            b.add_bullet(line)
     b.add_para(
         "The Herfindahl-Hirschman Index (HHI) measures export concentration across service "
         "categories. Lower values indicate greater diversification. An HHI below 0.15 is considered "
@@ -729,6 +1018,9 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     else:
         b.add_para("[Table 11 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
+    for line in narr.get("s3_8", []):
+        if line:
+            b.add_bullet(line)
     b.add_para(
         "Opportunity scores combine global growth rates, Kenya's current global share, and "
         "import penetration to identify categories where Kenya has the greatest potential to "
@@ -755,6 +1047,9 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     else:
         b.add_para("[Table 12 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
+    for line in narr.get("s3_9", []):
+        if line:
+            b.add_bullet(line)
     b.add_para(
         "Service categories are grouped into High-Value (Financial services, IP charges, ICT, "
         "Other business services), Traditional (Transport, Travel, Construction), and Other "
@@ -781,6 +1076,9 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     else:
         b.add_para("[Table 13 data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
+    for line in narr.get("s3_10", []):
+        if line:
+            b.add_bullet(line)
     b.add_para(
         "Kenya's total service exports are compared with African peers (South Africa, Egypt, "
         "Mauritius, Rwanda) and aspirational peers (Singapore, Malaysia) to benchmark Kenya's "
@@ -853,6 +1151,18 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
 
     b.add_footer()
     doc.save(out_path)
+
+    # Companion editable Excel workbook (plain editable ranges, no AutoFilter,
+    # thick outer borders, native charts).
+    try:
+        import excel_deliverable
+        xlsx_out = os.path.splitext(out_path)[0] + " TABLES.xlsx"
+        xdir = os.path.dirname(xlsx_out) or "."
+        os.makedirs(xdir, exist_ok=True)
+        excel_deliverable.build_services_deliverable(a, cfg, xlsx_out)
+        print(f"      Excel deliverable saved to   : {xlsx_out}")
+    except Exception as _e:  # additive; never break the report build
+        print(f"      [warn] Excel deliverable skipped: {_e}")
 
 
 # ---------------------------------------------------------------------------

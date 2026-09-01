@@ -66,6 +66,20 @@ ROW_FILL_ODD = None  # No fill for odd rows (white)
 # Kenya highlight (soft gold)
 KENYA_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
 
+# Red highlight for the focus country (Kenya) in the development-status tables
+# (always shown, even off top-N).
+DEV_PIN_FILL = PatternFill(fill_type="solid", fgColor="C00000")
+DEV_PIN_TEXT = "FFC7CE"
+
+# Focus country that must always appear in the dev-status tables (below top-N
+# if needed), normalized via _norm_country().
+PINNED_DEV_COUNTRIES = {"kenya"}
+
+
+def _norm_country(name):
+    """Normalise a country name for stable comparison (handles 'ü' -> 'u')."""
+    return (name or "").strip().lower().replace("ü", "u").replace("Ü", "u")
+
 # Band/summary row (light blue-gray)
 BAND_FILL = PatternFill(fill_type="solid", fgColor="D6DCE4")
 
@@ -841,6 +855,14 @@ def rank_by_dev_status(items, years, classification, top_n=10):
     for i, it in enumerate(ldc_items, 1):
         it["dev_rank"] = i
 
+    # Always keep the pinned focus country (Kenya) visible in its own
+    # development-status group, even when it falls outside the top N.
+    for group in (dev_items, devel_items, ldc_items):
+        for name in PINNED_DEV_COUNTRIES:
+            pinned = next((it for it in group if _norm_country(it.get("label", "")) == name), None)
+            if pinned is not None and pinned not in group[:top_n]:
+                group.insert(min(top_n - 1, len(group)), pinned)
+
     return dev_items[:top_n], devel_items[:top_n], ldc_items[:top_n]
 
 
@@ -1009,11 +1031,13 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
     shown = data["shown"]
 
     share_col = 3 + n
+    grow_col = share_col + 1
+    cagr_col = share_col + 2
 
     if row1_label or row1_title:
         if row1_label:
             put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
-        merge(ws, 1, 2, 1, 2 + n)
+        merge(ws, 1, 2, 1, cagr_col)
         put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
         title_rows = 1
     else:
@@ -1037,6 +1061,12 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
     put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=HEADER_FONT_SIZE, 
              fill=HDR_FILL, align="center", use_row_fill=False)
     ws.cell(h, share_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+    put_text(ws, h, grow_col, "Annual Growth %", bold=True, size=HEADER_FONT_SIZE,
+             fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
+    ws.cell(h, grow_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+    put_text(ws, h, cagr_col, "5Y CAGR %", bold=True, size=HEADER_FONT_SIZE,
+             fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
+    ws.cell(h, cagr_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     for k, y in enumerate(years):
         put_text(ws, h + 1, 3 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
@@ -1070,6 +1100,8 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
         _put_formula(ws, cache, r, share_col, formula, cached_share, fill=fill)
+        put_share(ws, r, grow_col, it.get("growth"), fill=fill, use_row_fill=False)
+        put_share(ws, r, cagr_col, it.get("cagr"), fill=fill, use_row_fill=False)
 
     # All other countries
     r = r_ao
@@ -1096,10 +1128,6 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
     put_share(ws, r, share_col, total.get("share"), bold=True)
     ws.freeze_panes = f"A{row0}"
 
-    try:
-        ws.auto_filter.ref = f"A{h}:{_cell_ref(r_world, share_col)}"
-    except Exception:
-        pass
 
     return cache
 
@@ -1141,10 +1169,18 @@ def write_product_table(ws, data, hdr, unit_row,
     put_text(ws, h, 4, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
     ws.cell(h, 4).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
     share_col = 4 + n
+    grow_col = share_col + 1
+    cagr_col = share_col + 2
     merge(ws, h, share_col, h + 1, share_col)
     put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=HEADER_FONT_SIZE, 
              fill=HDR_FILL, align="center", use_row_fill=False)
     ws.cell(h, share_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+    put_text(ws, h, grow_col, "Annual Growth %", bold=True, size=HEADER_FONT_SIZE,
+             fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
+    ws.cell(h, grow_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+    put_text(ws, h, cagr_col, "5Y CAGR %", bold=True, size=HEADER_FONT_SIZE,
+             fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
+    ws.cell(h, cagr_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
     for k, y in enumerate(years):
         put_text(ws, h + 1, 4 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
@@ -1177,6 +1213,8 @@ def write_product_table(ws, data, hdr, unit_row,
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
         _put_formula(ws, cache, r, share_col, formula, cached_share, fill=fill)
+        put_share(ws, r, grow_col, it.get("growth"), fill=fill, use_row_fill=False)
+        put_share(ws, r, cagr_col, it.get("cagr"), fill=fill, use_row_fill=False)
 
     # All other
     r = r_ao
@@ -1206,10 +1244,6 @@ def write_product_table(ws, data, hdr, unit_row,
     put_share(ws, r, share_col, total.get("share") if total else None, bold=True, fill=total_fill)
     ws.freeze_panes = f"A{row0}"
 
-    try:
-        ws.auto_filter.ref = f"A{h}:{_cell_ref(r_total, share_col)}"
-    except Exception:
-        pass
 
     return cache
 
@@ -1257,10 +1291,6 @@ def write_balance(ws, years, exports, imports, cache=None):
         else:
             put_val(ws, r_bal, c, (e - i) if (e is not None and i is not None) else None, fill=BAND_FILL)
 
-    try:
-        ws.auto_filter.ref = f"A3:{_cell_ref(r_bal, 2 + len(years))}"
-    except Exception:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -1305,19 +1335,27 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
         fill = _dev_fill(status.split()[0] if status.startswith("Developed") else
                          ("LDC" if "LDC" in status else "Developing"))
         for it in items:
-            put_text(ws, r, 2, it.get("dev_rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
-            put_text(ws, r, 3, it.get("label", ""), size=FONT_SIZE, fill=fill, wrap=True,
+            is_pinned = _norm_country(it.get("label", "")) in PINNED_DEV_COUNTRIES
+            row_fill = DEV_PIN_FILL if is_pinned else fill
+            put_text(ws, r, 2, it.get("dev_rank", ""), size=FONT_SIZE, fill=row_fill, use_row_fill=False)
+            put_text(ws, r, 3, it.get("label", ""), size=FONT_SIZE, fill=row_fill, wrap=True,
                      align="left", use_row_fill=False)
-            put_text(ws, r, 4, it.get("region", ""), size=FONT_SIZE, fill=fill, wrap=True,
+            put_text(ws, r, 4, it.get("region", ""), size=FONT_SIZE, fill=row_fill, wrap=True,
                      align="left", use_row_fill=False)
             val = it["vals"][-1] if it.get("vals") and it["vals"][-1] is not None else None
-            put_val(ws, r, 5, val, fill=fill, use_row_fill=False)
+            put_val(ws, r, 5, val, fill=row_fill, use_row_fill=False)
             growth = it.get("growth")
             if growth is not None:
-                put_share(ws, r, 6, growth, fill=fill, use_row_fill=False)
+                put_share(ws, r, 6, growth, fill=row_fill, use_row_fill=False)
             else:
-                put_share(ws, r, 6, None, fill=fill, use_row_fill=False)
-            put_share(ws, r, 7, it.get("cagr"), fill=fill, use_row_fill=False)
+                put_share(ws, r, 6, None, fill=row_fill, use_row_fill=False)
+            put_share(ws, r, 7, it.get("cagr"), fill=row_fill, use_row_fill=False)
+            if is_pinned:
+                for c in range(1, 8):
+                    cell = ws.cell(r, c)
+                    if cell.font:
+                        cell.font = Font(name=FONT, size=cell.font.size or FONT_SIZE,
+                                         bold=True, color=DEV_PIN_TEXT)
             r += 1
         # Write status label in first row and merge down for the group
         put_text(ws, group_start, 1, status, bold=True, size=FONT_SIZE, fill=fill,
@@ -2298,6 +2336,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         it["vals"] = [v / 1e3 if v is not None else None for v in it["vals"]]
     if total_kexp:
         total_kexp["vals"] = [v / 1e3 if v is not None else None for v in total_kexp["vals"]]
+    calc_growth_rates(items_kexp, years_kexp)
 
     n_years_ke = len(years_kexp)
     shown_kexp = rank_and_top(items_kexp, len(items_kexp))  # show all service categories
@@ -2317,6 +2356,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         it["vals"] = [v / 1e3 if v is not None else None for v in it["vals"]]
     if total_kimp:
         total_kimp["vals"] = [v / 1e3 if v is not None else None for v in total_kimp["vals"]]
+    calc_growth_rates(items_kimp, years_kimp)
 
     n_years_ki = len(years_kimp)
     shown_kimp = rank_and_top(items_kimp, len(items_kimp))
@@ -2339,6 +2379,27 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     imports_full = [v / 1e3 if v is not None else None for v in total_kimp["vals"]] if total_kimp else []
     exports_full += [None] * (n_bal - len(exports_full))
     imports_full += [None] * (n_bal - len(imports_full))
+
+    # Cross-check the latest-year balance against the ITC commercialized
+    # services file (list of services commercialized by Kenya).
+    comm_note = None
+    comm_path = files.get("kenya_commercialized")
+    if comm_path:
+        comm_total, _, comm_years = parse_kenya_commercialized(comm_path)
+        if comm_total and comm_total.get("export_val") is not None and comm_total.get("import_val") is not None:
+            comm_export = comm_total["export_val"] / 1e6
+            comm_import = comm_total["import_val"] / 1e6
+            comm_balance = comm_export - comm_import
+            bal_export = exports_full[-1] if exports_full else None
+            bal_import = imports_full[-1] if imports_full else None
+            if bal_export is not None and bal_import is not None:
+                diff = abs(bal_export - comm_export) + abs(bal_import - comm_import)
+                match = "consistent" if diff < 0.05 else "differs"
+                comm_note = (
+                    f"Balance cross-checked against the ITC list of services commercialized by Kenya: "
+                    f"{comm_years[-1]} exports USD {comm_export:,.2f} bn, imports USD {comm_import:,.2f} bn, "
+                    f"balance USD {comm_balance:,.2f} bn (source {match})."
+                )
 
     # ---- RCA: Kenya services revealed comparative advantage ---------------
     rca_items, rca_year = compute_services_rca(
@@ -2384,7 +2445,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                        row1_label="Table 1:",
                        row1_title="Top Global Service Exporters")
     set_widths(ws, {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
-                    "G": 12, "H": 12})
+                    "G": 12, "H": 12, "I": 12, "J": 12})
     out["t1"] = os.path.join(out_dir, "Table 1 Top Global Service Exporters.xlsx")
     _finalize(ws, out["t1"], cache)
 
@@ -2396,7 +2457,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                        row1_label="Table 2:",
                        row1_title="Top Global Service Importers")
     set_widths(ws, {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
-                    "G": 12, "H": 12})
+                    "G": 12, "H": 12, "I": 12, "J": 12})
     out["t2"] = os.path.join(out_dir, "Table 2 Top Global Service Importers.xlsx")
     _finalize(ws, out["t2"], cache)
 
@@ -2408,7 +2469,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                         row1_label="Table 3",
                         row1_title="Kenya's Service Exports by Category")
     set_widths(ws, {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
-                    "G": 12, "H": 12, "I": 12})
+                    "G": 12, "H": 12, "I": 12, "J": 12, "K": 12})
     out["t3"] = os.path.join(out_dir, "Table 3 Kenya Service Exports.xlsx")
     _finalize(ws, out["t3"], cache)
 
@@ -2420,7 +2481,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                         row1_label="Table 4",
                         row1_title="Kenya's Service Imports by Category")
     set_widths(ws, {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
-                    "G": 12, "H": 12, "I": 12})
+                    "G": 12, "H": 12, "I": 12, "J": 12, "K": 12})
     out["t4"] = os.path.join(out_dir, "Table 4 Kenya Service Imports.xlsx")
     _finalize(ws, out["t4"], cache)
 
@@ -2556,6 +2617,12 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     cache = []
     write_balance(ws, bal_years, exports_full, imports_full, cache=cache)
     set_widths(ws, BALANCE_WIDTHS)
+    if comm_note:
+        note_row = 8
+        ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=2 + n_bal)
+        cell = ws.cell(note_row, 1, comm_note)
+        cell.font = Font(name=FONT, size=9, italic=True, color=FONT_GRAY if "FONT_GRAY" in globals() else "595959")
+        ws.row_dimensions[note_row].height = 28
     out["balance"] = bal_path
     _finalize(ws, out["balance"], cache)
 
@@ -2597,9 +2664,9 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     wb_all = openpyxl.Workbook()
     wb_all.remove(wb_all.active)
     widths_mkt = {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
-                  "G": 12, "H": 12}
+                  "G": 12, "H": 12, "I": 12, "J": 12}
     widths_prd = {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
-                  "G": 12, "H": 12, "I": 12}
+                  "G": 12, "H": 12, "I": 12, "J": 12, "K": 12, "L": 12}
     cache_all = {}
 
     for s in ("Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6",

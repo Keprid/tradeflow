@@ -20,3 +20,7 @@ uae/
 !*.txt
 
 .env
+
+# policy dashboard: ingested datasets + downloaded source files (not source code)
+policydata/data/
+policydata/incoming/
