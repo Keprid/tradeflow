@@ -30,6 +30,7 @@ import csv
 import json
 import os
 import re
+import unicodedata
 import sys
 import zipfile
 
@@ -560,6 +561,66 @@ def _header_year_indices(header_row):
 
 
 # ---------------------------------------------------------------------------
+# Country name canonicalisation (ITC ↔ UNCTAD matching)
+# ---------------------------------------------------------------------------
+# UNCTAD economy labels → canonical short names.  Keys are lowercase.
+_UNCTAD_CANONICAL = {
+    "united states": "USA",
+    "united states of america": "USA",
+    "czech republic": "Czechia",
+    "czechia": "Czechia",
+    "bolivia, plurinational state of": "Bolivia",
+    "bolivia (plurinational state of)": "Bolivia",
+    "hong kong, china": "Hong Kong",
+    "china, hong kong sar": "Hong Kong",
+    "chinese taipei": "Taiwan",
+    "china, taiwan province of": "Taiwan",
+    "taiwan, province of china": "Taiwan",
+    "korea, republic of": "South Korea",
+    "republic of korea": "South Korea",
+    "iran, islamic republic of": "Iran",
+    "iran (islamic republic of)": "Iran",
+    "congo, democratic republic of the": "DR Congo",
+    "dem. rep. of the congo": "DR Congo",
+    "democratic republic of the congo": "DR Congo",
+    "lao people's democratic republic": "Laos",
+    "lao people's dem. rep.": "Laos",
+    "macedonia, north": "North Macedonia",
+    "north macedonia": "North Macedonia",
+    "netherlands (kingdom of the)": "Netherlands",
+    "netherlands antilles": "Netherlands Antilles",
+    "kyrgyzstan": "Kyrgyzstan",
+    "cote d'ivoire": "Cote d'Ivoire",
+    "côte d'ivoire": "Cote d'Ivoire",
+    "ivory coast": "Cote d'Ivoire",
+    "myanmar": "Myanmar",
+    "myanmar (burma)": "Myanmar",
+    "swaziland": "Eswatini",
+    "eswatini": "Eswatini",
+    "east timor": "Timor-Leste",
+    "timor-leste": "Timor-Leste",
+    "congo": "Congo",
+    "republic of the congo": "Congo",
+    "democratic republic of germany": "Germany",
+    "federal republic of germany": "Germany",
+    "kosovo": "Kosovo",
+}
+
+
+def _canonical_country(name):
+    """Map a country name to a canonical short form for ITC ↔ UNCTAD matching."""
+    s = name.lower().strip()
+    nfkd = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in nfkd if not unicodedata.combining(c))
+    if s in _UNCTAD_CANONICAL:
+        return _UNCTAD_CANONICAL[s].lower()
+    from country_names import SHORT_NAMES
+    if s in SHORT_NAMES:
+        return SHORT_NAMES[s].lower()
+    return s
+
+
+# ---------------------------------------------------------------------------
 # File detection
 # ---------------------------------------------------------------------------
 def find_service_files(excel_dir):
@@ -894,7 +955,13 @@ def parse_unctad_services(path):
     sidecar = _unctad_sidecar_path(p)
     if sidecar and os.path.exists(sidecar) and os.path.getsize(sidecar):
         return _load_unctad_json(sidecar)
-    return _parse_unctad_impl(p)
+    data = _parse_unctad_impl(p)
+    if sidecar:
+        try:
+            _write_unctad_json(sidecar, data)
+        except Exception:
+            pass
+    return data
 
 
 def _unctad_sidecar_path(path):
@@ -921,6 +988,12 @@ def _load_unctad_json(path):
     for key, q in raw.get("partial", {}).items():
         flow, cat, year = str(key).split("|")
         data["partial"][(flow, cat, int(year))] = int(q)
+    raw_cs = raw.get("country_s", {})
+    data["country_s"] = {
+        flow: {int(str(y)): {eco: float(v) for eco, v in byeco.items()}
+               for y, byeco in years.items()}
+        for flow, years in raw_cs.items()
+    } if raw_cs else {"Exports": {}, "Imports": {}}
     return data
 
 
@@ -935,6 +1008,11 @@ def _write_unctad_json(path, data):
         }
     out["partial"] = {f"{flow}|{cat}|{year}": q
                       for (flow, cat, year), q in data["partial"].items()}
+    out["country_s"] = {
+        flow: {str(y): {eco: v for eco, v in byeco.items()}
+               for y, byeco in years.items()}
+        for flow, years in data.get("country_s", {}).items()
+    }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f)
     return path
@@ -959,9 +1037,15 @@ def _parse_unctad_impl(path):
         "Imports": collections.defaultdict(
             lambda: collections.defaultdict(dict))}
     nq = {}
+    # Map of economy label -> whether it is a real country (True) or an
+    # aggregate region/total row (False).  UNCTAD uses 3-digit codes for real
+    # economies; region aggregates use 4-digit codes (5210/5220/5300/5400)
+    # and "0000" is the World total.
+    eco_is_country = {}
     rows = _read_unctad_rows(path)
     for row in rows:
         eco = (row.get("Economy Label") or "").strip().lower()
+        eco_code = (row.get("Economy") or "").strip()
         flow = (row.get("Flow Label") or "").strip()
         cat = (row.get("Category") or "").strip()
         period = (row.get("Period") or "").strip()
@@ -973,26 +1057,38 @@ def _parse_unctad_impl(path):
         year = int(period[:4])
         if not (2000 <= year <= 2100):
             continue
+        if eco not in eco_is_country and eco_code.isdigit():
+            eco_is_country[eco] = len(eco_code) == 3
         ann[flow][eco][cat].setdefault(year, 0.0)
         ann[flow][eco][cat][year] += val
         key = (flow, eco, cat, year)
         nq[key] = nq.get(key, 0) + 1
 
+    def _is_country(eco):
+        # Treat unknowns as countries (conservative) unless clearly an
+        # aggregate name.
+        if eco in eco_is_country:
+            return eco_is_country[eco]
+        return eco not in ("world", "asia", "europe", "northern america",
+                           "latin america and the caribbean", "africa",
+                           "oceania", "north america")
+
     def _world(flow):
         world = {}
         ecomap = ann[flow]
         cats = set()
-        for bycat in ecomap.values():
+        countries = [eco for eco in ecomap if _is_country(eco)]
+        for bycat in (ecomap[eco] for eco in countries):
             cats.update(bycat.keys())
         for cat in cats:
             world[cat] = {}
             years = set()
-            for bycat in ecomap.values():
-                years.update(bycat.get(cat, {}))
+            for eco in countries:
+                years.update(ecomap[eco].get(cat, {}))
             for y in years:
                 world[cat][y] = sum(
                     ecomap[eco][cat].get(y, 0.0)
-                    for eco in ecomap if cat in ecomap[eco])
+                    for eco in countries if cat in ecomap[eco])
         return world
 
     kenya = {"Exports": dict(ann["Exports"].get("kenya", {})),
@@ -1000,11 +1096,21 @@ def _parse_unctad_impl(path):
     partial = {(flow, cat, year): q
                for (flow, eco, cat, year), q in nq.items()
                if eco == "kenya" and q < 4}
+
+    # Economy-level total services (S) for country rankings
+    country_s = {"Exports": {}, "Imports": {}}
+    for flow in ("Exports", "Imports"):
+        for eco, bycat in ann[flow].items():
+            if "S" in bycat and _is_country(eco):
+                for year, val in bycat["S"].items():
+                    country_s[flow].setdefault(year, {})[eco] = val
+
     return {
         "kenya": kenya,
         "world": {"Exports": _world("Exports"),
                   "Imports": _world("Imports")},
         "partial": partial,
+        "country_s": country_s,
     }
 
 
@@ -1150,6 +1256,106 @@ def extend_world_categories_from_unctad(world_items, world_total, itc_years,
     note = ("UNCTAD integration: extended world %s categories with %d value(s) "
             "for %s." % (flow, filled, ", ".join(str(y) for y in un_years)))
     return world_items, world_total, new_years, note
+
+
+def extend_country_rankings_from_unctad(items, total, itc_years,
+                                         un_country_s, flow, max_year=None):
+    """Extend ITC country-ranking series (exporters or importers) with UNCTAD data.
+
+    ``items``: list of dicts with ``label`` and ``vals`` (already in USD
+    billions, after the caller's /1e6 conversion).
+    ``total``: world total dict with ``label`` and ``vals``.
+    ``itc_years``: list of ITC year ints (e.g. [2020, …, 2024]).
+    ``un_country_s``: UNCTAD ``country_s[flow]`` = {year: {eco_lower: millions}}.
+    ``flow``: ``"Exports"`` or ``"Imports"`` (for UNCTAD lookup).
+    ``max_year``: if given, only years ≤ this value are appended (used to keep
+    the country axis aligned with Kenya's coverage).
+
+    Appends UNCTAD years (beyond the ITC max year) as new columns.  Values
+    are converted from UNCTAD millions to USD billions (÷1e3).  Existing ITC
+    values are never modified.
+
+    Returns ``(items, total, years, note)``.
+    """
+    if not un_country_s or not itc_years:
+        return items, total, itc_years, None
+    max_itc = max(itc_years)
+    un_years = sorted(y for y in un_country_s if y > max_itc)
+    if max_year is not None:
+        un_years = [y for y in un_years if y <= max_year]
+    if not un_years:
+        return items, total, itc_years, None
+    new_years = list(itc_years) + un_years
+
+    def _pad(vals, n):
+        vals = list(vals)
+        return (vals + [None] * (n - len(vals)))[:n]
+
+    n = len(new_years)
+    items = [dict(it) for it in items]
+    for it in items:
+        it["vals"] = _pad(it.get("vals", []), n)
+    total = dict(total)
+    total["vals"] = _pad(total.get("vals", []), n)
+
+    year_idx = {y: i for i, y in enumerate(new_years)}
+    itc_set = set(itc_years)
+    filled_items = 0
+    filled_world = 0
+
+    # Build lookup: canonical name -> UNCTAD millions by year
+    un_lookup = {}
+    for y in un_years:
+        byeco = un_country_s.get(y, {})
+        for eco_label, val in byeco.items():
+            canon = _canonical_country(eco_label)
+            un_lookup.setdefault(canon, {})[y] = val
+
+    # Map ITC items to canonical names
+    itc_canon = {}
+    for it in items:
+        itc_canon[id(it)] = _canonical_country(it.get("label", ""))
+
+    for it in items:
+        canon = itc_canon[id(it)]
+        un_years_for_eco = un_lookup.get(canon, {})
+        for y in un_years:
+            idx = year_idx.get(y)
+            if idx is None or y in itc_set:
+                continue
+            if it["vals"][idx] is None and y in un_years_for_eco:
+                it["vals"][idx] = un_years_for_eco[y] / 1e3
+                filled_items += 1
+
+    # World total from UNCTAD.  The CSV carries aggregate/region rows
+    # (e.g. "Europe", "Asia", "Northern America") in addition to real
+    # countries, so we cannot simply sum every row (that would double-count).
+    # Prefer UNCTAD's own "World" economy row; otherwise sum only the rows
+    # that matched a real ITC country (canonical country names -> items).
+    itc_ecos = set(itc_canon.values())
+    for y in un_years:
+        idx = year_idx.get(y)
+        if idx is None or total["vals"][idx] is not None:
+            continue
+        byeco = un_country_s.get(y, {})
+        if not byeco:
+            continue
+        world_val = byeco.get("world")
+        if world_val is None:
+            world_val = sum(v for eco, v in byeco.items()
+                            if _canonical_country(eco) in itc_ecos)
+        if world_val:
+            total["vals"][idx] = world_val / 1e3
+            filled_world += 1
+
+    if filled_items or filled_world:
+        note = ("UNCTAD country rankings: extended %s series with %d country "
+                "value(s) and %d world value(s) for %s."
+                % (flow.lower(), filled_items, filled_world,
+                   ", ".join(str(y) for y in un_years)))
+    else:
+        note = None
+    return items, total, new_years, note
 
 
 # ---------------------------------------------------------------------------
@@ -2721,6 +2927,11 @@ def generate_service_tables(excel_dir, out_dir, top_n):
             print(f"Warning: ignoring unusable UNCTAD services file: {exc}")
             unctad = None
 
+    max_kenya_year = None
+    if unctad:
+        un_kenya_exp_years = sorted(unctad["kenya"].get("Exports", {}).get("S", {}))
+        max_kenya_year = un_kenya_exp_years[-1] if un_kenya_exp_years else None
+
     # ---- Table 1: Global service exporters by country --------------------
     total_exp, items_exp, years_exp = _load_first(files, "exporters", parse_exporters)
     # Convert to billions
@@ -2728,6 +2939,14 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         it["vals"] = [v / 1e6 if v is not None else None for v in it["vals"]]
     if total_exp:
         total_exp["vals"] = [v / 1e6 if v is not None else None for v in total_exp["vals"]]
+
+    if unctad:
+        items_exp, total_exp, years_exp, exp_note = extend_country_rankings_from_unctad(
+            items_exp, total_exp, years_exp,
+            unctad["country_s"].get("Exports", {}), "Exports",
+            max_year=max_kenya_year)
+        if exp_note:
+            print(exp_note)
 
     n_years = len(years_exp)
     shown_exp = rank_and_top(items_exp, top_n)
@@ -2747,6 +2966,14 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         it["vals"] = [v / 1e6 if v is not None else None for v in it["vals"]]
     if total_imp:
         total_imp["vals"] = [v / 1e6 if v is not None else None for v in total_imp["vals"]]
+
+    if unctad:
+        items_imp, total_imp, years_imp, imp_note = extend_country_rankings_from_unctad(
+            items_imp, total_imp, years_imp,
+            unctad["country_s"].get("Imports", {}), "Imports",
+            max_year=max_kenya_year)
+        if imp_note:
+            print(imp_note)
 
     n_years_i = len(years_imp)
     shown_imp = rank_and_top(items_imp, top_n)
@@ -2769,8 +2996,6 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         total_gexp["vals"] = [v / 1e6 if v is not None else None for v in total_gexp["vals"]]
 
     if unctad:
-        un_kenya_exp_years = sorted(unctad["kenya"].get("Exports", {}).get("S", {}))
-        max_kenya_year = un_kenya_exp_years[-1] if un_kenya_exp_years else None
         items_gexp, total_gexp, years_gexp, gexp_note = extend_world_categories_from_unctad(
             items_gexp, total_gexp, years_gexp,
             unctad["world"].get("Exports", {}), "exports",
