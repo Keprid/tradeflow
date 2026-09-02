@@ -828,7 +828,13 @@ def _unctad_float(x):
 
 
 def _read_unctad_rows(path):
-    """Yield the UNCTAD CSV as dict rows, regardless of source format.
+    """Yield the UNCTAD rows as dicts, regardless of source format.
+
+    This is a *generator* so the raw UNCTAD CSV (often ~60 MB / several
+    hundred thousand quarterly rows) is streamed row-by-row instead of being
+    buffered into a list of dicts.  Buffering the whole file spikes memory to
+    several hundred MB, which can OOM / crash the services pipeline when the
+    UNCTAD file is included.  The .xlsx/.xls routes are small and buffered.
 
     Prefers the raw .csv, but also tolerates a converted .xlsx/.xls/.xlsm
     (the webapp used to convert uploads); decodes text leniently so binary
@@ -851,22 +857,19 @@ def _read_unctad_rows(path):
             headers = []
             if low.endswith((".xlsx", ".xlsm")):
                 wb.close()
-            return []
-        rows = []
+            return
         for data in it:
             row = {}
             for i, h in enumerate(headers):
                 row[h] = data[i] if i < len(data) else None
-            rows.append(row)
+            yield row
         if low.endswith((".xlsx", ".xlsm")):
             wb.close()
-        return rows
+        return
 
-    rows = []
     with open(path, newline="", encoding="utf-8", errors="replace") as f:
         for row in csv.DictReader(f):
-            rows.append(row)
-    return rows
+            yield row
 
 
 def parse_unctad_services(path):
