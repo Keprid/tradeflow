@@ -175,7 +175,14 @@ def _save_upload(uploads_dir, upload: UploadFile):
             i += 1
     with dst.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
-    return _convert_to_xlsx(dst)
+    try:
+        return _convert_to_xlsx(dst)
+    except HTTPException as exc:
+        # Keep the raw file so the loader can still try it (an unneeded or
+        # unsupported extra file must not abort the whole upload set).
+        LOG.warning("Keeping raw upload %s after conversion failure: %s",
+                    name, exc.detail)
+        return dst
 
 
 def _extract_zip(zpath, dest):
@@ -413,6 +420,25 @@ def _convert_to_xlsx(src):
     ext = src.suffix.lower()
     if ext not in (".xls", ".xlsb", ".csv"):
         return src
+    # The UNCTAD quarterly services file is ~60 MB and is only used for a
+    # handful of aggregates.  Pre-process it once at upload time into a small
+    # sidecar (dropping every unneeded entry); the pipeline reads that instead
+    # of a giant converted .xlsx (which previously crashed strict UTF-8 reads).
+    if ext in (".csv", ".xls", ".xlsb") and "totandcomservices" in src.name.lower():
+        try:
+            sidecar = make_services_tables.preprocess_unctad_services(
+                src, src.with_name(src.stem + ".unctad.json"))
+            if ext == ".csv":
+                src.unlink()
+            else:
+                src.with_suffix(".xlsx").unlink(missing_ok=True)
+            LOG.info("Pre-processed UNCTAD services file %s -> %s",
+                     src.name, sidecar.name)
+            return sidecar
+        except Exception as e:  # noqa: BLE001 - keep raw if pre-processing fails
+            LOG.warning("UNCTAD pre-processing failed for %s: %s; keeping raw",
+                        src.name, e)
+            return src
     out = src.with_suffix(".xlsx")
     i = 1
     while out.exists():
@@ -571,9 +597,12 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Uploaded files: {uploaded}\n"
             f"Expected the raw KRA extracts (filenames containing any of: "
             f"{kw_list}) or the generated Exports.xlsx and Imports.xlsx.")
+    # The raw services files are recognised by their own distinctive keywords,
+    # so the upload set can be detected even when the client did not explicitly
+    # select the "Services Trade Flow" report type.
+    if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
+        return "services_raw", ""
     if report_type == "services":
-        if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
-            return "services_raw", ""
         uploaded = ", ".join(sorted(names))
         kw_list = ", ".join(SERVICE_RAW_KEYWORDS)
         return None, (
@@ -953,6 +982,16 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         mode, err = _detect_mode(job_dir / "uploads", report_type)
         if mode is None:
             raise HTTPException(400, err)
+        # The mode is derived from the actual uploads: trust it over the
+        # client-supplied report_type so a raw services upload set is always
+        # routed to the services pipeline even if the caller forgot to select
+        # the services report type.
+        if mode.startswith("services"):
+            report_type = "services"
+        elif mode.startswith("quarterly"):
+            report_type = "quarterly"
+        elif mode in ("raw", "ready"):
+            report_type = "goods"
 
         LOG.info("POST /api/run config=%s top=%s mode=%s report_type=%s job=%s",
                  config, top, mode, report_type, job_dir.name)

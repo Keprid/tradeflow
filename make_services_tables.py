@@ -25,6 +25,9 @@ filename, case-insensitive; all Excel formats accepted: .xls, .xlsx, .xlsm,
 """
 
 import argparse
+import collections
+import csv
+import json
 import os
 import re
 import sys
@@ -74,6 +77,27 @@ DEV_PIN_TEXT = "FFC7CE"
 # Focus country that must always appear in the dev-status tables (below top-N
 # if needed), normalized via _norm_country().
 PINNED_DEV_COUNTRIES = {"kenya"}
+
+# Filename keywords used to auto-detect the optional UNCTAD (UNCTADstat)
+# quarterly services file.  When present alongside the ITC Trade Map files,
+# its data fills missing Kenya entries for 2024 and extends coverage to the
+# latest published UNCTAD year (see parse_unctad_services).
+UNCTAD_FILE_KEYWORDS = ("totandcomservices",)
+
+# UNCTADstat EBOPS service code -> ITC Trade Map service code for the
+# categories that map cleanly between the two sources.
+UNCTAD_CATEGORY_TO_ITC_CODE = {
+    "SC": "3",   # Transport
+    "SD": "4",   # Travel
+    "SE": "5",   # Construction
+    "SF": "6",   # Insurance and pension services
+    "SG": "7",   # Financial services
+    "SH": "8",   # Charges for the use of intellectual property n.i.e.
+    "SI": "9",   # Telecommunications, computer, and information services
+    "SJ": "10",  # Other business services
+    "SK": "11",  # Personal, cultural, and recreational services
+    "SL": "12",  # Government goods and services n.i.e.
+}
 
 
 def _norm_country(name):
@@ -149,6 +173,11 @@ LDC_COUNTRIES = {
 LDC_GRADUATED = {
     "botswana", "cabo verde", "maldives", "samoa",
     "equatorial guinea", "vanuatu", "bhutan", "sao tome and principe",
+}
+
+# Countries with high HDI that are still considered developing economies
+DEVELOPING_OVERRIDE = {
+    "turkey", "türkiye",
 }
 
 # ITC name -> HDI / World Bank name aliases (for mismatches between data sources)
@@ -352,6 +381,10 @@ def get_development_status(name, classification, hdi_data=None):
     if name_lower in LDC_COUNTRIES and name_lower not in LDC_GRADUATED:
         return "LDC"
 
+    # Manual override for countries with high HDI but still developing economies
+    if name_lower in DEVELOPING_OVERRIDE:
+        return "Developing"
+
     # Try HDI data first (most accurate)
     if hdi_data and lookup in hdi_data:
         hdi = hdi_data[lookup]
@@ -532,33 +565,51 @@ def _header_year_indices(header_row):
 def find_service_files(excel_dir):
     """Locate the six required raw service source files by filename keywords.
 
+    Returns ``{role: [path, ...]}`` mapping each known role to *every* file
+    in *excel_dir* whose name matches that role's keywords (several candidates
+    can exist when both the raw ``.xls`` download and a converted ``.xlsx``
+    copy of the same query are present, or when an upload was renamed with a
+    ``__1`` suffix).  Unrecognised files are simply ignored.
+
     The ``kenya_commercialized`` file is optional; when present its data is
     loaded but the balance is always computed from export − import totals.
+    The UNCTAD quarterly services file is optional; when present its data
+    fills Kenya's missing 2024 category detail and extends coverage to the
+    latest published UNCTAD year (see parse_unctad_services).
     """
-    found = {}
+    found = collections.defaultdict(list)
     for fname in sorted(os.listdir(excel_dir)):
+        low = fname.lower()
+        if any(kw in low for kw in UNCTAD_FILE_KEYWORDS) and (
+                is_spreadsheet(fname) or low.endswith(".json")):
+            found["unctad"].append(os.path.join(excel_dir, fname))
+            continue
         if not is_spreadsheet(fname):
             continue
-        low = fname.lower()
         if "exported_services_for" in low or "list_of_exported_services" in low:
-            found["exported_services"] = fname
+            role = "exported_services"
         elif "exporters_for" in low or "list_of_exporters_for" in low:
-            found["exporters"] = fname
+            role = "exporters"
         elif "imported_services_for" in low or "list_of_imported_services" in low:
-            found["imported_services"] = fname
+            role = "imported_services"
         elif "importers_for" in low or "list_of_importers_for" in low:
-            found["importers"] = fname
+            role = "importers"
         elif "services_exported_by" in low:
-            found["kenya_exports"] = fname
+            role = "kenya_exports"
         elif "services_imported_by" in low:
-            found["kenya_imports"] = fname
+            role = "kenya_imports"
         elif "services_commercialized_by" in low:
-            found["kenya_commercialized"] = fname
+            role = "kenya_commercialized"
+        elif any(kw in low for kw in UNCTAD_FILE_KEYWORDS):
+            role = "unctad"
+        else:
+            continue
+        found[role].append(os.path.join(excel_dir, fname))
 
     required = ("exported_services", "exporters",
                  "imported_services", "importers",
                  "kenya_exports", "kenya_imports")
-    missing = [k for k in required if k not in found]
+    missing = [k for k in required if not found[k]]
     if missing:
         expected = {
             "exported_services": "List_of_exported_services_for_the_selected_service",
@@ -571,14 +622,41 @@ def find_service_files(excel_dir):
         missing_detail = []
         for k in missing:
             missing_detail.append(f"  - {k}: expected filename containing '{expected[k]}'")
+        found_summary = ", ".join(
+            f"{k}=[{', '.join(os.path.basename(p) for p in v)}]"
+            for k, v in sorted(found.items()))
         sys.exit(
             "[ERROR] Missing required service source files in '%s'.\n"
-            "Found %d file(s): %s\n"
+            "Found %d candidate file(s): %s\n"
             "Missing %d required file(s):\n%s"
-            % (excel_dir, len(found),
-               ", ".join(f"{k}={v}" for k, v in sorted(found.items())),
+            % (excel_dir, sum(len(v) for v in found.values()),
+               found_summary or "(none)",
                len(missing), "\n".join(missing_detail)))
-    return {k: os.path.join(excel_dir, v) for k, v in found.items()}
+    return dict(found)
+
+
+def _load_first(found, role, loader):
+    """Try each candidate file for *role* until one parses successfully.
+
+    Returns the loader's result, ignoring any unusable candidates for the
+    same role, or ``None`` when the role has no candidates (optional roles).
+
+    Raises the last parsing error when *role* has candidates but none of them
+    could be read (required roles) — the caller decides whether a failure is
+    fatal.
+    """
+    candidates = found.get(role) or []
+    last_err = None
+    for path in candidates:
+        try:
+            return loader(path)
+        except Exception as exc:  # noqa: BLE001 - resilience by design
+            last_err = exc
+            print(f"Warning: skipping unreadable '{os.path.basename(path)}' "
+                  f"for role '{role}': {exc}")
+    if candidates and last_err is not None:
+        raise last_err
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -734,6 +812,344 @@ def parse_kenya_commercialized(path):
 
 
 # ---------------------------------------------------------------------------
+# UNCTAD (UNCTADstat) quarterly services integration
+# ---------------------------------------------------------------------------
+def _unctad_float(x):
+    """Parse a numeric CSV cell; return None for blanks/annotations."""
+    if x is None:
+        return None
+    s = str(x).strip().replace(",", "")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _read_unctad_rows(path):
+    """Yield the UNCTAD CSV as dict rows, regardless of source format.
+
+    Prefers the raw .csv, but also tolerates a converted .xlsx/.xls/.xlsm
+    (the webapp used to convert uploads); decodes text leniently so binary
+    or non-UTF-8 content can never crash the pipeline.
+    """
+    def _normalize(headers):
+        return [str(h).strip() if h is not None else "" for h in headers]
+
+    low = str(path).lower()
+    if low.endswith((".xlsx", ".xlsm", ".xls", ".xlsb")):
+        if low.endswith((".xlsx", ".xlsm")):
+            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        else:
+            wb, _ = convert_to_xlsx(path)
+        ws = wb.active
+        it = ws.iter_rows(values_only=True)
+        try:
+            headers = _normalize(next(it))
+        except StopIteration:
+            headers = []
+            if low.endswith((".xlsx", ".xlsm")):
+                wb.close()
+            return []
+        rows = []
+        for data in it:
+            row = {}
+            for i, h in enumerate(headers):
+                row[h] = data[i] if i < len(data) else None
+            rows.append(row)
+        if low.endswith((".xlsx", ".xlsm")):
+            wb.close()
+        return rows
+
+    rows = []
+    with open(path, newline="", encoding="utf-8", errors="replace") as f:
+        for row in csv.DictReader(f):
+            rows.append(row)
+    return rows
+
+
+def parse_unctad_services(path):
+    """Parse the UNCTADstat quarterly services CSV into annual totals.
+
+    Quarterly values are summed into annual figures (millions of USD) per
+    ``(flow, economy, category, year)``.  The returned structure exposes
+    Kenya-specific series and world series (the sum across all reporting
+    economies) for each flow:
+
+    .. code-block:: python
+
+        {
+          "kenya": {"Exports": {cat: {year: value}}, "Imports": {...}},
+          "world": {"Exports": {cat: {year: value}}, "Imports": {...}},
+          "partial": {(flow, cat, year): n_quarters},   # fewer quarters published
+        }
+    """
+    p = str(path)
+    if p.lower().endswith(".json"):
+        return _load_unctad_json(p)
+    sidecar = _unctad_sidecar_path(p)
+    if sidecar and os.path.exists(sidecar) and os.path.getsize(sidecar):
+        return _load_unctad_json(sidecar)
+    return _parse_unctad_impl(p)
+
+
+def _unctad_sidecar_path(path):
+    """Companion preprocessed file name for an UNCTAD CSV path."""
+    p = str(path)
+    if p.lower().endswith(".json"):
+        return None
+    stem, _ = os.path.splitext(p)
+    return stem + ".unctad.json"
+
+
+def _load_unctad_json(path):
+    """Load a preprocessed UNCTAD JSON sidecar into the normal data shape."""
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    data = {"kenya": {}, "world": {}, "partial": {}}
+    for src in ("kenya", "world"):
+        for flow in ("Exports", "Imports"):
+            bycat = raw.get(src, {}).get(flow, {})
+            data[src][flow] = {
+                str(cat): {int(str(y)): float(v) for y, v in byy.items()}
+                for cat, byy in bycat.items()
+            }
+    for key, q in raw.get("partial", {}).items():
+        flow, cat, year = str(key).split("|")
+        data["partial"][(flow, cat, int(year))] = int(q)
+    return data
+
+
+def _write_unctad_json(path, data):
+    """Serialize the UNCTAD data shape into a compact JSON sidecar."""
+    out = {}
+    for src in ("kenya", "world"):
+        out[src] = {
+            flow: {cat: {str(y): v for y, v in byy.items()}
+                   for cat, byy in flows.items()}
+            for flow, flows in data[src].items()
+        }
+    out["partial"] = {f"{flow}|{cat}|{year}": q
+                      for (flow, cat, year), q in data["partial"].items()}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(out, f)
+    return path
+
+
+def preprocess_unctad_services(path, out_json=None):
+    """Stream an UNCTAD file once, drop all unneeded entries, and write the
+    compact aggregate to *out_json* (default: ``<name>.unctad.json``).
+
+    The resulting sidecar contains only what the pipeline uses (Kenya's
+    series, world sums, partial-quarter flags), so the ~60 MB source file
+    never has to be read again.  Returns the sidecar path.
+    """
+    data = _parse_unctad_impl(path)
+    return _write_unctad_json(out_json or _unctad_sidecar_path(path), data)
+
+
+def _parse_unctad_impl(path):
+    """Read the raw UNCTAD CSV/xlsx into the annual aggregate data shape."""
+    ann = {"Exports": collections.defaultdict(
+        lambda: collections.defaultdict(dict)),
+        "Imports": collections.defaultdict(
+            lambda: collections.defaultdict(dict))}
+    nq = {}
+    rows = _read_unctad_rows(path)
+    for row in rows:
+        eco = (row.get("Economy Label") or "").strip().lower()
+        flow = (row.get("Flow Label") or "").strip()
+        cat = (row.get("Category") or "").strip()
+        period = (row.get("Period") or "").strip()
+        val = _unctad_float(row.get("Millions of US$ at current prices"))
+        if not flow or flow not in ann or not cat or val is None:
+            continue
+        if len(period) != 7 or not period[:4].isdigit():
+            continue
+        year = int(period[:4])
+        if not (2000 <= year <= 2100):
+            continue
+        ann[flow][eco][cat].setdefault(year, 0.0)
+        ann[flow][eco][cat][year] += val
+        key = (flow, eco, cat, year)
+        nq[key] = nq.get(key, 0) + 1
+
+    def _world(flow):
+        world = {}
+        ecomap = ann[flow]
+        cats = set()
+        for bycat in ecomap.values():
+            cats.update(bycat.keys())
+        for cat in cats:
+            world[cat] = {}
+            years = set()
+            for bycat in ecomap.values():
+                years.update(bycat.get(cat, {}))
+            for y in years:
+                world[cat][y] = sum(
+                    ecomap[eco][cat].get(y, 0.0)
+                    for eco in ecomap if cat in ecomap[eco])
+        return world
+
+    kenya = {"Exports": dict(ann["Exports"].get("kenya", {})),
+             "Imports": dict(ann["Imports"].get("kenya", {}))}
+    partial = {(flow, cat, year): q
+               for (flow, eco, cat, year), q in nq.items()
+               if eco == "kenya" and q < 4}
+    return {
+        "kenya": kenya,
+        "world": {"Exports": _world("Exports"),
+                  "Imports": _world("Imports")},
+        "partial": partial,
+    }
+
+
+def extend_kenya_series_from_unctad(items, total, itc_years, un_kenya, flow):
+    """Fill missing Kenya ITC category cells and extend to UNCTAD years.
+
+    The latest ITC year with complete category detail is used as the
+    structural anchor: each missing/new category value is set to that
+    category's share of the anchor-year total, scaled to the total for the
+    target year.  ITC totals are kept wherever they exist; only genuinely
+    missing cells (e.g. Kenya 2024 category detail, and all of 2025) are
+    filled from UNCTAD.
+
+    Items and totals are in USD millions (as returned by the caller, which
+    divides the raw ITC thousands by 1e3).  UNCTAD figures are also USD
+    millions, so they are used directly with no further scaling.
+
+    Returns ``(items, total, years, note)``.
+    """
+    if not total or "S" not in un_kenya:
+        return items, total, itc_years, None
+    un_total = un_kenya["S"]
+    max_itc = itc_years[-1] if itc_years else 0
+    un_years = [y for y in sorted(un_total) if y > max_itc]
+    if not un_years:
+        return items, total, itc_years, None
+    new_years = list(itc_years) + un_years
+
+    items = [dict(it) for it in items]
+    total = dict(total)
+
+    def _pad(vals, n):
+        vals = list(vals)
+        return (vals + [None] * (n - len(vals)))[:n]
+
+    n = len(new_years)
+    year_idx = {y: i for i, y in enumerate(new_years)}
+    for it in items:
+        it["vals"] = _pad(it.get("vals", []), n)
+    total["vals"] = _pad(total.get("vals", []), n)
+
+    # Anchor = latest ITC year with at least two non-None categories.
+    anchor_idx = None
+    for k in range(len(itc_years) - 1, -1, -1):
+        if sum(1 for it in items if it["vals"][k] is not None) >= 2:
+            anchor_idx = k
+            break
+    if anchor_idx is None:
+        return items, total, itc_years, None
+    anchor_total = total["vals"][anchor_idx]
+    if not anchor_total:
+        return items, total, itc_years, None
+    shares = {it.get("code"): it["vals"][anchor_idx] / anchor_total
+              for it in items
+              if it.get("vals") and it["vals"][anchor_idx] is not None}
+
+    filled_old = filled_new = 0
+    for y in new_years:
+        idx = year_idx[y]
+        total_val = total["vals"][idx]
+        if total_val is None and y in un_total:
+            total_val = un_total[y]  # USD millions (matches Kenya columns)
+            total["vals"][idx] = total_val
+        if not total_val:
+            continue
+        for it in items:
+            if it["vals"][idx] is not None:
+                continue
+            sh = shares.get(it.get("code"))
+            if sh is None:
+                continue
+            it["vals"][idx] = sh * total_val
+            if y > max_itc:
+                filled_new += 1
+            else:
+                filled_old += 1
+
+    note = (
+        "UNCTAD integration: filled %d missing Kenya %s category cell(s) for %s "
+        "and estimated %d cell(s) for %s using the %d category structure "
+        "scaled to total." % (filled_old, flow, max_itc, filled_new,
+                              ", ".join(str(y) for y in un_years),
+                              itc_years[anchor_idx] if anchor_idx < len(itc_years) else max_itc))
+    return items, total, new_years, note
+
+
+def extend_world_categories_from_unctad(world_items, world_total, itc_years,
+                                        un_world, flow, max_year=None):
+    """Extend ITC global service-category series with UNCTAD world sums.
+
+    Appends UNCTAD years (e.g. 2025) to the year axis and fills the world
+    series for the ITC codes that map cleanly to UNCTAD EBOPS categories so
+    that Kenya's RCA can be computed for the extended years.
+
+    ``max_year``: if given, only years ≤ this value are appended (used to
+    keep the world axis aligned with Kenya's coverage).
+
+    Returns ``(world_items, world_total, years, note)``.
+    """
+    if "S" not in un_world:
+        return world_items, world_total, itc_years, None
+    max_itc = itc_years[-1] if itc_years else 0
+    un_years = [y for y in sorted(un_world["S"]) if y > max_itc]
+    if max_year is not None:
+        un_years = [y for y in un_years if y <= max_year]
+    if not un_years:
+        return world_items, world_total, itc_years, None
+    new_years = list(itc_years) + un_years
+
+    world_items = [dict(it) for it in world_items]
+    world_total = dict(world_total)
+
+    def _pad(vals, n):
+        vals = list(vals)
+        return (vals + [None] * (n - len(vals)))[:n]
+
+    n = len(new_years)
+    year_idx = {y: i for i, y in enumerate(new_years)}
+    for it in world_items:
+        it["vals"] = _pad(it.get("vals", []), n)
+    world_total["vals"] = _pad(world_total.get("vals", []), n)
+
+    itc_set = set(itc_years)
+    filled = 0
+    for it in world_items:
+        itc_code = str(it.get("code"))
+        un_cat = next((c for c, code in UNCTAD_CATEGORY_TO_ITC_CODE.items()
+                       if code == itc_code), None)
+        if not un_cat or un_cat not in un_world:
+            continue
+        for y in un_years:
+            idx = year_idx.get(y)
+            if idx is None or y in itc_set:
+                continue
+            if it["vals"][idx] is None and y in un_world[un_cat]:
+                it["vals"][idx] = un_world[un_cat][y] / 1e3
+                filled += 1
+    for y in un_years:
+        idx = year_idx.get(y)
+        if idx is not None and world_total["vals"][idx] is None and y in un_world["S"]:
+            world_total["vals"][idx] = un_world["S"][y] / 1e3
+
+    note = ("UNCTAD integration: extended world %s categories with %d value(s) "
+            "for %s." % (flow, filled, ", ".join(str(y) for y in un_years)))
+    return world_items, world_total, new_years, note
+
+
+# ---------------------------------------------------------------------------
 # Ranking / aggregation
 # ---------------------------------------------------------------------------
 def rank_and_top(items, top_n):
@@ -857,13 +1273,23 @@ def rank_by_dev_status(items, years, classification, top_n=10):
 
     # Always keep the pinned focus country (Kenya) visible in its own
     # development-status group, even when it falls outside the top N.
+    # Pinned items are appended AFTER the top N (not inserted at top_n-1)
+    # so they do not displace the Nth natural entry.
+    pinned_added = []
     for group in (dev_items, devel_items, ldc_items):
+        group_pinned = False
         for name in PINNED_DEV_COUNTRIES:
             pinned = next((it for it in group if _norm_country(it.get("label", "")) == name), None)
             if pinned is not None and pinned not in group[:top_n]:
-                group.insert(min(top_n - 1, len(group)), pinned)
+                group.insert(top_n, pinned)
+                group_pinned = True
+        pinned_added.append(group_pinned)
 
-    return dev_items[:top_n], devel_items[:top_n], ldc_items[:top_n]
+    return (
+        dev_items[:top_n + (1 if pinned_added[0] else 0)],
+        devel_items[:top_n + (1 if pinned_added[1] else 0)],
+        ldc_items[:top_n + (1 if pinned_added[2] else 0)],
+    )
 
 
 def rank_by_region(items, years, top_n=5):
@@ -2284,8 +2710,16 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     os.makedirs(out_dir, exist_ok=True)
     files = find_service_files(excel_dir)
 
+    unctad = None
+    if files.get("unctad"):
+        try:
+            unctad = _load_first(files, "unctad", parse_unctad_services)
+        except Exception as exc:  # noqa: BLE001 - optional source
+            print(f"Warning: ignoring unusable UNCTAD services file: {exc}")
+            unctad = None
+
     # ---- Table 1: Global service exporters by country --------------------
-    total_exp, items_exp, years_exp = parse_exporters(files["exporters"])
+    total_exp, items_exp, years_exp = _load_first(files, "exporters", parse_exporters)
     # Convert to billions
     for it in items_exp:
         it["vals"] = [v / 1e6 if v is not None else None for v in it["vals"]]
@@ -2305,7 +2739,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
           "all_other": {"vals": ao_exp, "share": ao_share_exp}}
 
     # ---- Table 2: Global service importers by country --------------------
-    total_imp, items_imp, years_imp = parse_importers(files["importers"])
+    total_imp, items_imp, years_imp = _load_first(files, "importers", parse_importers)
     for it in items_imp:
         it["vals"] = [v / 1e6 if v is not None else None for v in it["vals"]]
     if total_imp:
@@ -2324,18 +2758,36 @@ def generate_service_tables(excel_dir, out_dir, top_n):
           "all_other": {"vals": ao_imp, "share": ao_share_imp}}
 
     # ---- Global service exports by category (for pie chart) ---------------
-    total_gexp, items_gexp, years_gexp = parse_exported_services(files["exported_services"])
+    total_gexp, items_gexp, years_gexp = _load_first(
+        files, "exported_services", parse_exported_services)
     for it in items_gexp:
         it["vals"] = [v / 1e6 if v is not None else None for v in it["vals"]]
     if total_gexp:
         total_gexp["vals"] = [v / 1e6 if v is not None else None for v in total_gexp["vals"]]
 
+    if unctad:
+        un_kenya_exp_years = sorted(unctad["kenya"].get("Exports", {}).get("S", {}))
+        max_kenya_year = un_kenya_exp_years[-1] if un_kenya_exp_years else None
+        items_gexp, total_gexp, years_gexp, gexp_note = extend_world_categories_from_unctad(
+            items_gexp, total_gexp, years_gexp,
+            unctad["world"].get("Exports", {}), "exports",
+            max_year=max_kenya_year)
+        if gexp_note:
+            print(gexp_note)
+
     # ---- Table 3: Kenya service exports by category ----------------------
-    total_kexp, items_kexp, years_kexp = parse_kenya_services(files["kenya_exports"])
+    total_kexp, items_kexp, years_kexp = _load_first(
+        files, "kenya_exports", parse_kenya_services)
     for it in items_kexp:
         it["vals"] = [v / 1e3 if v is not None else None for v in it["vals"]]
     if total_kexp:
         total_kexp["vals"] = [v / 1e3 if v is not None else None for v in total_kexp["vals"]]
+    if unctad:
+        items_kexp, total_kexp, years_kexp, kexp_note = extend_kenya_series_from_unctad(
+            items_kexp, total_kexp, years_kexp,
+            unctad["kenya"].get("Exports", {}), "exports")
+        if kexp_note:
+            print(kexp_note)
     calc_growth_rates(items_kexp, years_kexp)
 
     n_years_ke = len(years_kexp)
@@ -2351,11 +2803,18 @@ def generate_service_tables(excel_dir, out_dir, top_n):
           "all_other": {"vals": ao_kexp, "share": ao_share_kexp}}
 
     # ---- Table 4: Kenya service imports by category ----------------------
-    total_kimp, items_kimp, years_kimp = parse_kenya_services(files["kenya_imports"])
+    total_kimp, items_kimp, years_kimp = _load_first(
+        files, "kenya_imports", parse_kenya_services)
     for it in items_kimp:
         it["vals"] = [v / 1e3 if v is not None else None for v in it["vals"]]
     if total_kimp:
         total_kimp["vals"] = [v / 1e3 if v is not None else None for v in total_kimp["vals"]]
+    if unctad:
+        items_kimp, total_kimp, years_kimp, kimp_note = extend_kenya_series_from_unctad(
+            items_kimp, total_kimp, years_kimp,
+            unctad["kenya"].get("Imports", {}), "imports")
+        if kimp_note:
+            print(kimp_note)
     calc_growth_rates(items_kimp, years_kimp)
 
     n_years_ki = len(years_kimp)
@@ -2385,7 +2844,13 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     comm_note = None
     comm_path = files.get("kenya_commercialized")
     if comm_path:
-        comm_total, _, comm_years = parse_kenya_commercialized(comm_path)
+        try:
+            comm_loaded = _load_first(files, "kenya_commercialized",
+                                      parse_kenya_commercialized)
+            comm_total, _, comm_years = comm_loaded
+        except Exception as exc:  # noqa: BLE001 - optional source
+            print(f"Warning: ignoring unusable commercialized services file: {exc}")
+            comm_total, comm_years = None, []
         if comm_total and comm_total.get("export_val") is not None and comm_total.get("import_val") is not None:
             comm_export = comm_total["export_val"] / 1e6
             comm_import = comm_total["import_val"] / 1e6
