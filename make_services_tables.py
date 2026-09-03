@@ -1920,7 +1920,8 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
         val_latest = it["vals"][-1] if it["vals"] else None
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
-        _put_formula(ws, cache, r, share_col, formula, cached_share, fill=fill)
+        _put_formula(ws, cache, r, share_col, formula, cached_share,
+                     fill=fill, numfmt=FMT_SHARE)
         put_share(ws, r, grow_col, it.get("growth"), fill=fill, use_row_fill=False)
         put_share(ws, r, cagr_col, it.get("cagr"), fill=fill, use_row_fill=False)
 
@@ -1936,7 +1937,8 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
         _put_formula(ws, cache, r, 3 + k, formula, cached_val, fill=ao_fill)
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
-    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val, fill=ao_fill)
+    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val,
+                 fill=ao_fill, numfmt=FMT_SHARE)
 
     # World total
     r = r_world
@@ -2033,7 +2035,8 @@ def write_product_table(ws, data, hdr, unit_row,
         val_latest = it["vals"][-1] if it["vals"] else None
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
-        _put_formula(ws, cache, r, share_col, formula, cached_share, fill=fill)
+        _put_formula(ws, cache, r, share_col, formula, cached_share,
+                     fill=fill, numfmt=FMT_SHARE)
 
         # Annual growth (latest year-over-year) as a live Excel formula so the
         # figure is independently verifiable in the spreadsheet.  Mirrors
@@ -2082,7 +2085,8 @@ def write_product_table(ws, data, hdr, unit_row,
         _put_formula(ws, cache, r, 4 + k, formula, cached_val, fill=ao_fill)
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
-    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val, fill=ao_fill)
+    _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val,
+                 fill=ao_fill, numfmt=FMT_SHARE)
 
     # Total
     r = r_total
