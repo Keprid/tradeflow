@@ -1199,6 +1199,54 @@ def parse_unctad_services_r(path):
     }
 
 
+def _gage_kenya_from_annual_gz(files, un_annual):
+    """Fill Kenya per-category gaps in ``un_annual`` from the all-economy gz.
+
+    The R-export CSV (``parse_unctad_services_r``) is the *primary* UNCTAD source
+    and is preferred wherever it has a value, but its category list omits some
+    EBOPS codes (notably ``SA`` Manufacturing and ``SB`` Maintenance/repair) that
+    the fetched all-economy file (``parse_unctad_annual``) does carry.  For
+    Kenya's Tables 3/4 the same country-specific detail can legitimately be taken
+    from the gz, so we merge in any category/year that the R-file is missing -
+    a generalized gap-fill, capped to the same notion of "complete real data"
+    (no ``Not publishable`` rows, no estimates).
+
+    ``un_annual`` is mutated in place (its ``kenya`` map gets any missing
+    category cells filled) and returned.
+    """
+    if un_annual is None or not un_annual.get("kenya"):
+        return un_annual
+    # Only merge when a usable all-economy gz is also available.
+    cands = [c for c in files.get("unctad_annual", [])
+             if os.path.basename(c).lower().endswith("_all.csv.gz")] \
+        or list(files.get("unctad_annual", []))
+    gz_out = None
+    for cand in sorted(cands):
+        try:
+            gz_out = parse_unctad_annual(cand)
+            if gz_out and gz_out.get("kenya"):
+                break
+        except Exception:  # noqa: BLE001 - try next candidate
+            gz_out = None
+    if not gz_out or not gz_out.get("kenya"):
+        return un_annual
+
+    for flow in ("Exports", "Imports"):
+        gz_flow = gz_out["kenya"].get(flow, {})
+        if not gz_flow:
+            continue
+        r_flow = un_annual["kenya"].setdefault(flow, {})
+        for cat, byyear in gz_flow.items():
+            for year, val in byyear.items():
+                # R-file wins wherever it already has the cell.
+                if val is None:
+                    continue
+                r_cat = r_flow.setdefault(cat, {})
+                if year not in r_cat or r_cat[year] is None:
+                    r_cat[year] = val
+    return un_annual
+
+
 def _copy_unctad_source_files(files, out_dir):
     """Copy the upstream UNCTAD R-export file(s) into *out_dir*.
 
@@ -3129,6 +3177,11 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         except Exception as exc:  # noqa: BLE001 - optional source
             print(f"Warning: ignoring unusable UNCTAD annual services file: {exc}")
             un_annual = None
+
+    # R-file primary, all-economy gz fills Kenya category gaps (e.g. SA/SB that
+    # the R download omits) so no genuinely-available cell is left blank.
+    if un_annual:
+        _gage_kenya_from_annual_gz(files, un_annual)
 
     # Kenya's latest *reported* total-services (S) year in the annual dataset.
     # This caps the global country-ranking axis (Tables 1/2) and the world pie so
