@@ -4,8 +4,8 @@
 fetch_unctad_tradeserv.py
 =========================
 
-Pull Kenya's services trade per category (annual, partner = World) from the
-UNCTADstat data API and cache it next to the existing UNCTAD sources.
+Pull annual services-trade-by-category data from the UNCTADstat data API and
+cache it as a gzipped CSV next to the other service sources.
 
 Endpoint (from UNCTAD's own "Get selected data using the data API" recipe):
     https://unctadstat-user-api.unctad.org/US.TradeServCatTotal/cur/Facts?culture=en
@@ -13,7 +13,16 @@ Endpoint (from UNCTAD's own "Get selected data using the data API" recipe):
 The dataset is "Services: Trade by category - Annual" (UNCTAD-WTO Trade in
 Services Data Set).  It reports ~100 service categories per economy per year
 for partner "World total" — which is exactly the per-country category detail
-that the quarterly file lacks for Kenya's most recent years.
+that the quarterly bulk file lacks for the most recent years.
+
+By default this fetches **one economy** (Kenya) — enough for the Kenya category
+tables (3/4).  With ``--all-economies`` it fetches **every economy** and becomes
+a single canonical annual source for:
+  * economy-level total services (``S``) → Tables 1/2 (global exporters/importers)
+    and Table 13 (Kenya vs peers), together with the true published **World**
+    total (which the quarterly bulk never carried for recent years);
+  * per-category world totals (pie chart, RCA/concentration/diversification);
+  * Kenya's per-category detail (Tables 3/4).
 
 Authentication requires YOUR UNCTADstat account credentials:
     * 'Client ID'  and 'API key' from the 'My Home' page of a logged-in user
@@ -24,12 +33,14 @@ Credentials are supplied via environment variables (or --client-id/--api-key):
     $env:UNCTAD_CLIENT_ID = "xxxx"
     $env:UNCTAD_API_KEY   = "yyyy"
 
-Example:
-    python fetch_unctad_tradeserv.py --out C:\\...\\Servicesnew\\Kenya_tradeserv_annual.csv.gz
+Examples:
+    # Kenya-only (Tables 3/4 category detail)
+    python fetch_unctad_tradeserv.py --out C:\\...\\services\\UNCTAD_Kenya_tradeserv_annual.csv.gz
 
-By default this writes a small **coverage report** and the gz CSV.  Opening the
-report lets you confirm whether Kenya's annual category detail now extends past
-2023 (2024 / 2025), which would let the services tables lift the 2023 cap.
+    # All economies (canonical annual source replacing the quarterly bulk file)
+    python fetch_unctad_tradeserv.py --all-economies \
+        --categories S,SA,SB,SC,SD,SE,SF,SG,SH,SI,SJ,SK,SL \
+        --out C:\\...\\services\\UNCTAD_tradeserv_annual_all.csv.gz
 """
 
 import argparse
@@ -65,8 +76,14 @@ CATEGORIES = {
 }
 
 
-def build_filter(economy, flows, start, end):
-    """Build the OData $filter string."""
+def build_filter(economy, flows, start, end, categories=None):
+    """Build the OData $filter string.
+
+    ``economy`` may be ``None`` (fetch **all** economies) or a label / numeric
+    code.  ``flows`` is a tuple of ``Flow/Code`` values.  ``categories`` is an
+    optional tuple of ``Category/Code`` values; when omitted the endpoint's
+    full category set is returned (thousands of rows per economy).
+    """
     exprs = []
     if economy:
         # Prefer the numeric code; fall back to the label.
@@ -75,24 +92,33 @@ def build_filter(economy, flows, start, end):
         else:
             exprs.append("Economy/Label eq '%s'" % economy)
     exprs.append("Flow/Code in (%s)" % ",".join("'%s'" % f for f in flows))
+    if categories:
+        exprs.append("Category/Code in (%s)"
+                     % ",".join("'%s'" % c for c in categories))
     years = ",".join(str(y) for y in range(start, end + 1))
     exprs.append("Year in (%s)" % years)
     return " and ".join(exprs)
 
 
-def fetch(client_id, api_key, economy="Kenya", flows=("01", "02"),
-          start=2005, end=2025, timeout=180):
-    """Return the decoded CSV rows as a list."""
+def _fetch_once(client_id, api_key, filt, orderby, timeout, select=None,
+                compute=None):
+    """Issue one OData query and return the decoded CSV rows as a list.
+
+    Raises ``SystemExit`` on HTTP errors (the raw body is echoed) and ``IOError``
+    on other network failures.
+    """
     params = {
-        "$select": "Economy/Label,Flow/Label,Category/Code,Category/Label,Year,"
-                   "Millions_of_US_at_current_prices_Value,"
-                   "US_at_current_prices_Footnote,US_at_current_prices_MissingValue",
-        "$filter": build_filter(economy, flows, start, end),
-        "$orderby": "Economy/Order asc,Year asc",
-        "$compute": "round(M0100/Value div 1000000, 0) as "
-                    "Millions_of_US_at_current_prices_Value, "
-                    "M0100/Footnote/Text as US_at_current_prices_Footnote, "
-                    "M0100/MissingValue/Label as US_at_current_prices_MissingValue",
+        "$select": select or (
+            "Economy/Label,Economy/Code,Flow/Label,Category/Code,Category/Label,Year,"
+            "Millions_of_US_at_current_prices_Value,"
+            "US_at_current_prices_Footnote,US_at_current_prices_MissingValue"),
+        "$filter": filt,
+        "$orderby": orderby,
+        "$compute": compute or (
+            "round(M0100/Value div 1000000, 0) as "
+            "Millions_of_US_at_current_prices_Value, "
+            "M0100/Footnote/Text as US_at_current_prices_Footnote, "
+            "M0100/MissingValue/Label as US_at_current_prices_MissingValue"),
         "$format": "csv",
         "compress": "gz",
     }
@@ -107,7 +133,7 @@ def fetch(client_id, api_key, economy="Kenya", flows=("01", "02"),
     except urllib.error.HTTPError as exc:  # noqa: F821
         raise SystemExit("[ERROR] HTTP %s: %s" % (exc.code, exc.read()[:500]))
     except Exception as exc:  # noqa: BLE001
-        raise SystemExit("[ERROR] Request failed: %s" % exc)
+        raise IOError("[ERROR] Request failed: %s" % exc)
 
     # Response body is gzip-compressed CSV.
     try:
@@ -116,8 +142,27 @@ def fetch(client_id, api_key, economy="Kenya", flows=("01", "02"),
         raw = content
     text = raw.decode("utf-8", errors="replace")
     reader = csv.DictReader(io.StringIO(text))
-    rows = list(reader)
-    return rows
+    return list(reader)
+
+
+def fetch(client_id, api_key, economy="Kenya", flows=("01", "02"),
+          start=2005, end=2025, timeout=300, categories=None):
+    """Return the decoded CSV rows as a list.
+
+    When ``economy`` is ``None`` (the *all economies* case) the response for the
+    full year span may exceed the OData endpoint's size cap, so the request is
+    split **one year at a time** and the per-year pages are concatenated.  A
+    single economy/category combo is returned in one shot.
+    """
+    orderby = "Economy/Order asc,Year asc"
+    if economy is None:
+        rows = []
+        for y in range(start, end + 1):
+            filt = build_filter(None, flows, y, y, categories)
+            rows.extend(_fetch_once(client_id, api_key, filt, orderby, timeout))
+        return rows
+    filt = build_filter(economy, flows, start, end, categories)
+    return _fetch_once(client_id, api_key, filt, orderby, timeout)
 
 
 def summarize(rows):
@@ -157,11 +202,18 @@ def main(argv=None):
     ap.add_argument("--api-key", default=os.environ.get("UNCTAD_API_KEY"),
                     help="UNCTADstat API key (or env UNCTAD_API_KEY)")
     ap.add_argument("--economy", default="Kenya",
-                    help="Economy label or 3/4-digit code (default: Kenya)")
+                    help="Economy label or 3/4-digit code (default: Kenya")
+    ap.add_argument("--all-economies", action="store_true",
+                    help="Fetch every economy (overrides --economy). Use for the "
+                         "global by-category file that drives country rankings, "
+                         "world category totals and Kenya's category detail.")
+    ap.add_argument("--categories", default=None,
+                    help="Comma/space separated Category/Code list to fetch "
+                         "(e.g. 'S,SC,SD').  Omit to fetch the full category set.")
     ap.add_argument("--start", type=int, default=2005)
     ap.add_argument("--end", type=int, default=2025)
     ap.add_argument("--out", default=None,
-                    help="Output gz CSV path (default: <cwd>/Kenya_tradeserv_annual.csv.gz)")
+                    help="Output gz CSV path (default: <cwd>/<name>_tradeserv_annual.csv.gz)")
     args = ap.parse_args(argv)
 
     if not args.client_id or not args.api_key:
@@ -171,12 +223,19 @@ def main(argv=None):
             "  https://unctadstat.unctad.org/datacentre\n"
             "Then set UNCTAD_CLIENT_ID / UNCTAD_API_KEY or pass --client-id/--api-key.")
 
-    rows = fetch(args.client_id, args.api_key, args.economy,
-                 ("01", "02"), args.start, args.end)
+    economy = None if args.all_economies else args.economy
+    categories = tuple(c.strip() for c in (args.categories or "").split(",")
+                       if c.strip()) or None
+    rows = fetch(args.client_id, args.api_key, economy,
+                 ("01", "02"), args.start, args.end, categories=categories)
     if not rows:
         raise SystemExit("[WARN] API returned no rows — check filters/credentials.")
 
-    out = args.out or os.path.join(os.getcwd(), "Kenya_tradeserv_annual.csv.gz")
+    if args.out:
+        out = args.out
+    else:
+        scope = "all" if args.all_economies else (economy or "")
+        out = os.path.join(os.getcwd(), "%s_tradeserv_annual.csv.gz" % scope)
     with gzip.open(out, "wt", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
         writer.writeheader()

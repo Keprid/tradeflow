@@ -28,9 +28,9 @@ import argparse
 import collections
 import csv
 import gzip
-import json
 import os
 import re
+import shutil
 import unicodedata
 import sys
 import zipfile
@@ -80,18 +80,21 @@ DEV_PIN_TEXT = "FFC7CE"
 # if needed), normalized via _norm_country().
 PINNED_DEV_COUNTRIES = {"kenya"}
 
-# Filename keywords used to auto-detect the optional UNCTAD (UNCTADstat)
-# quarterly services file.  When present alongside the ITC Trade Map files,
-# its data fills missing Kenya entries for 2024 and extends coverage to the
-# latest published UNCTAD year (see parse_unctad_services).
-UNCTAD_FILE_KEYWORDS = ("totandcomservices",)
-
 # Optional UNCTADstat *annual* service-by-category file fetched from the
 # US.TradeServCatTotal/cur Facts OData endpoint (see fetch_unctad_tradeserv.py).
-# Unlike the quarterly bulk download it contains complete per-category detail
-# for Kenya in the most recent years (e.g. 2024), so the category tables can be
-# extended to that year with genuine values instead of a fabricated breakdown.
+# The all-economy file (``UNCTAD_*_tradeserv_annual_all.csv.gz``) is the single
+# canonical annual source: it supplies Kenya's per-category detail, economy-level
+# total services + the true published World total, and per-category world sums.
 UNCTAD_ANNUAL_KEYWORDS = ("tradeserv",)
+
+# UNCTADstat data exported from the R helper (Services: Trade by category -
+# Annual).  The R download writes ``unctad_services_<years>.csv/.xlsx`` with a
+# long format carrying every economy (no numeric ``Economy/Code`` column), the
+# full category list incl. the granular aggregates (``S``, ``SPX1``, ``SOX``,
+# ...) and Category_Type TOTAL/DETAIL.  When supplied alongside the ITC files it
+# is the preferred UNCTAD source (bridges Kenya's 2024 category detail and the
+# World/Country total-services ``S`` totals).
+UNCTAD_R_KEYWORDS = ("unctad_services",)
 
 # UNCTADstat EBOPS service code -> ITC Trade Map service code for the
 # categories that map cleanly between the two sources.
@@ -644,19 +647,19 @@ def find_service_files(excel_dir):
 
     The ``kenya_commercialized`` file is optional; when present its data is
     loaded but the balance is always computed from export − import totals.
-    The UNCTAD quarterly services file is optional; when present its data
-    fills Kenya's missing 2024 category detail and extends coverage to the
-    latest published UNCTAD year (see parse_unctad_services).
+    The UNCTADstat *annual* services file is optional; when present its data
+    fills Kenya's missing 2024 category detail, extends Tables 1/2 & the world
+    pie to the latest UNCTAD year using the true World total, and supplies the
+    per-category world sums for the RCA/concentration/diversification tables.
     """
     found = collections.defaultdict(list)
     for fname in sorted(os.listdir(excel_dir)):
         low = fname.lower()
+        if any(kw in low for kw in UNCTAD_R_KEYWORDS):
+            found["unctad_r"].append(os.path.join(excel_dir, fname))
+            continue
         if any(kw in low for kw in UNCTAD_ANNUAL_KEYWORDS):
             found["unctad_annual"].append(os.path.join(excel_dir, fname))
-            continue
-        if any(kw in low for kw in UNCTAD_FILE_KEYWORDS) and (
-                is_spreadsheet(fname) or low.endswith(".json")):
-            found["unctad"].append(os.path.join(excel_dir, fname))
             continue
         if not is_spreadsheet(fname):
             continue
@@ -674,8 +677,6 @@ def find_service_files(excel_dir):
             role = "kenya_imports"
         elif "services_commercialized_by" in low:
             role = "kenya_commercialized"
-        elif any(kw in low for kw in UNCTAD_FILE_KEYWORDS):
-            role = "unctad"
         else:
             continue
         found[role].append(os.path.join(excel_dir, fname))
@@ -885,248 +886,6 @@ def parse_kenya_commercialized(path):
     return total, items, years
 
 
-# ---------------------------------------------------------------------------
-# UNCTAD (UNCTADstat) quarterly services integration
-# ---------------------------------------------------------------------------
-def _unctad_float(x):
-    """Parse a numeric CSV cell; return None for blanks/annotations."""
-    if x is None:
-        return None
-    s = str(x).strip().replace(",", "")
-    if not s:
-        return None
-    try:
-        return float(s)
-    except ValueError:
-        return None
-
-
-def _read_unctad_rows(path):
-    """Yield the UNCTAD rows as dicts, regardless of source format.
-
-    This is a *generator* so the raw UNCTAD CSV (often ~60 MB / several
-    hundred thousand quarterly rows) is streamed row-by-row instead of being
-    buffered into a list of dicts.  Buffering the whole file spikes memory to
-    several hundred MB, which can OOM / crash the services pipeline when the
-    UNCTAD file is included.  The .xlsx/.xls routes are small and buffered.
-
-    Prefers the raw .csv, but also tolerates a converted .xlsx/.xls/.xlsm
-    (the webapp used to convert uploads); decodes text leniently so binary
-    or non-UTF-8 content can never crash the pipeline.
-    """
-    def _normalize(headers):
-        return [str(h).strip() if h is not None else "" for h in headers]
-
-    low = str(path).lower()
-    if low.endswith((".xlsx", ".xlsm", ".xls", ".xlsb")):
-        if low.endswith((".xlsx", ".xlsm")):
-            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        else:
-            wb, _ = convert_to_xlsx(path)
-        ws = wb.active
-        it = ws.iter_rows(values_only=True)
-        try:
-            headers = _normalize(next(it))
-        except StopIteration:
-            headers = []
-            if low.endswith((".xlsx", ".xlsm")):
-                wb.close()
-            return
-        for data in it:
-            row = {}
-            for i, h in enumerate(headers):
-                row[h] = data[i] if i < len(data) else None
-            yield row
-        if low.endswith((".xlsx", ".xlsm")):
-            wb.close()
-        return
-
-    with open(path, newline="", encoding="utf-8", errors="replace") as f:
-        for row in csv.DictReader(f):
-            yield row
-
-
-def parse_unctad_services(path):
-    """Parse the UNCTADstat quarterly services CSV into annual totals.
-
-    Quarterly values are summed into annual figures (millions of USD) per
-    ``(flow, economy, category, year)``.  The returned structure exposes
-    Kenya-specific series and world series (the sum across all reporting
-    economies) for each flow:
-
-    .. code-block:: python
-
-        {
-          "kenya": {"Exports": {cat: {year: value}}, "Imports": {...}},
-          "world": {"Exports": {cat: {year: value}}, "Imports": {...}},
-          "partial": {(flow, cat, year): n_quarters},   # fewer quarters published
-        }
-    """
-    p = str(path)
-    if p.lower().endswith(".json"):
-        return _load_unctad_json(p)
-    sidecar = _unctad_sidecar_path(p)
-    if sidecar and os.path.exists(sidecar) and os.path.getsize(sidecar):
-        return _load_unctad_json(sidecar)
-    data = _parse_unctad_impl(p)
-    if sidecar:
-        try:
-            _write_unctad_json(sidecar, data)
-        except Exception:
-            pass
-    return data
-
-
-def _unctad_sidecar_path(path):
-    """Companion preprocessed file name for an UNCTAD CSV path."""
-    p = str(path)
-    if p.lower().endswith(".json"):
-        return None
-    stem, _ = os.path.splitext(p)
-    return stem + ".unctad.json"
-
-
-def _load_unctad_json(path):
-    """Load a preprocessed UNCTAD JSON sidecar into the normal data shape."""
-    with open(path, encoding="utf-8") as f:
-        raw = json.load(f)
-    data = {"kenya": {}, "world": {}, "partial": {}}
-    for src in ("kenya", "world"):
-        for flow in ("Exports", "Imports"):
-            bycat = raw.get(src, {}).get(flow, {})
-            data[src][flow] = {
-                str(cat): {int(str(y)): float(v) for y, v in byy.items()}
-                for cat, byy in bycat.items()
-            }
-    for key, q in raw.get("partial", {}).items():
-        flow, cat, year = str(key).split("|")
-        data["partial"][(flow, cat, int(year))] = int(q)
-    raw_cs = raw.get("country_s", {})
-    data["country_s"] = {
-        flow: {int(str(y)): {eco: float(v) for eco, v in byeco.items()}
-               for y, byeco in years.items()}
-        for flow, years in raw_cs.items()
-    } if raw_cs else {"Exports": {}, "Imports": {}}
-    return data
-
-
-def _write_unctad_json(path, data):
-    """Serialize the UNCTAD data shape into a compact JSON sidecar."""
-    out = {}
-    for src in ("kenya", "world"):
-        out[src] = {
-            flow: {cat: {str(y): v for y, v in byy.items()}
-                   for cat, byy in flows.items()}
-            for flow, flows in data[src].items()
-        }
-    out["partial"] = {f"{flow}|{cat}|{year}": q
-                      for (flow, cat, year), q in data["partial"].items()}
-    out["country_s"] = {
-        flow: {str(y): {eco: v for eco, v in byeco.items()}
-               for y, byeco in years.items()}
-        for flow, years in data.get("country_s", {}).items()
-    }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(out, f)
-    return path
-
-
-def preprocess_unctad_services(path, out_json=None):
-    """Stream an UNCTAD file once, drop all unneeded entries, and write the
-    compact aggregate to *out_json* (default: ``<name>.unctad.json``).
-
-    The resulting sidecar contains only what the pipeline uses (Kenya's
-    series, world sums, partial-quarter flags), so the ~60 MB source file
-    never has to be read again.  Returns the sidecar path.
-    """
-    data = _parse_unctad_impl(path)
-    return _write_unctad_json(out_json or _unctad_sidecar_path(path), data)
-
-
-def _parse_unctad_impl(path):
-    """Read the raw UNCTAD CSV/xlsx into the annual aggregate data shape."""
-    ann = {"Exports": collections.defaultdict(
-        lambda: collections.defaultdict(dict)),
-        "Imports": collections.defaultdict(
-            lambda: collections.defaultdict(dict))}
-    nq = {}
-    # Map of economy label -> whether it is a real country (True) or an
-    # aggregate region/total row (False).  UNCTAD uses 3-digit codes for real
-    # economies; region aggregates use 4-digit codes (5210/5220/5300/5400)
-    # and "0000" is the World total.
-    eco_is_country = {}
-    rows = _read_unctad_rows(path)
-    for row in rows:
-        eco = (row.get("Economy Label") or "").strip().lower()
-        eco_code = (row.get("Economy") or "").strip()
-        flow = (row.get("Flow Label") or "").strip()
-        cat = (row.get("Category") or "").strip()
-        period = (row.get("Period") or "").strip()
-        val = _unctad_float(row.get("Millions of US$ at current prices"))
-        if not flow or flow not in ann or not cat or val is None:
-            continue
-        if len(period) != 7 or not period[:4].isdigit():
-            continue
-        year = int(period[:4])
-        if not (2000 <= year <= 2100):
-            continue
-        if eco not in eco_is_country and eco_code.isdigit():
-            eco_is_country[eco] = len(eco_code) == 3
-        ann[flow][eco][cat].setdefault(year, 0.0)
-        ann[flow][eco][cat][year] += val
-        key = (flow, eco, cat, year)
-        nq[key] = nq.get(key, 0) + 1
-
-    def _is_country(eco):
-        # Treat unknowns as countries (conservative) unless clearly an
-        # aggregate name.
-        if eco in eco_is_country:
-            return eco_is_country[eco]
-        return eco not in ("world", "asia", "europe", "northern america",
-                           "latin america and the caribbean", "africa",
-                           "oceania", "north america")
-
-    def _world(flow):
-        world = {}
-        ecomap = ann[flow]
-        cats = set()
-        countries = [eco for eco in ecomap if _is_country(eco)]
-        for bycat in (ecomap[eco] for eco in countries):
-            cats.update(bycat.keys())
-        for cat in cats:
-            world[cat] = {}
-            years = set()
-            for eco in countries:
-                years.update(ecomap[eco].get(cat, {}))
-            for y in years:
-                world[cat][y] = sum(
-                    ecomap[eco][cat].get(y, 0.0)
-                    for eco in countries if cat in ecomap[eco])
-        return world
-
-    kenya = {"Exports": dict(ann["Exports"].get("kenya", {})),
-             "Imports": dict(ann["Imports"].get("kenya", {}))}
-    partial = {(flow, cat, year): q
-               for (flow, eco, cat, year), q in nq.items()
-               if eco == "kenya" and q < 4}
-
-    # Economy-level total services (S) for country rankings
-    country_s = {"Exports": {}, "Imports": {}}
-    for flow in ("Exports", "Imports"):
-        for eco, bycat in ann[flow].items():
-            if "S" in bycat and _is_country(eco):
-                for year, val in bycat["S"].items():
-                    country_s[flow].setdefault(year, {})[eco] = val
-
-    return {
-        "kenya": kenya,
-        "world": {"Exports": _world("Exports"),
-                  "Imports": _world("Imports")},
-        "partial": partial,
-        "country_s": country_s,
-    }
-
-
 def _truncate_to_category_year(items, total, years):
     """Drop trailing year columns that have no real per-category data.
 
@@ -1205,6 +964,256 @@ def parse_unctad_annual_kenya(path):
                 continue
             out[flow].setdefault(code, {})[year] = val
     return out
+
+
+def parse_unctad_annual(path):
+    """Parse the fetched UNCTADstat *annual* **all-economy** services file.
+
+    Produced by ``fetch_unctad_tradeserv.py --all-economies`` (→ an
+    ``UNCTAD_*_tradeserv_annual_all.csv.gz`` in *excel_dir*).  It carries every
+    economy (real 3-digit countries plus the 4-digit aggregate/region rows) by
+    EBOPS category and year, in millions of USD.  Columns are:
+
+        Economy_Label, Economy_Code, Flow_Label, Category_Code, Category_Label,
+        Year, Millions_of_US_at_current_prices_Value,
+        US_at_current_prices_Footnote, US_at_current_prices_MissingValue
+
+    A real economy has a 3-digit ``Economy_Code`` (e.g. Kenya = ``404``);
+    aggregate rows carry 4-digit codes (``0000`` = World, regions, development
+    groupings).  Rows with a blank value or a ``Not publishable`` note are
+    dropped (we never estimate a category).
+
+    Returns::
+
+        {
+          "kenya":     {"Exports": {cat: {year: Mn}}, "Imports": {...}},  # Kenya
+          "world":     {"Exports": {cat: {year: Mn}}, "Imports": {...}},  # sum of 3-digit economies per category
+          "country_s": {"Exports": {year: {eco_lower: Mn}}, "Imports": {...}},  # S total, 3-digit only
+          "world_s":   {"Exports": {year: Mn}, "Imports": {...}},         # TRUE published World (0000) total
+        }
+
+    All values are in millions of USD.
+    """
+    f = gzip.open(path, "rt", encoding="utf-8") if str(path).lower().endswith(".gz") \
+        else open(path, newline="", encoding="utf-8")
+
+    def _mk():
+        return {"Exports": collections.defaultdict(
+            lambda: collections.defaultdict(dict)),
+            "Imports": collections.defaultdict(
+                lambda: collections.defaultdict(dict))}
+
+    by_flow = _mk()          # flow -> cat -> {year -> {eco -> value}}
+    world_s = {"Exports": {}, "Imports": {}}
+    country_s = {"Exports": {}, "Imports": {}}
+    kenya = _mk()
+    eco_is_country = {}
+
+    with f as fh:
+        for row in csv.DictReader(fh):
+            flow = (row.get("Flow_Label") or "").strip()
+            if flow not in ("Exports", "Imports"):
+                continue
+            code = (row.get("Category_Code") or "").strip()
+            year_s = (row.get("Year") or "").strip()
+            if not code or not year_s.isdigit():
+                continue
+            year = int(year_s)
+            raw = (row.get("Millions_of_US_at_current_prices_Value") or "").strip()
+            missing = (row.get("US_at_current_prices_MissingValue") or "").strip()
+            if not raw or missing:
+                continue
+            try:
+                val = float(raw.replace(",", ""))
+            except ValueError:
+                continue
+            eco = (row.get("Economy_Label") or "").strip()
+            eco_code = (row.get("Economy_Code") or "").strip()
+            if not eco:
+                continue
+            is_country = eco_code.isdigit() and len(eco_code) == 3
+            eco_is_country[eco.lower()] = is_country
+            by_flow[flow][code][year].setdefault(eco, 0.0)
+            by_flow[flow][code][year][eco] += val
+            if eco.lower() == "kenya":
+                kenya[flow][code].setdefault(year, 0.0)
+                kenya[flow][code][year] += val
+
+    for flow in ("Exports", "Imports"):
+        # TRUE published World total (the 0000 aggregate row labelled 'World').
+        if "S" in by_flow[flow]:
+            for year, byeco in by_flow[flow]["S"].items():
+                w = byeco.get("World") or byeco.get("world")
+                if w:
+                    world_s[flow][year] = w
+        # country_s: per-economy S total for 3-digit economies only.
+        if "S" in by_flow[flow]:
+            for year, byeco in by_flow[flow]["S"].items():
+                for eco, val in byeco.items():
+                    if eco_is_country.get(eco.lower(), False):
+                        country_s[flow].setdefault(year, {})[eco.lower()] = val
+
+    # world: per-category sum over 3-digit economies only.
+    world_out = {"Exports": {}, "Imports": {}}
+    for flow in ("Exports", "Imports"):
+        for code, byyear in by_flow[flow].items():
+            wc = {}
+            for year, byeco in byyear.items():
+                s = sum(v for eco, v in byeco.items()
+                        if eco_is_country.get(eco.lower(), False))
+                if s:
+                    wc[year] = s
+            if wc:
+                world_out[flow][code] = wc
+
+    kenya_out = {"Exports": {c: dict(yy) for c, yy in kenya["Exports"].items()},
+                 "Imports": {c: dict(yy) for c, yy in kenya["Imports"].items()}}
+    return {
+        "kenya": kenya_out,
+        "world": world_out,
+        "country_s": country_s,
+        "world_s": world_s,
+    }
+
+
+# UNCTAD economy labels in the R-script output that are REGIONAL/AGGREGATE
+# groupings rather than real countries.  Every other label in that file is a
+# genuine economy (Kenya, United States, Turkiye, ...) whose per-category (S)
+# total is a true published figure.  These are excluded from ``country_s`` and
+# from the per-category ``world`` sums to avoid double counting; the real
+# published World aggregate is read separately from the ``World`` label.
+_UNCTAD_R_AGGREGATES = frozenset({
+    "world", "africa", "americas", "asia", "europe", "oceania",
+    "individual economies", "developing economies", "developed economies",
+    "ldcs", "land locked developing countries",
+    "small island developing states",
+    "sids", "other territories n.e.c.", "memo",
+})
+
+
+def parse_unctad_services_r(path):
+    """Parse the R-script UNCTAD CSV (``unctad_services_<years>.csv``).
+
+    The R download produces a long-format CSV with columns::
+
+        Flow_Label, Category_Label, Economy_Label, Year,
+        Millions_of_US_at_current_prices_Value, Category_Type, Category_Code
+
+    Unlike the ``parse_unctad_annual`` input there is **no** numeric
+    ``Economy/Code`` column, so real economies are recognised by *label*: any
+    economy not in ``_UNCTAD_R_AGGREGATES`` is treated as a country.  The extra
+    aggregate categories (``SPX1`` Other services, ``SPX4`` Goods-related,
+    ``SOX`` Commercial services, ``Category_Type`` TOTAL vs DETAIL) are kept but
+    only ``S`` contributes to ``country_s``/``world_s``.  ``NA`` values are
+    treated as missing (never estimated).
+
+    Returns::
+
+        {
+          "kenya":     {"Exports": {cat: {year: Mn}}, "Imports": {...}},
+          "world":     {"Exports": {cat: {year: Mn}}, "Imports": {...}},
+          "country_s": {"Exports": {year: {eco_lower: Mn}}, "Imports": {...}},
+          "world_s":   {"Exports": {year: Mn}, "Imports": {...}},
+        }
+
+    All values are already in millions of USD.
+    """
+    def _mk():
+        flow = lambda: collections.defaultdict(
+            lambda: collections.defaultdict(dict))
+        return {"Exports": flow(), "Imports": flow()}
+
+    by_flow = _mk()
+    world_s = {"Exports": {}, "Imports": {}}
+    country_s = {"Exports": {}, "Imports": {}}
+    kenya = _mk()
+    is_country = {}
+
+    opener = gzip.open(path, "rt", encoding="utf-8") \
+        if str(path).lower().endswith(".gz") \
+        else open(path, newline="", encoding="utf-8")
+
+    with opener as fh:
+        for row in csv.DictReader(fh):
+            flow = (row.get("Flow_Label") or "").strip()
+            if flow not in ("Exports", "Imports"):
+                continue
+            code = (row.get("Category_Code") or "").strip()
+            if not code:
+                continue
+            year_s = (row.get("Year") or "").strip()
+            if not year_s.isdigit():
+                continue
+            year = int(year_s)
+            raw = (row.get("Millions_of_US_at_current_prices_Value")
+                   or "").strip()
+            # "NA" / blank / annotation => missing, never an estimate.
+            if not raw or raw.upper() == "NA" or raw.upper() in ("..", "-", "NULL"):
+                continue
+            try:
+                val = float(raw.replace(",", ""))
+            except ValueError:
+                continue
+            eco = (row.get("Economy_Label") or "").strip()
+            if not eco:
+                continue
+            eco_key = eco.lower()
+            is_country[eco_key] = eco_key not in _UNCTAD_R_AGGREGATES
+            by_flow[flow][code][year].setdefault(eco, 0.0)
+            by_flow[flow][code][year][eco] += val
+            if eco_key == "kenya":
+                kenya[flow][code].setdefault(year, 0.0)
+                kenya[flow][code][year] += val
+
+    for flow in ("Exports", "Imports"):
+        if "S" in by_flow[flow]:
+            for year, byeco in by_flow[flow]["S"].items():
+                world_val = byeco.get("World") or byeco.get("world")
+                if world_val:
+                    world_s[flow][year] = world_val
+        if "S" in by_flow[flow]:
+            for year, byeco in by_flow[flow]["S"].items():
+                for eco, val in byeco.items():
+                    if is_country.get(eco.lower(), False):
+                        country_s[flow].setdefault(year, {})[eco.lower()] = val
+
+    world_out = {"Exports": {}, "Imports": {}}
+    for flow in ("Exports", "Imports"):
+        for code, byyear in by_flow[flow].items():
+            wc = {}
+            for year, byeco in byyear.items():
+                s = sum(v for eco, v in byeco.items()
+                        if is_country.get(eco.lower(), False))
+                if s:
+                    wc[year] = s
+            if wc:
+                world_out[flow][code] = wc
+
+    kenya_out = {"Exports": {c: dict(yy) for c, yy in kenya["Exports"].items()},
+                 "Imports": {c: dict(yy) for c, yy in kenya["Imports"].items()}}
+    return {
+        "kenya": kenya_out,
+        "world": world_out,
+        "country_s": country_s,
+        "world_s": world_s,
+    }
+
+
+def _copy_unctad_source_files(files, out_dir):
+    """Copy the upstream UNCTAD R-export file(s) into *out_dir*.
+
+    The services deliverable should contain both the ITC tables *and* the raw
+    UNCTAD R-export CSV that was analysed, so a zip of that folder bundles it
+    alongside the tables.  Only the ``*.csv`` is mirrored: the analyst keeps the
+    companion ``*.xlsx`` locally (it is the source and need not be shipped).
+    """
+    try:
+        for src in files.get("unctad_r", []):
+            base = os.path.basename(src)
+            if base.lower().endswith(".csv"):
+                shutil.copy2(src, os.path.join(out_dir, base))
+    except Exception as exc:  # noqa: BLE001 - additive, never break the build
+        print(f"Warning: could not copy UNCTAD source files into output: {exc}")
 
 
 def extend_kenya_categories_from_unctad(items, total, years, un_kan, flow,
@@ -1367,7 +1376,8 @@ def extend_world_categories_from_unctad(world_items, world_total, itc_years,
 
 
 def extend_country_rankings_from_unctad(items, total, itc_years,
-                                         un_country_s, flow, max_year=None):
+                                         un_country_s, flow, max_year=None,
+                                         world_s=None):
     """Extend ITC country-ranking series (exporters or importers) with UNCTAD data.
 
     ``items``: list of dicts with ``label`` and ``vals`` (already in USD
@@ -1378,6 +1388,9 @@ def extend_country_rankings_from_unctad(items, total, itc_years,
     ``flow``: ``"Exports"`` or ``"Imports"`` (for UNCTAD lookup).
     ``max_year``: if given, only years ≤ this value are appended (used to keep
     the country axis aligned with Kenya's coverage).
+    ``world_s``: optional ``{year: millions}`` of the *published* UNCTAD World
+    total, used for the World total row when available (preferred over a
+    subset sum of matched countries).
 
     Appends UNCTAD years (beyond the ITC max year) as new columns.  Values
     are converted from UNCTAD millions to USD billions (÷1e3).  Existing ITC
@@ -1438,18 +1451,21 @@ def extend_country_rankings_from_unctad(items, total, itc_years,
     # World total from UNCTAD.  The CSV carries aggregate/region rows
     # (e.g. "Europe", "Asia", "Northern America") in addition to real
     # countries, so we cannot simply sum every row (that would double-count).
-    # Prefer UNCTAD's own "World" economy row; otherwise sum only the rows
-    # that matched a real ITC country (canonical country names -> items).
+    # Prefer the published "World" aggregate (``world_s``); otherwise fall back
+    # to summing only the rows that matched a real ITC country.
     itc_ecos = set(itc_canon.values())
     for y in un_years:
         idx = year_idx.get(y)
         if idx is None or total["vals"][idx] is not None:
             continue
-        byeco = un_country_s.get(y, {})
-        if not byeco:
-            continue
-        world_val = byeco.get("world")
+        world_val = world_s.get(y) if world_s else None
         if world_val is None:
+            byeco = un_country_s.get(y, {})
+            if not byeco:
+                continue
+            world_val = byeco.get("world")
+        if world_val is None:
+            byeco = un_country_s.get(y, {})
             world_val = sum(v for eco, v in byeco.items()
                             if _canonical_country(eco) in itc_ecos)
         if world_val:
@@ -3074,30 +3090,54 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     os.makedirs(out_dir, exist_ok=True)
     files = find_service_files(excel_dir)
 
-    unctad = None
-    if files.get("unctad"):
-        try:
-            unctad = _load_first(files, "unctad", parse_unctad_services)
-        except Exception as exc:  # noqa: BLE001 - optional source
-            print(f"Warning: ignoring unusable UNCTAD services file: {exc}")
-            unctad = None
-
-    max_kenya_year = None
-    if unctad:
-        un_kenya_exp_years = sorted(unctad["kenya"].get("Exports", {}).get("S", {}))
-        max_kenya_year = un_kenya_exp_years[-1] if un_kenya_exp_years else None
-
-    # Optional UNCTADstat *annual* service-by-category file (fetch_unctad_tradeserv.py).
-    # It carries complete Kenya per-category detail through the most recent fully
-    # published year, which lets the category tables extend past the last ITC
-    # breakdown year (2023) using genuine values - never an estimated share.
+    # ---- UNCTADstat service-by-category data (annual).
+    # Preferred source: the R-export CSV (``unctad_services_<years>.csv``) that
+    # is uploaded alongside the ITC files.  It supplies Kenya's per-category
+    # detail (Tables 3/4), economy-level total services and the true published
+    # World total (Tables 1/2, Table 13), and per-category world sums (world
+    # pie / RCA / concentration).  Fallback: the all-economy gz from
+    # fetch_unctad_tradeserv.py (``UNCTAD_*_tradeserv_annual_all.csv.gz``).
     un_annual = None
-    if files.get("unctad_annual"):
+    if files.get("unctad_r") or files.get("unctad_annual"):
         try:
-            un_annual = _load_first(files, "unctad_annual", parse_unctad_annual_kenya)
+            un_annual = None
+            last_err = None
+            # 1) R-export CSV (the user's canonical UNCTAD file).
+            for cand in sorted(files.get("unctad_r", [])):
+                try:
+                    un_annual = parse_unctad_services_r(cand)
+                    if un_annual.get("country_s"):
+                        break
+                except Exception as exc:  # noqa: BLE001 - try next candidate
+                    last_err = exc
+                    un_annual = None
+            # 2) Fallback: all-economy gz (prefer *_all, else Kenya-only shape).
+            if not un_annual:
+                cands = sorted(files.get("unctad_annual", []),
+                               key=lambda p: (os.path.basename(p).lower().find("_all") == -1,
+                                              os.path.basename(p)))
+                for cand in cands:
+                    try:
+                        un_annual = parse_unctad_annual(cand)
+                        if un_annual.get("country_s"):
+                            break
+                    except Exception as exc:  # noqa: BLE001 - try next candidate
+                        last_err = exc
+                        un_annual = None
+            if isinstance(last_err, Exception) and not un_annual:
+                raise last_err
         except Exception as exc:  # noqa: BLE001 - optional source
             print(f"Warning: ignoring unusable UNCTAD annual services file: {exc}")
             un_annual = None
+
+    # Kenya's latest *reported* total-services (S) year in the annual dataset.
+    # This caps the global country-ranking axis (Tables 1/2) and the world pie so
+    # they stay aligned with Kenya's coverage.  Kenya's per-category tables (3/4)
+    # are separately capped at 2024 (2025 has no category breakdown for Kenya).
+    max_kenya_year = None
+    if un_annual and "kenya" in un_annual and "S" in un_annual["kenya"].get("Exports", {}):
+        k_years = sorted(un_annual["kenya"]["Exports"]["S"])
+        max_kenya_year = k_years[-1] if k_years else None
 
     # ---- Table 1: Global service exporters by country --------------------
     total_exp, items_exp, years_exp = _load_first(files, "exporters", parse_exporters)
@@ -3107,11 +3147,12 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     if total_exp:
         total_exp["vals"] = [v / 1e6 if v is not None else None for v in total_exp["vals"]]
 
-    if unctad:
+    if un_annual and un_annual.get("country_s"):
         items_exp, total_exp, years_exp, exp_note = extend_country_rankings_from_unctad(
             items_exp, total_exp, years_exp,
-            unctad["country_s"].get("Exports", {}), "Exports",
-            max_year=max_kenya_year)
+            un_annual["country_s"].get("Exports", {}), "Exports",
+            max_year=max_kenya_year,
+            world_s=un_annual.get("world_s", {}).get("Exports"))
         if exp_note:
             print(exp_note)
 
@@ -3134,11 +3175,12 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     if total_imp:
         total_imp["vals"] = [v / 1e6 if v is not None else None for v in total_imp["vals"]]
 
-    if unctad:
+    if un_annual and un_annual.get("country_s"):
         items_imp, total_imp, years_imp, imp_note = extend_country_rankings_from_unctad(
             items_imp, total_imp, years_imp,
-            unctad["country_s"].get("Imports", {}), "Imports",
-            max_year=max_kenya_year)
+            un_annual["country_s"].get("Imports", {}), "Imports",
+            max_year=max_kenya_year,
+            world_s=un_annual.get("world_s", {}).get("Imports"))
         if imp_note:
             print(imp_note)
 
@@ -3162,10 +3204,10 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     if total_gexp:
         total_gexp["vals"] = [v / 1e6 if v is not None else None for v in total_gexp["vals"]]
 
-    if unctad:
+    if un_annual and un_annual.get("world"):
         items_gexp, total_gexp, years_gexp, gexp_note = extend_world_categories_from_unctad(
             items_gexp, total_gexp, years_gexp,
-            unctad["world"].get("Exports", {}), "exports",
+            un_annual["world"].get("Exports", {}), "exports",
             max_year=max_kenya_year)
         if gexp_note:
             print(gexp_note)
@@ -3177,17 +3219,17 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         it["vals"] = [v / 1e3 if v is not None else None for v in it["vals"]]
     if total_kexp:
         total_kexp["vals"] = [v / 1e3 if v is not None else None for v in total_kexp["vals"]]
-    if un_annual:
+    if un_annual and "kenya" in un_annual:
         # The ITC Kenya file only breaks categories out through 2023; 2024 is
         # aggregate (S) only.  Fill the 2024 category detail and total from the
         # real UNCTAD annual dataset, then cap the table at the latest genuinely
         # complete year (2024).  2025 never enters: it is an estimated total only.
         items_kexp, total_kexp, years_kexp, kexpl_note = extend_kenya_categories_from_unctad(
-            items_kexp, total_kexp, years_kexp, un_annual.get("Exports", {}),
+            items_kexp, total_kexp, years_kexp, un_annual["kenya"].get("Exports", {}),
             "exports", max_year=2024)
         if kexpl_note:
             print(kexpl_note)
-    if un_annual or unctad:
+    if un_annual:
         years_kexp = _truncate_to_category_year(items_kexp, total_kexp, years_kexp)
     calc_growth_rates(items_kexp, years_kexp)
 
@@ -3210,15 +3252,15 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         it["vals"] = [v / 1e3 if v is not None else None for v in it["vals"]]
     if total_kimp:
         total_kimp["vals"] = [v / 1e3 if v is not None else None for v in total_kimp["vals"]]
-    if un_annual:
+    if un_annual and "kenya" in un_annual:
         # Same as exports: fill the 2024 import category detail + total from the
         # real UNCTAD annual dataset, capped at the latest complete year (2024).
         items_kimp, total_kimp, years_kimp, kimpl_note = extend_kenya_categories_from_unctad(
-            items_kimp, total_kimp, years_kimp, un_annual.get("Imports", {}),
+            items_kimp, total_kimp, years_kimp, un_annual["kenya"].get("Imports", {}),
             "imports", max_year=2024)
         if kimpl_note:
             print(kimpl_note)
-    if un_annual or unctad:
+    if un_annual:
         years_kimp = _truncate_to_category_year(items_kimp, total_kimp, years_kimp)
     calc_growth_rates(items_kimp, years_kimp)
 
@@ -3644,6 +3686,11 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         _inject_cached_values(out["all"], cache_all)
     except Exception:
         pass
+
+    # Ship the UNCTAD R-export CSV alongside the ITC tables so the packaged
+    # "services" deliverable carries both the ITC analysis and the raw UNCTAD
+    # source file.  (The analyst keeps the companion *.xlsx locally.)
+    _copy_unctad_source_files(files, out_dir)
 
     # Extract country name from Kenya exports title
     rep = "Kenya"

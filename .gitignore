@@ -15,6 +15,16 @@ uae/
 !services/CLASS_2026_07_15.xlsx
 !config_template.json
 
+# Local-only data: raw downloads & R-exported UNCTAD files are huge and are
+# not needed on the remote (kept locally by the analyst).
+*.csv.gz
+*.xlsm
+*.xls
+!services/CLASS_2026_07_15.xlsx
+services/unctad_services_*.csv
+servicesnew/
+*.unctad.json
+
 *.docx
 !*.md
 !*.txt
