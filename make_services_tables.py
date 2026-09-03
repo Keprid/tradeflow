@@ -1934,7 +1934,8 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
         col_letter = get_column_letter(3 + k)
         formula = f"={col_letter}{r_world}-SUM({col_letter}{r_first}:{col_letter}{r_last})"
         cached_val = ao_vals[k] if k < len(ao_vals) else None
-        _put_formula(ws, cache, r, 3 + k, formula, cached_val, fill=ao_fill)
+        _put_formula(ws, cache, r, 3 + k, formula, cached_val,
+                     fill=ao_fill, numfmt=FMT_VALUE)
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
     _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val,
@@ -2082,7 +2083,8 @@ def write_product_table(ws, data, hdr, unit_row,
         col_letter = get_column_letter(4 + k)
         formula = f"={col_letter}{r_total}-SUM({col_letter}{r_first}:{col_letter}{r_last})"
         cached_val = ao_vals[k] if k < len(ao_vals) else None
-        _put_formula(ws, cache, r, 4 + k, formula, cached_val, fill=ao_fill)
+        _put_formula(ws, cache, r, 4 + k, formula, cached_val,
+                     fill=ao_fill, numfmt=FMT_VALUE)
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
     _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val,
