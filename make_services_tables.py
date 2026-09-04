@@ -47,7 +47,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from charts import draw_share_pie, new_fig, finish
-from country_names import display_name, short_product_name
+from country_names import display_name, short_product_name, title_case
 from xlsx_compat import HTMLTableParser, convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
@@ -1751,12 +1751,13 @@ def set_widths(ws, widths):
 
 
 def style_cell(cell, bold=False, size=FONT_SIZE, fill=None, numfmt=None,
-               wrap=False, align="center", border_style="data"):
+               wrap=False, align="center", border_style="data", italic=False):
     """Apply professional styling to a cell.
     
     border_style: 'header', 'data', 'total', or 'none'
     """
-    cell.font = Font(name=FONT, size=size, bold=bold, color="000000" if not bold else "1F3864")
+    cell.font = Font(name=FONT, size=size, bold=bold, italic=italic,
+                     color="000000" if not bold else "1F3864")
     
     # Apply appropriate border
     if border_style == "header":
@@ -1805,12 +1806,12 @@ def _put_formula(ws, cache, row, col, formula, cached, bold=False, fill=None,
 
 
 def put_text(ws, row, col, text, bold=False, size=FONT_SIZE, fill=None, wrap=False,
-             align="left", use_row_fill=True):
+             align="left", use_row_fill=True, italic=False):
     """Write text with optional alternating row fill."""
     if fill is None and use_row_fill:
         fill = get_row_fill(row)
     return put(ws, row, col, text, bold=bold, size=size, fill=fill,
-               wrap=wrap, align=align)
+               wrap=wrap, align=align, italic=italic)
 
 
 def put_val(ws, row, col, value, bold=False, fill=None, fmt=FMT_VALUE, use_row_fill=True):
@@ -1857,9 +1858,11 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, cagr_col)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -1921,7 +1924,7 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
         _put_formula(ws, cache, r, share_col, formula, cached_share,
-                     fill=fill, numfmt=FMT_SHARE)
+                     fill=fill, numfmt=FMT_SHARE, bold=True)
         put_share(ws, r, grow_col, it.get("growth"), fill=fill, use_row_fill=False)
         put_share(ws, r, cagr_col, it.get("cagr"), fill=fill, use_row_fill=False)
 
@@ -1939,7 +1942,7 @@ def write_market_table(ws, data, hdr_label, verb, unit_row, kenya_highlight,
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}"
     _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val,
-                 fill=ao_fill, numfmt=FMT_SHARE)
+                 fill=ao_fill, numfmt=FMT_SHARE, bold=True)
 
     # World total
     r = r_world
@@ -1971,9 +1974,11 @@ def write_product_table(ws, data, hdr, unit_row,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2037,7 +2042,7 @@ def write_product_table(ws, data, hdr, unit_row,
         cached_share = share(val_latest, t_latest)
         formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
         _put_formula(ws, cache, r, share_col, formula, cached_share,
-                     fill=fill, numfmt=FMT_SHARE)
+                     fill=fill, numfmt=FMT_SHARE, bold=True)
 
         # Annual growth (latest year-over-year) as a live Excel formula so the
         # figure is independently verifiable in the spreadsheet.  Mirrors
@@ -2088,7 +2093,7 @@ def write_product_table(ws, data, hdr, unit_row,
     ao_share_val = data["all_other"]["share"]
     ao_formula = f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}"
     _put_formula(ws, cache, r, share_col, ao_formula, ao_share_val,
-                 fill=ao_fill, numfmt=FMT_SHARE)
+                 fill=ao_fill, numfmt=FMT_SHARE, bold=True)
 
     # Total
     r = r_total
@@ -2116,8 +2121,10 @@ def write_balance(ws, years, exports, imports, cache=None):
     """
     cache = [] if cache is None else cache
     hdr = HDR_FILL
-    put_text(ws, 1, 1, "Figure 1", bold=True, size=12, align="center", use_row_fill=False)
-    put_text(ws, 1, 2, "Kenya Services Balance of Trade", bold=True, size=12, align="center", use_row_fill=False)
+    put_text(ws, 1, 1, "Figure 1", bold=True, size=12, align="center",
+             use_row_fill=False, italic=True)
+    put_text(ws, 1, 2, title_case("Kenya Services Balance of Trade"), bold=True, size=12,
+             align="center", use_row_fill=False, italic=True)
 
     # Header row
     put_text(ws, 2, 2, "", bold=True, size=HEADER_FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
@@ -2169,9 +2176,11 @@ def write_dev_status_table(ws, dev_items, devel_items, ldc_items, years,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 6)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2238,9 +2247,11 @@ def write_region_table(ws, by_region, years, verb, unit_label,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 5)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2364,9 +2375,11 @@ def write_rca_table(ws, rca_items, years, row1_label=None, row1_title=None):
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 7)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2473,9 +2486,11 @@ def write_concentration_table(ws, concentration, row1_label=None, row1_title=Non
     """Write export concentration index comparison table."""
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 4)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2666,9 +2681,11 @@ def write_diversification_table(ws, items, row1_label=None, row1_title=None):
     """Write diversification potential table."""
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=11, align="center")
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=11, align="center",
+                     italic=True)
         merge(ws, 1, 2, 1, 7)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2787,9 +2804,11 @@ def write_value_trajectory_table(ws, trajectory, row1_label=None, row1_title=Non
     years = trajectory["years"]
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 3 + len(years))
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -2888,9 +2907,11 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
     """Write Kenya vs peer countries total service exports comparison."""
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+         use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 6)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+         align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0

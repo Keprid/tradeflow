@@ -60,7 +60,7 @@ from docx.shared import Emu, Inches, Pt, RGBColor
 
 from charts import draw_share_pie, series_shares, slice_callouts, new_fig, finish
 from country_names import (display_name, is_africa, narrative_ref,
-                           short_product_name, title_partner)
+                           short_product_name, title_partner, title_case)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -107,6 +107,11 @@ def pct(share, decimals=1):
     if share is None:
         return ""
     return f"{share * 100:.{decimals}f}%"
+
+
+def _title_case(text):
+    """Title-case a caption/title (delegates to the shared helper)."""
+    return title_case(text)
 
 
 def clean_label(label):
@@ -1409,8 +1414,8 @@ class ReportBuilder:
 
     def add_table_caption(self, text):
         p = self.doc.add_paragraph()
-        r = p.add_run(text)
-        self._style_run(r, italic=True)
+        r = p.add_run(_title_case(text))
+        self._style_run(r, italic=True, bold=True)
         m = re.match(r"^(Table|Figure)\s+\d+\s*[:\-–]", str(text), re.IGNORECASE)
         if m:
             # style drives the automated List of Tables / List of Figures
@@ -1583,6 +1588,28 @@ class ReportBuilder:
             r.font.italic = italic
             if color is not None:
                 r.font.color.rgb = color
+
+    def _vmerge_column(self, table, col, nrows):
+        """Vertically merge one column across the top ``nrows`` rows using
+        explicit ``w:vMerge`` elements.
+
+        ``Cell.merge()`` is unreliable for top-down vertical merges in
+        python-docx: it can duplicate the top cell's text on the merged cell
+        and fail to emit ``vMerge continue`` on the rows below.  This helper
+        keeps the text in the top row, empties the continuation rows and marks
+        the run correctly so the label header spans the whole header band
+        (no empty box below Rank / label / Share).
+        """
+        tcs = [row.cells[col]._tc for row in table.rows[:nrows]]
+        for tc in tcs[1:]:
+            for child in list(tc):
+                tc.remove(child)
+            tcPr = tc.get_or_add_tcPr()
+            tcPr.append(OxmlElement("w:vMerge"))
+        topPr = tcs[0].get_or_add_tcPr()
+        vm = OxmlElement("w:vMerge")
+        vm.set(qn("w:val"), "restart")
+        topPr.append(vm)
 
     # -- page fitting -------------------------------------------------------
     # Vertical budget, in inches, reserved on the table's page for the
@@ -1777,7 +1804,6 @@ class ReportBuilder:
         hdr.merge(table.cell(0, 1 + n))
         sh = table.cell(0, 2 + n)
         self._cell_text(sh, f"Share in {last} %", bold=True)
-        sh.merge(table.cell(1, 2 + n))
 
         # header row 1 (years)
         for k in range(n):
@@ -1792,6 +1818,13 @@ class ReportBuilder:
             self._cell_text(table.cell(2, 2 + n), "%", bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
 
+        # Vertically merge the label + share columns across the whole header
+        # band so no empty cell appears below "Rank in ...", "Exporters"/
+        # "Importers" or "Share in ...", matching the template.
+        last_hdr = 2 if unit_row else 1
+        for c in (0, 1, 2 + n):
+            self._vmerge_column(table, c, last_hdr + 1)
+
         # data rows
         for ri, d in enumerate(parsed["data"]):
             r = 3 + ri if unit_row else 2 + ri
@@ -1804,7 +1837,7 @@ class ReportBuilder:
             for k in range(n):
                 self._cell_text(table.cell(r, 2 + k), num(d["years"][k]),
                                 bold=bold, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 2 + n), pct(d["share"]), bold=bold, color=red,
+            self._cell_text(table.cell(r, 2 + n), pct(d["share"]), bold=True, color=red,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
         self._fit_table_on_page(table)
         return table
@@ -1873,7 +1906,6 @@ class ReportBuilder:
         hdr.merge(table.cell(0, 2 + n))
         sh = table.cell(0, 3 + n)
         self._cell_text(sh, f"Share in {last} %", bold=True)
-        sh.merge(table.cell(1, 3 + n))
 
         for k in range(n):
             self._cell_text(table.cell(1, 3 + k), str(years[k]), bold=True,
@@ -1885,6 +1917,13 @@ class ReportBuilder:
             unit.merge(table.cell(2, 2 + n))
             self._cell_text(table.cell(2, 3 + n), "%", bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
+
+        # Vertically merge the label + share columns across the whole header
+        # band so no empty cell sits below "Rank in ...", "Code",
+        # "Product label" or "Share in ...", matching the template.
+        last_hdr = 2 if unit_row else 1
+        for c in (0, 1, 2, 3 + n):
+            self._vmerge_column(table, c, last_hdr + 1)
 
         for ri, d in enumerate(parsed["data"]):
             r = 3 + ri if unit_row else 2 + ri
@@ -1898,7 +1937,7 @@ class ReportBuilder:
             for k in range(n):
                 self._cell_text(table.cell(r, 3 + k), num(d["years"][k]),
                                 bold=b, align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 3 + n), pct(d["share"]), bold=b,
+            self._cell_text(table.cell(r, 3 + n), pct(d["share"]), bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
         self._fit_table_on_page(table)
         return table

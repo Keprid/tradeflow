@@ -61,7 +61,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple
 
-from country_names import display_name, short_product_name
+from country_names import display_name, short_product_name, title_case
 from xlsx_compat import convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
@@ -812,12 +812,13 @@ def set_widths(ws, widths):
 
 
 def style_cell(cell, bold=False, size=FONT_SIZE, fill=None, numfmt=None,
-               wrap=False, align="center", border_style="data"):
+               wrap=False, align="center", border_style="data", italic=False):
     """Apply professional styling to a cell.
     
     border_style: 'header', 'data', 'total', or 'none'
     """
-    cell.font = Font(name=FONT, size=size, bold=bold, color="000000" if not bold else "1F3864")
+    cell.font = Font(name=FONT, size=size, bold=bold, italic=italic,
+                     color="000000" if not bold else "1F3864")
     
     # Apply appropriate border
     if border_style == "header":
@@ -859,12 +860,12 @@ def put(ws, row, col, value, **kw):
 
 
 def put_text(ws, row, col, text, bold=False, size=FONT_SIZE, fill=None, wrap=False,
-             align="left", use_row_fill=True):
+             align="left", use_row_fill=True, italic=False):
     """Write text with optional alternating row fill."""
     if fill is None and use_row_fill:
         fill = get_row_fill(row)
     return put(ws, row, col, text, bold=bold, size=size, fill=fill,
-               wrap=wrap, align=align)
+               wrap=wrap, align=align, italic=italic)
 
 
 def put_val(ws, row, col, value, bold=False, fill=None, fmt=FMT_VALUE, use_row_fill=True):
@@ -1050,9 +1051,11 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
     # optional title row (Table 1 only)
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+                     use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+                 align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -1109,9 +1112,9 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
         if it["share"] is not None and total and total["vals"][-1] is not None:
             _put_formula(ws, cache, r, share_col,
                          f"={_cell_ref(r, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}",
-                         it["share"], fill=fill, numfmt=FMT_SHARE)
+                         it["share"], fill=fill, numfmt=FMT_SHARE, bold=True)
         else:
-            put_share(ws, r, share_col, it["share"], fill=fill, use_row_fill=False)
+            put_share(ws, r, share_col, it["share"], fill=fill, use_row_fill=False, bold=True)
 
     # all other row
     r = r_ao
@@ -1132,9 +1135,9 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
     if ao_share is not None and total and total["vals"][-1] is not None:
         _put_formula(ws, cache, r, share_col,
                      f"={_cell_ref(r_ao, 3 + n - 1)}/{_cell_ref(r_world, 3 + n - 1)}",
-                     ao_share, fill=ao_fill, numfmt=FMT_SHARE)
+                     ao_share, fill=ao_fill, numfmt=FMT_SHARE, bold=True)
     else:
-        put_share(ws, r, share_col, ao_share, fill=ao_fill, use_row_fill=False)
+        put_share(ws, r, share_col, ao_share, fill=ao_fill, use_row_fill=False, bold=True)
 
     # world row
     r = r_world
@@ -1167,9 +1170,11 @@ def write_product_table(ws, data, hdr, unit_row,
     # optional title row (Tables 2, 4, 6)
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+                     use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 2 + n)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+                 align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0
@@ -1227,9 +1232,9 @@ def write_product_table(ws, data, hdr, unit_row,
         if it["share"] is not None and total and total["vals"][-1] is not None:
             _put_formula(ws, cache, r, 4 + n,
                          f"={_cell_ref(r, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}",
-                         it["share"], fill=fill, numfmt=FMT_SHARE)
+                         it["share"], fill=fill, numfmt=FMT_SHARE, bold=True)
         else:
-            put_share(ws, r, 4 + n, it["share"], fill=fill, use_row_fill=False)
+            put_share(ws, r, 4 + n, it["share"], fill=fill, use_row_fill=False, bold=True)
 
     # all other row
     r = r_ao
@@ -1250,9 +1255,9 @@ def write_product_table(ws, data, hdr, unit_row,
     if ao_share is not None and total and total["vals"][-1] is not None:
         _put_formula(ws, cache, r, 4 + n,
                      f"={_cell_ref(r_ao, 4 + n - 1)}/{_cell_ref(r_total, 4 + n - 1)}",
-                     ao_share, fill=ao_fill, numfmt=FMT_SHARE)
+                     ao_share, fill=ao_fill, numfmt=FMT_SHARE, bold=True)
     else:
-        put_share(ws, r, 4 + n, ao_share, fill=ao_fill, use_row_fill=False)
+        put_share(ws, r, 4 + n, ao_share, fill=ao_fill, use_row_fill=False, bold=True)
 
     # total row
     r = r_total
@@ -1279,8 +1284,10 @@ def write_balance(ws, krep, kpartner, years, exports, imports, cache=None, skip_
     """
     cache = [] if cache is None else cache
     hdr = HDR_FILL
-    put_text(ws, 1, 1, "Figure 1", bold=True, size=12, align="center", use_row_fill=False)
-    put_text(ws, 1, 2, f"BOT Kenya- {kpartner}", bold=True, size=12, align="center", use_row_fill=False)
+    put_text(ws, 1, 1, "Figure 1", bold=True, size=12, align="center",
+             use_row_fill=False, italic=True)
+    put_text(ws, 1, 2, title_case(f"BOT Kenya- {kpartner}"), bold=True, size=12,
+             align="center", use_row_fill=False, italic=True)
     put_text(ws, 2, 2, f"Kenya's exports to {kpartner}", size=FONT_SIZE, fill=hdr, align="center", use_row_fill=False)
     ws.cell(2, 2).font = Font(name=FONT, size=FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
 
@@ -1470,9 +1477,11 @@ def write_bilateral_table(ws, items, years, krep, kpartner,
 
     if row1_label or row1_title:
         if row1_label:
-            put_text(ws, 1, 1, row1_label, bold=True, size=12, align="center", use_row_fill=False)
+            put_text(ws, 1, 1, title_case(row1_label), bold=True, size=12, align="center",
+                     use_row_fill=False, italic=True)
         merge(ws, 1, 2, 1, 7)
-        put_text(ws, 1, 2, row1_title, bold=True, size=12, wrap=True, align="center", use_row_fill=False)
+        put_text(ws, 1, 2, title_case(row1_title), bold=True, size=12, wrap=True,
+                 align="center", use_row_fill=False, italic=True)
         title_rows = 1
     else:
         title_rows = 0

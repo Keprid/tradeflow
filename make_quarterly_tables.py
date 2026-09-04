@@ -745,7 +745,7 @@ def write_report_table_simple(wb, rows, all_other, grand, title, month_names,
         cl_ = get_column_letter(3 + n)
         _putf(ws, cache, r, share_col,
               "=IF(%s=0,0,%s/%s)" % (gref, cl_, gref),
-              d["share"], bold=is_ao, numfmt="0.0%", fill=fill)
+              d["share"], bold=True, numfmt="0.0%", fill=fill)
         r += 1
     _putf(ws, cache, grand_row, share_col,
           "=IF(%s=0,0,%s/%s)" % (gref, gref, gref),

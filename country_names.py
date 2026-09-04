@@ -436,3 +436,42 @@ def short_product_name(label=None, code=None, maxlen=None):
 
     text = _tidy_label(label)
     return _truncate_words(text, maxlen or 50) if text else ""
+
+
+# Words conventionally left lowercase in Title Case headings/captions.
+_TITLE_MINOR = {"a", "an", "the", "and", "but", "or", "nor",
+                "for", "of", "on", "in", "to", "by", "with",
+                "from", "at", "as", "via", "per"}
+
+
+def title_case(text):
+    """Convert a caption/title string to Title Case.
+
+    Respects a leading "Table N:" / "Figure N:" prefix, keeps acronyms and
+    words with existing internal capitals (USD, UNCTAD, EAC, Kenya's) intact,
+    and leaves minor words (prepositions/conjunctions/articles) lowercase
+    unless they open the title.
+    """
+    text = str(text)
+
+    def cap_word(w, force_upper):
+        if w.isupper():
+            return w
+        if any(ch.isupper() for ch in w[1:]):
+            return w
+        if not force_upper and w.lower() in _TITLE_MINOR:
+            return w.lower()
+        return w[:1].upper() + w[1:]
+
+    m = re.match(r"^((?:Table|Figure)\s+\d+[a-z]?\s*[:\-–]\s*)(.*)$", text, re.IGNORECASE)
+    prefix, rest = m.groups() if m else ("", text)
+    words = re.split(r"(\s+)", rest)
+    out = []
+    force = True
+    for w in words:
+        if w.isspace():
+            out.append(w)
+            continue
+        out.append(cap_word(w, force))
+        force = False
+    return prefix + "".join(out)
