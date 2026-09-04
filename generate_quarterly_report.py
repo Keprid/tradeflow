@@ -1040,12 +1040,12 @@ def _fill_arrow_cell(b, cell, value, kind):
     arrow, txt, color = _arrow_text(value, kind)
     if arrow:
         r = p.add_run(arrow + " ")
-        r.font.name = "Times New Roman"
+        r.font.name = "Century Gothic"
         r.font.size = Pt(9)
         r.font.bold = True
         r.font.color.rgb = color
     r2 = p.add_run(txt)
-    r2.font.name = "Times New Roman"
+    r2.font.name = "Century Gothic"
     r2.font.size = Pt(10)
     r2.font.color.rgb = color
 
@@ -1232,11 +1232,11 @@ def add_growth_decline_table(b: ReportBuilder, growers, decliners,
         p = cell.paragraphs[0]
         p.paragraph_format.space_after = Pt(3)
         r = p.add_run(str(d["name"]))
-        r.font.name = "Times New Roman"
+        r.font.name = "Century Gothic"
         r.font.size = Pt(10)
         arrow, txt, color = _arrow_text(d["change"], "chg")
         r2 = p.add_run("  %s %s" % (arrow, txt))
-        r2.font.name = "Times New Roman"
+        r2.font.name = "Century Gothic"
         r2.font.size = Pt(10)
         r2.font.bold = True
         r2.font.color.rgb = color

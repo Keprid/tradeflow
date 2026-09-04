@@ -72,9 +72,9 @@ YEAR_HEADER = [2021, 2022, 2023, 2024, 2025]
 RED = RGBColor(0xC0, 0x00, 0x00)       # dark red used for Kenya rows
 BRIGHT_RED = RGBColor(0xEE, 0x00, 0x00)  # red used for "Exports"/"Imports" labels
 THEME_ACCENTS = ["#156082", "#E97132", "#196B24", "#0F9ED5", "#A02B93", "#4EA72E"]
-# Times New Roman is bundled with Windows; Linux uses the metrically
-# identical Liberation Serif.
-FONT_PREFERENCE = ["Times New Roman", "Liberation Serif", "DejaVu Serif", "Arial"]
+# Century Gothic (the KEPROBA template font) is preferred; Liberation Serif is
+# the metrically-similar Linux fallback when Century Gothic is not installed.
+FONT_PREFERENCE = ["Century Gothic", "Liberation Serif", "DejaVu Serif", "Arial"]
 
 SRC = ("Source: International Trade Centre (ITC) Trade Map database. "
        "Macroeconomic indicators are drawn from official sources (World Bank, "
@@ -1290,7 +1290,7 @@ class ReportBuilder:
     # -- styling ------------------------------------------------------------
     def _setup_styles(self):
         normal = self.doc.styles["Normal"]
-        normal.font.name = "Times New Roman"
+        normal.font.name = "Century Gothic"
         normal.font.size = Pt(12)
         rpr = normal.element.get_or_add_rPr()
         rf = rpr.find(qn("w:rFonts"))
@@ -1298,13 +1298,13 @@ class ReportBuilder:
             rf = OxmlElement("w:rFonts")
             rpr.append(rf)
         for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
-            rf.set(qn(attr), "Times New Roman")
+            rf.set(qn(attr), "Century Gothic")
         pf = normal.paragraph_format
         pf.space_after = Pt(8)
         pf.line_spacing = 1.16
 
         h1 = self.doc.styles["Heading 1"]
-        h1.font.name = "Arial"
+        h1.font.name = "Century Gothic"
         h1.font.size = Pt(14)
         h1.font.bold = True
         h1.font.color.rgb = RGBColor(0, 0, 0)
@@ -1313,7 +1313,7 @@ class ReportBuilder:
         h1.paragraph_format.keep_with_next = True
 
         h2 = self.doc.styles["Heading 2"]
-        h2.font.name = "Times New Roman"
+        h2.font.name = "Century Gothic"
         h2.font.size = Pt(13)
         h2.font.bold = True
         h2.font.color.rgb = RGBColor(0, 0, 0)
@@ -1326,13 +1326,13 @@ class ReportBuilder:
         for style_name in ("Caption Table", "Caption Figure"):
             st = self.doc.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
             st.base_style = self.doc.styles["Normal"]
-            st.font.name = "Times New Roman"
+            st.font.name = "Century Gothic"
             st.font.size = Pt(12)
             st.font.italic = True
             st.paragraph_format.space_before = Pt(10)
             st.quick_style = True
 
-    def _style_run(self, run, size=None, bold=None, italic=None, color=None, name="Times New Roman"):
+    def _style_run(self, run, size=None, bold=None, italic=None, color=None, name="Century Gothic"):
         run.font.name = name
         run._element.rPr.rFonts.set(qn("w:eastAsia"), name)
         if size is not None:
@@ -1395,7 +1395,7 @@ class ReportBuilder:
     def add_heading(self, text, level=1, red=False):
         p = self.doc.add_paragraph(style="Heading 1" if level == 1 else "Heading 2")
         r = p.add_run(text)
-        self._style_run(r, name="Times New Roman")
+        self._style_run(r, name="Century Gothic")
         return p
 
     def add_bullet(self, text):
@@ -1577,7 +1577,7 @@ class ReportBuilder:
                 run = p.add_run()
                 run.add_break()
             r = p.add_run(part)
-            r.font.name = "Times New Roman"
+            r.font.name = "Century Gothic"
             r.font.size = Pt(size)
             r.font.bold = bold
             r.font.italic = italic
@@ -1677,7 +1677,7 @@ class ReportBuilder:
                     r._r.getparent().remove(r._r)
                 r = p.add_run(cut)
                 if first is not None:
-                    r.font.name = first.font.name or "Times New Roman"
+                    r.font.name = first.font.name or "Century Gothic"
                     r.font.bold = first.font.bold
                     r.font.italic = first.font.italic
                     if first.font.color is not None and first.font.color.rgb is not None:
@@ -2073,13 +2073,13 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
 
     # ============================== SECTION 1 ===============================
     b.add_heading(f"1. {c['title']}")
-    b.add_heading("1.1. Backgrounds", level=2)
+    b.add_heading("1.1. Background", level=2)
     for segments in narr["background"]:
         b.add_background_para(segments)
     b.page_break()
 
     # ============================== SECTION 2 ===============================
-    b.add_heading("2. SITUATIONAL ANALYSIS")
+    b.add_heading("2. Situational Analysis")
     b.add_para(f"{c['name']}'s Trade Flows and Position in the Global Trade", bold=True)
     b.add_para("Exports", bold=True, color=BRIGHT_RED)
     for line in narr["exports_bullets"]:
@@ -2141,7 +2141,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.page_break()
 
     # ============================== SECTION 3 ===============================
-    b.add_heading(f"3. BILATERAL TRADE BETWEEN KENYA AND {c['title']}")
+    b.add_heading(f"3. Bilateral Trade Between Kenya and {c['title']}")
 
     # 3.1 Trends
     b.add_heading(f"3.1 Kenya – {c['name']} Bilateral Trade Trends", level=2)
@@ -2213,7 +2213,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.page_break()
 
     # ============================== SECTION 4 ===============================
-    b.add_heading(f"4. KENYA'S EXPORT POTENTIAL ON {c['title']} MARKET")
+    b.add_heading(f"4. Kenya's Export Potential on {c['title']} Market")
     ep = cfg.get("export_potential", {}) or {}
     b.add_table_caption(f"Figure 4: Kenya's products with export potential to {c['name']}.")
     img = resolve_path(cfg_path, ep.get("image"))

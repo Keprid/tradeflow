@@ -27,7 +27,7 @@ NAVY = "1F3864"
 GRID_COLOR = "D6DCE4"
 THICK_COLOR = "1F3864"
 HDR_FILL = PatternFill(fill_type="solid", fgColor=NAVY)
-HDR_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+HDR_FONT = Font(name="Century Gothic", size=11, bold=True, color="FFFFFF")
 THIN = Side(style="thin", color=GRID_COLOR)
 THICK = Side(style="thick", color=THICK_COLOR)
 CENTER = Alignment(horizontal="center", vertical="center")
@@ -65,7 +65,7 @@ def _title_row(ws, row, text, span):
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=span)
     cell = ws.cell(row, 1)
     cell.value = text
-    cell.font = Font(name="Calibri", size=14, bold=True, color=NAVY)
+    cell.font = Font(name="Century Gothic", size=14, bold=True, color=NAVY)
     cell.alignment = Alignment(horizontal="left", vertical="center")
     return row + 1
 

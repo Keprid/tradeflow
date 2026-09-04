@@ -68,7 +68,7 @@ from xlsx_compat import convert_to_xlsx, is_spreadsheet
 # Constants / styles (matching make_services_tables.py)
 # ---------------------------------------------------------------------------
 # Professional color palette (muted, modern tones)
-FONT = "Calibri"
+FONT = "Century Gothic"
 FONT_SIZE = 10
 HEADER_FONT_SIZE = 10
 

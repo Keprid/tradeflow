@@ -85,7 +85,7 @@ EXCLUDED_DESTINATIONS = {"AIRCRAFT & SHIPSTORES"}
 UNDEFINED_EXPORT_LABEL = "All others (non-defined)"
 UNDEFINED_IMPORT_LABEL = "All others"
 
-FONT = "Calibri"
+FONT = "Century Gothic"
 FONT_SIZE = 11
 HDR_FILL = PatternFill("solid", fgColor="156082")
 HDR_FONT_COLOR = "FFFFFF"

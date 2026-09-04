@@ -54,7 +54,7 @@ from xlsx_compat import HTMLTableParser, convert_to_xlsx, is_spreadsheet
 # Constants / styles (shared with make_tables.py)
 # ---------------------------------------------------------------------------
 # Professional color palette (muted, modern tones)
-FONT = "Calibri"
+FONT = "Century Gothic"
 FONT_SIZE = 10
 HEADER_FONT_SIZE = 10
 
