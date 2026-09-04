@@ -314,7 +314,8 @@ def inject_chart(paragraph, kind, title, categories, series, colors=None,
 
     cx = int(width_in * 914400)
     cy = int(height_in * 914400)
-    drawing = _drawing_inline(chart_r_id, doc_part.next_id, name, cx, cy)
+    drawing = _drawing_inline(
+        chart_r_id, _next_doc_object_id(doc_part), name, cx, cy)
 
     p = paragraph._p
     run = p.makeelement(_W + "r", {})
@@ -330,3 +331,27 @@ def _next_chart_index(package):
         if pn not in {p.partname for p in package.iter_parts()}:
             return idx
         idx += 1
+
+
+def _next_doc_object_id(doc_part):
+    """Unique drawing (``wp:docPr/@id``) number across the whole package.
+
+    ``DocumentPart.next_id`` only scans the document body, so any drawing in a
+    header/footer (e.g. the letterhead) can already own an id the body will
+    happily duplicate.  Word rejects documents whose drawing ids collide
+    ("found unreadable content"), so walk every XML part to find ids already in
+    use and return the next value missing from that set.
+    """
+    used = set()
+    package = doc_part.package
+    for part in package.iter_parts():
+        element = getattr(part, "_element", None)
+        if element is None:
+            continue
+        for value in element.xpath("//@id"):
+            if value.isdigit():
+                used.add(int(value))
+    candidate = doc_part.next_id
+    while candidate in used:
+        candidate += 1
+    return candidate
