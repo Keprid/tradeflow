@@ -1308,7 +1308,38 @@ class ReportBuilder:
         section.bottom_margin = Inches(1)
         section.left_margin = Inches(1)
         section.right_margin = Inches(1)
+        self._add_page_border(section)
         self._setup_styles()
+
+    def _add_page_border(self, section):
+        """Black outside border frame ('wall') around every page.
+
+        Uses ``w:pgBorders`` (page offset, 1.5pt single black line) so the
+        frame sits at the page edge, around the header/footer too.
+        """
+        sect_pr = section._sectPr
+        if sect_pr.find(qn("w:pgBorders")) is not None:
+            return
+        borders = OxmlElement("w:pgBorders")
+        borders.set(qn("w:offsetFrom"), "page")
+        for edge in ("top", "left", "bottom", "right"):
+            el = OxmlElement("w:" + edge)
+            el.set(qn("w:val"), "single")
+            el.set(qn("w:sz"), "12")
+            el.set(qn("w:space"), "24")
+            el.set(qn("w:color"), "000000")
+            borders.append(el)
+        # schema order: pgBorders just before lnNumType / pgNumType / cols / docGrid
+        anchor = None
+        for tag in ("w:lnNumType", "w:pgNumType", "w:cols", "w:docGrid"):
+            found = sect_pr.find(qn(tag))
+            if found is not None:
+                anchor = found
+                break
+        if anchor is not None:
+            anchor.addprevious(borders)
+        else:
+            sect_pr.append(borders)
 
     # -- styling ------------------------------------------------------------
     def _setup_styles(self):
@@ -1551,6 +1582,7 @@ class ReportBuilder:
             anchor.addprevious(pg_num)
         else:
             sect_pr.append(pg_num)
+        self._add_page_border(sec)
         return sec
 
     def add_footer(self):
