@@ -49,6 +49,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import openpyxl
 
+import word_chart
+
 from docx import Document
 from docx.enum.section import WD_SECTION_START
 from docx.enum.style import WD_STYLE_TYPE
@@ -1275,6 +1277,22 @@ def make_chart_share(a: Analysis, out_path, direction):
     finish(fig, out_path)
 
 
+def pie_share_rows(items, n=10):
+    """Labels + shares for the top ``n`` products, for editable pie charts.
+
+    Mirrors the Excel deliverable's pie data so the Word pie (Figure 2/3)
+    and the Excel deliverable's pie reflect the same numbers.
+    """
+    out = []
+    for d in (items or [])[:n]:
+        if d.get("share") is None:
+            continue
+        lab = short_product_name(d.get("label") or d.get("name"),
+                                 d.get("code"), maxlen=42)
+        out.append((lab, round(d["share"], 6)))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Word document building
 # ---------------------------------------------------------------------------
@@ -1438,6 +1456,20 @@ class ReportBuilder:
         p = self.doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.add_run().add_picture(image_path, width=Inches(width_in))
+        return p
+
+    def add_word_chart(self, kind, title, categories, series, width_in=6.3,
+                       height_in=3.6, name="Chart"):
+        """Insert a native, editable Word chart in a centred paragraph.
+
+        kind: "bar" (series = [(name, [values...]), ...]) or
+              "pie" (series = [share, ...], categories = labels).
+        """
+        p = self.doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        word_chart.inject_chart(p, kind, title, categories, series,
+                                width_in=width_in, height_in=height_in,
+                                name=name)
         return p
 
     def page_break(self):
@@ -2185,9 +2217,13 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     # 3.1 Trends
     b.add_heading(f"3.1 Kenya – {c['name']} Bilateral Trade Trends", level=2)
     b.add_table_caption(f"Figure 1: Kenya – {c['name']} Balance of Trade")
-    fig1 = os.path.join(tmp_dir, "chart_balance.png")
-    make_chart_balance(a, fig1)
-    b.add_figure(fig1)
+    b.add_word_chart(
+        "bar", f"Kenya – {c['name']} Balance of Trade (USD Million)",
+        a.balance["years"],
+        [("Exports", a.balance["exports"]),
+         ("Imports", a.balance["imports"]),
+         ("Balance of Trade", a.balance["balance"])],
+        width_in=6.3, height_in=3.6, name="Figure 1 - Balance of Trade")
     b.add_source()
     for line in narr["s31"]:
         b.add_bullet(line)
@@ -2204,9 +2240,11 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
 
     b.add_para(f"Share of Kenya's Top Export Products to {c['name']}", bold=True)
     b.add_table_caption(f"Figure 2: Share of Kenya's Top Exports to {c['name']} in {Y}")
-    fig2 = os.path.join(tmp_dir, "chart_export_share.png")
-    make_chart_share(a, fig2, "exports")
-    b.add_figure(fig2)
+    _ex2 = pie_share_rows(a.table5.get("items") if a.table5 else None)
+    b.add_word_chart(
+        "pie", f"Share of Kenya's Top Exports to {c['name']} in {Y}",
+        [lab for lab, _ in _ex2], [sh for _, sh in _ex2],
+        width_in=5.6, height_in=4.4, name="Figure 2 - Top Exports")
     b.add_bullet(narr["fig2_note"])
     b.page_break()
 
@@ -2226,9 +2264,11 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     # 3.4 Import share figure
     b.add_heading("3.4 Share of top Import Products from " + c["name"], level=2)
     b.add_table_caption(f"Figure 3: Share of Kenya's Top Imports from {c['name']} in {Y}")
-    fig3 = os.path.join(tmp_dir, "chart_import_share.png")
-    make_chart_share(a, fig3, "imports")
-    b.add_figure(fig3)
+    _ex3 = pie_share_rows(a.table6.get("items") if a.table6 else None)
+    b.add_word_chart(
+        "pie", f"Share of Kenya's Top Imports from {c['name']} in {Y}",
+        [lab for lab, _ in _ex3], [sh for _, sh in _ex3],
+        width_in=5.6, height_in=4.4, name="Figure 3 - Top Imports")
     b.add_bullet(narr["fig3_note"])
     b.page_break()
 
