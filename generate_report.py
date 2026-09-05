@@ -79,9 +79,7 @@ THEME_ACCENTS = ["#156082", "#E97132", "#196B24", "#0F9ED5", "#A02B93", "#4EA72E
 FONT_PREFERENCE = ["Century Gothic", "Liberation Serif", "DejaVu Serif", "Arial"]
 
 SRC = ("Source: International Trade Centre (ITC) Trade Map database. "
-       "Macroeconomic indicators are drawn from official sources (World Bank, "
-       "IMF World Economic Outlook and WTO). Compiled by KEPROBA - Research "
-       "and Innovation Directorate (RID).")
+       "Compiled by KEPROBA - Research and Innovation Directorate (RID).")
 
 
 # ---------------------------------------------------------------------------
@@ -98,10 +96,21 @@ def to_float(v):
 
 
 def num(v, decimals=1):
-    """Format a number to `decimals` decimals, e.g. 30.2349 -> '30.2'."""
+    """Format a number to `decimals` decimals with thousands separators,
+    e.g. 3422.5 -> '3,422.5' (Word table/Excel-deliverable convention)."""
     if v is None:
         return ""
-    return f"{v:.{decimals}f}"
+    n = f"{v:.{decimals}f}"
+    if "." in n:
+        whole, frac = n.split(".")
+        frac = "." + frac
+    else:
+        whole, frac = n, ""
+    sign = ""
+    if whole.startswith("-"):
+        sign, whole = "-", whole[1:]
+    whole = f"{int(whole):,}" if whole.isdigit() else whole
+    return sign + whole + frac
 
 
 def pct(share, decimals=1):
@@ -1239,6 +1248,7 @@ def make_chart_balance(a: Analysis, out_path):
     ax.set_xticklabels([str(y) for y in years], fontsize=9)
     ax.set_ylabel("Value in USD Million", fontsize=10)
     ax.set_title(f"Kenya – {a.country} Balance of Trade (USD Million)", fontsize=12, weight="bold")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:,.1f}"))
     ax.yaxis.grid(True, linestyle="--", alpha=0.35)
     ax.set_axisbelow(True)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.10), ncol=3, frameon=False, fontsize=10)
@@ -1490,17 +1500,21 @@ class ReportBuilder:
         return p
 
     def add_word_chart(self, kind, title, categories, series, width_in=6.3,
-                       height_in=3.6, name="Chart"):
+                       height_in=3.6, name="Chart", colors=None,
+                       hole_size=50):
         """Insert a native, editable Word chart in a centred paragraph.
 
-        kind: "bar" (series = [(name, [values...]), ...]) or
-              "pie" (series = [share, ...], categories = labels).
+        kind: "bar" / "stacked" / "line" (series = [(name, [..]), ...]) or
+              "pie" / "doughnut" (series = [share, ...], categories = labels).
+        colors: optional per-slice / per-series palette; ``hole_size`` only
+        matters for doughnuts.
         """
         p = self.doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         word_chart.inject_chart(p, kind, title, categories, series,
-                                width_in=width_in, height_in=height_in,
-                                name=name)
+                                colors=colors, width_in=width_in,
+                                height_in=height_in, name=name,
+                                hole_size=hole_size)
         return p
 
     def page_break(self):
@@ -1595,7 +1609,7 @@ class ReportBuilder:
         tab_stops = p.paragraph_format.tab_stops
         tab_stops.add_tab_stop(Inches(6.5), WD_ALIGN_PARAGRAPH.RIGHT)
         r = p.add_run("Research and Innovation Directorate (RI)")
-        self._style_run(r, size=10)
+        self._style_run(r, size=10, italic=True)
         r2 = p.add_run("\t")
         self._style_run(r2, size=10)
         run = p.add_run()
@@ -2020,6 +2034,32 @@ class ReportBuilder:
             row.cells[1].width = Inches(4.2)
         return table
 
+    def _excel_cell_text(self, cell):
+        """Render an Excel cell for a Word table: thousands separators for
+        values >= 1000, one decimal by default, percents as '27.4%', while
+        index columns (RCA/HHI/score) keep the precision their Excel format
+        declares.
+        """
+        v = cell.value
+        if v is None:
+            return ""
+        if isinstance(v, str):
+            return v
+        if isinstance(v, bool):
+            return str(v)
+        if isinstance(v, (int, float)):
+            fmt = (cell.number_format or "").replace("General", "").strip()
+            if "%" in fmt:
+                return pct(v, 1)
+            dec = 1
+            m = re.search(r"0+(\.0+)?", fmt)
+            if m and m.group(1):
+                dec = len(m.group(1).strip("."))
+            elif fmt and not re.search(r"\.0+", fmt):
+                dec = 0
+            return num(v, dec)
+        return str(v)
+
     def add_table_from_excel(self, excel_path, sheet_name=None):
         """Add a table from an Excel file to the document."""
         import openpyxl as xl
@@ -2029,8 +2069,8 @@ class ReportBuilder:
         else:
             ws = wb.active
         rows = []
-        for row in ws.iter_rows(values_only=True):
-            rows.append([str(c) if c is not None else "" for c in row])
+        for row in ws.iter_rows():
+            rows.append([self._excel_cell_text(c) for c in row])
         wb.close()
         if not rows:
             return

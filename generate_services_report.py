@@ -691,6 +691,7 @@ def make_chart_balance(a: ServicesAnalysis, out_path):
     ax.set_xticklabels([str(y) for y in years], fontsize=9)
     ax.set_ylabel("Value in USD Million", fontsize=10)
     ax.set_title(f"Kenya Services Balance of Trade (USD Million)", fontsize=12, weight="bold")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:,.1f}"))
     ax.yaxis.grid(True, linestyle="--", alpha=0.35)
     ax.set_axisbelow(True)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.10), ncol=3, frameon=False, fontsize=10)
@@ -737,6 +738,69 @@ def make_chart_import_share(a: ServicesAnalysis, out_path):
     ax.set_title(f"Share of Kenya's Service Imports by Category in {a.year}",
                  fontsize=12, weight="bold")
     finish(fig, out_path)
+
+
+# ---------------------------------------------------------------------------
+# Editable-chart data helpers
+# ---------------------------------------------------------------------------
+def service_share_rows(items, n=10):
+    """(label, fraction) pairs for editable doughnuts from parsed items.
+
+    Uses the parsed 'share' column; falls back to the most recent year whose
+    values are populated (mirrors ``charts.series_shares``/the Excel
+    deliverable) so the Word chart and the Excel figure agree.
+    """
+    def lab(d):
+        return short_product_name(d.get("label") or d.get("name"), maxlen=42)
+
+    parsed = [(lab(d), d.get("share")) for d in (items or [])[:n]]
+    if any(s is not None for _, s in parsed):
+        return [(l, round(s, 6)) for l, s in parsed if s is not None]
+    rows = [d.get("years") or [] for d in (items or [])[:n]]
+    ncol = max((len(r) for r in rows), default=0)
+    for k in range(ncol - 1, -1, -1):
+        vals = [r[k] if k < len(r) and r[k] else 0.0 for r in rows]
+        total = sum(vals)
+        if total > 0:
+            return [(lab(d), round(v / total, 6))
+                    for d, v in zip((items or [])[:n], vals)]
+    return []
+
+
+def region_bar_series(excel_path):
+    """Grouped-bar series for the Table 7/8 regional workbooks.
+
+    Rows carry ``Region | Rank | <verb> | Value in USD Billion (year) | ...``;
+    returns (categories, series) where categories are regions ordered by
+    total value and each series is the top-ranked country per region.
+    """
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb.worksheets[0]
+    rows = []
+    for row in ws.iter_rows(min_row=3, values_only=True):
+        if not row or not row[0]:
+            continue
+        regions_sort = str(row[0]).strip()
+        val = to_float(row[3])
+        if val is None:
+            continue
+        rows.append((regions_sort, str(row[2]).strip(), val))
+    regions = sorted({r for r, _, _ in rows},
+                     key=lambda r: -sum(v for rr, _, v in rows if rr == r))
+    ranks = {}
+    for r, name, val in rows:
+        ranks.setdefault(r, []).append((name, val))
+    series = []
+    for rank in range(3):
+        vals = []
+        for r in regions:
+            entries = sorted(ranks.get(r, []), key=lambda e: -e[1])
+            if rank < len(entries):
+                vals.append(round(entries[rank][1], 1))
+            else:
+                vals.append(None)
+        series.append(("Rank %d" % (rank + 1), vals))
+    return regions, series
 
 
 # ---------------------------------------------------------------------------
@@ -805,12 +869,21 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
             b.add_bullet(line)
     b.page_break()
 
-    # Export share chart
+    # Export share chart (editable doughnut)
     b.add_para("Share of Global Service Exports by Country", bold=True)
     b.add_table_caption(f"Figure 1: Share of Global Service Exports in {Y}")
-    fig1 = os.path.join(tmp_dir, "chart_export_share.png")
-    make_chart_export_share(a, fig1)
-    b.add_figure(fig1)
+    _sh1 = service_share_rows(a.table3.get("items") if a.table3 else None)
+    if _sh1:
+        b.add_word_chart(
+            "doughnut",
+            f"Share of Kenya's Service Exports by Category in {Y}",
+            [l for l, _ in _sh1], [s for _, s in _sh1],
+            width_in=6.0, height_in=4.6,
+            name="Figure 1 - Service Export Shares",
+            colors=[c.lstrip("#") for c in THEME_ACCENTS])
+    else:
+        b.add_para("[Share chart data not available]", italic=True,
+                   color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
     b.page_break()
 
@@ -842,12 +915,21 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
             b.add_bullet(line)
     b.page_break()
 
-    # Import share chart
+    # Import share chart (editable doughnut)
     b.add_para("Share of Kenya's Service Imports by Category", bold=True)
     b.add_table_caption(f"Figure 2: Share of Kenya's Service Imports in {Y}")
-    fig2 = os.path.join(tmp_dir, "chart_import_share.png")
-    make_chart_import_share(a, fig2)
-    b.add_figure(fig2)
+    _sh2 = service_share_rows(a.table4.get("items") if a.table4 else None)
+    if _sh2:
+        b.add_word_chart(
+            "doughnut",
+            f"Share of Kenya's Service Imports by Category in {Y}",
+            [l for l, _ in _sh2], [s for _, s in _sh2],
+            width_in=6.0, height_in=4.6,
+            name="Figure 2 - Service Import Shares",
+            colors=[c.lstrip("#") for c in THEME_ACCENTS])
+    else:
+        b.add_para("[Share chart data not available]", italic=True,
+                   color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
     b.page_break()
 
@@ -922,11 +1004,17 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         italic=True)
     b.page_break()
 
-    # Regional exporter chart
-    reg_exp_path = os.path.join(excel_dir, "Figure 4 Service Exports by Region.png")
-    if os.path.exists(reg_exp_path):
+    # Regional exporter chart (editable grouped bar from Table 7)
+    reg_exp_table = os.path.join(excel_dir, "Table 7 Service Exporters by Region.xlsx")
+    if os.path.exists(reg_exp_table):
+        _cat, _ser = region_bar_series(reg_exp_table)
         b.add_table_caption("Figure 6: Top Service Exporters by Region")
-        b.add_figure(reg_exp_path)
+        b.add_word_chart(
+            "bar", "Top Service Exporters by Region (USD Billion)",
+            _cat, _ser,
+            width_in=6.3, height_in=3.8,
+            name="Figure 6 - Service Exporters by Region",
+            colors=["#2E75B6", "#ED7D31", "#70AD47"])
         b.add_source()
     b.page_break()
 
@@ -940,11 +1028,17 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     b.page_break()
 
-    # Regional importer chart
-    reg_imp_path = os.path.join(excel_dir, "Figure 5 Service Imports by Region.png")
-    if os.path.exists(reg_imp_path):
+    # Regional importer chart (editable grouped bar from Table 8)
+    reg_imp_table = os.path.join(excel_dir, "Table 8 Service Importers by Region.xlsx")
+    if os.path.exists(reg_imp_table):
+        _cat, _ser = region_bar_series(reg_imp_table)
         b.add_table_caption("Figure 7: Top Service Importers by Region")
-        b.add_figure(reg_imp_path)
+        b.add_word_chart(
+            "bar", "Top Service Importers by Region (USD Billion)",
+            _cat, _ser,
+            width_in=6.3, height_in=3.8,
+            name="Figure 7 - Service Importers by Region",
+            colors=["#2E75B6", "#ED7D31", "#70AD47"])
         b.add_source()
     b.page_break()
 
@@ -970,11 +1064,19 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         italic=True)
     b.page_break()
 
-    # Figure 6: RCA chart
-    rca_chart = os.path.join(excel_dir, "Figure 6 Kenya Services RCA.png")
-    if os.path.exists(rca_chart):
+    # Figure 8: RCA chart (editable bar)
+    rca_items = [d for d in a.rca.get("items", []) if d.get("rca") is not None]
+    if rca_items:
+        rca_items = sorted(rca_items, key=lambda d: d["rca"])
+        _cat = [short_product_name(d["category"], maxlen=42) for d in rca_items]
+        _ser = [("RCA", [round(d["rca"], 2) for d in rca_items])]
         b.add_table_caption("Figure 8: Kenya's Service Export RCA by Category")
-        b.add_figure(rca_chart)
+        b.add_word_chart(
+            "bar", "Kenya's Service Export RCA by Category",
+            _cat, _ser,
+            width_in=6.3, height_in=4.2,
+            name="Figure 8 - Kenya Services RCA",
+            colors=["#2E75B6"])
         b.add_source()
     b.page_break()
 
@@ -999,11 +1101,20 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         italic=True)
     b.page_break()
 
-    # Figure 7: Concentration chart
-    conc_chart = os.path.join(excel_dir, "Figure 7 Concentration Comparison.png")
-    if os.path.exists(conc_chart):
+    # Figure 9: Concentration chart (editable grouped bar, Kenya vs World)
+    conc = a.concentration
+    if conc and (conc.get("kenya_hhi") is not None or conc.get("kenya_top3") is not None
+                 or conc.get("kenya_top5") is not None):
+        _cat = ["HHI", "Top-3 Share", "Top-5 Share"]
+        _ke = [conc.get("kenya_hhi"), conc.get("kenya_top3"), conc.get("kenya_top5")]
+        _wo = [conc.get("world_hhi"), conc.get("world_top3"), conc.get("world_top5")]
         b.add_table_caption("Figure 9: Kenya vs World Export Concentration Metrics")
-        b.add_figure(conc_chart)
+        b.add_word_chart(
+            "bar", "Kenya vs World: Export Concentration Metrics",
+            _cat, [("Kenya", _ke), ("World", _wo)],
+            width_in=6.3, height_in=3.6,
+            name="Figure 9 - Export Concentration",
+            colors=["#2E75B6", "#ED7D31"])
         b.add_source()
     b.page_break()
 
@@ -1028,11 +1139,20 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         italic=True)
     b.page_break()
 
-    # Figure 8: Diversification chart
-    div_chart = os.path.join(excel_dir, "Figure 8 Diversification Opportunities.png")
-    if os.path.exists(div_chart):
+    # Figure 10: Diversification chart (editable bar)
+    div_items = [d for d in a.diversification.get("items", [])
+                 if d.get("score") is not None and d.get("score", 0) > 0]
+    if div_items:
+        div_items = sorted(div_items, key=lambda d: d["score"])
+        _cat = [short_product_name(d["category"], maxlen=42) for d in div_items]
+        _ser = [("Opportunity Score", [round(d["score"], 4) for d in div_items])]
         b.add_table_caption("Figure 10: Kenya's Top Diversification Opportunities")
-        b.add_figure(div_chart)
+        b.add_word_chart(
+            "bar", "Kenya's Top Diversification Opportunities in Services",
+            _cat, _ser,
+            width_in=6.3, height_in=4.2,
+            name="Figure 10 - Diversification Opportunities",
+            colors=["#70AD47"])
         b.add_source()
     b.page_break()
 
@@ -1057,11 +1177,25 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         italic=True)
     b.page_break()
 
-    # Figure 9: Value composition chart
-    traj_chart = os.path.join(excel_dir, "Figure 9 Value Composition Trajectory.png")
-    if os.path.exists(traj_chart):
+    # Figure 11: Value composition trajectory (editable stacked bar)
+    traj = a.trajectory
+    trad = traj if isinstance(traj, dict) else {}
+    years_t = trad.get("years") or []
+    shares_t = trad.get("shares") or {}
+    if years_t and any(shares_t.get(k) for k in ("high", "traditional", "other")):
+        def _pct(vals):
+            return [round((v or 0) * 100, 1) for v in vals]
         b.add_table_caption("Figure 11: Kenya's Service Export Composition Over Time")
-        b.add_figure(traj_chart)
+        b.add_word_chart(
+            "stacked",
+            "Kenya's Service Export Composition Over Time",
+            [str(y) for y in years_t],
+            [("High-Value Services", _pct(shares_t.get("high", []))),
+             ("Traditional Services", _pct(shares_t.get("traditional", []))),
+             ("Other Services", _pct(shares_t.get("other", [])))],
+            width_in=6.3, height_in=3.8,
+            name="Figure 11 - Value Composition Trajectory",
+            colors=["#2E75B6", "#70AD47", "#A5A5A5"])
         b.add_source()
     b.page_break()
 
@@ -1115,11 +1249,21 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     # ============================== SECTION 5 ===============================
     b.add_heading("5. Kenya's Services Trade Balance")
 
-    # Figure 1: Balance chart
+    # Figure 3: Balance chart (editable bar)
     b.add_table_caption(f"Figure 3: Kenya's Services Balance of Trade")
-    fig3 = os.path.join(tmp_dir, "chart_balance.png")
-    make_chart_balance(a, fig3)
-    b.add_figure(fig3)
+    if a.balance and a.balance.get("years"):
+        b.add_word_chart(
+            "bar", "Kenya Services Balance of Trade (USD Million)",
+            a.balance["years"],
+            [("Exports", a.balance["exports"]),
+             ("Imports", a.balance["imports"]),
+             ("Balance of Trade", a.balance["balance"])],
+            width_in=6.3, height_in=3.6,
+            name="Figure 3 - Services Balance of Trade",
+            colors=["#156082", "#E97132", "#196B24"])
+    else:
+        b.add_para("[Balance chart data not available]", italic=True,
+                   color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
     for line in narr.get("s5", []):
         if line:
@@ -1159,7 +1303,7 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
         xlsx_out = os.path.splitext(out_path)[0] + " TABLES.xlsx"
         xdir = os.path.dirname(xlsx_out) or "."
         os.makedirs(xdir, exist_ok=True)
-        excel_deliverable.build_services_deliverable(a, cfg, xlsx_out)
+        excel_deliverable.build_services_deliverable(a, cfg, xlsx_out, excel_dir)
         print(f"      Excel deliverable saved to   : {xlsx_out}")
     except Exception as _e:  # additive; never break the report build
         print(f"      [warn] Excel deliverable skipped: {_e}")

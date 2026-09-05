@@ -25,7 +25,7 @@ import io
 from lxml import etree
 
 import openpyxl
-from openpyxl.chart import BarChart, PieChart, Reference
+from openpyxl.chart import BarChart, DoughnutChart, LineChart, PieChart, Reference
 from openpyxl.chart.series import DataPoint
 from openpyxl.chart.label import DataLabelList
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -80,7 +80,7 @@ def _write_chart_data(wb, kind, categories, series, colors):
     ws = wb.active
     ws.title = "Sheet1"
 
-    if kind == "pie":
+    if kind in ("pie", "doughnut"):
         ws.cell(1, 1, "Category")
         ws.cell(1, 2, "Share")
         for i, (lab, sh) in enumerate(zip(categories, series), start=2):
@@ -88,8 +88,8 @@ def _write_chart_data(wb, kind, categories, series, colors):
             c = ws.cell(i, 2)
             c.value = sh
             c.number_format = "0.0%"
-    else:  # bar
-        ws.cell(1, 1, "Year")
+    else:  # bar / line / stacked: one named column per series
+        ws.cell(1, 1, "Category")
         for sidx, (name, values) in enumerate(series, start=1):
             ws.cell(1, 1 + sidx, name)
             for ri, v in enumerate(values, start=2):
@@ -105,14 +105,22 @@ def _write_chart_data(wb, kind, categories, series, colors):
             c.alignment = Alignment(horizontal="right")
 
 
-def _build_openpyxl_chart(kind, title, categories, series, colors):
-    """Construct and return (chart, workbook) ready for Word packaging."""
+def _build_openpyxl_chart(kind, title, categories, series, colors,
+                          hole_size=50):
+    """Construct and return (chart, workbook) ready for Word packaging.
+
+    kind: "bar" -> clustered columns (series = [(name, [..]), ...])
+          "stacked" -> stacked columns      (series = [(name, [..]), ...])
+          "line"  -> line                   (series = [(name, [..]), ...])
+          "pie"   -> pie                    (series = [share, ...])
+          "doughnut" -> doughnut            (series = [share, ...])
+    """
     wb = openpyxl.Workbook()
     _write_chart_data(wb, kind, categories, series, colors)
     ws = wb.active
 
-    if kind == "pie":
-        chart = PieChart()
+    if kind in ("pie", "doughnut"):
+        chart = DoughnutChart() if kind == "doughnut" else PieChart()
         chart.title = title
         labels = Reference(ws, min_col=1, min_row=2,
                            max_row=1 + len(categories))
@@ -121,7 +129,10 @@ def _build_openpyxl_chart(kind, title, categories, series, colors):
         chart.set_categories(labels)
         chart.dataLabels = DataLabelList()
         chart.dataLabels.showPercent = True
+        chart.dataLabels.numFmt = "0.0%"
         chart.legend = None
+        if kind == "doughnut":
+            chart.holeSize = hole_size
         # per-point fill colours (openpyxl keeps default Office palette when
         # points aren't specified; setting them keeps parity with the pie).
         chart.series[0].data_points = [
@@ -129,10 +140,13 @@ def _build_openpyxl_chart(kind, title, categories, series, colors):
         for i in range(len(categories)):
             col = colors[i % len(colors)]
             chart.series[0].data_points[i].graphicalProperties.solidFill = col
-    else:  # bar
-        chart = BarChart()
-        chart.type = "col"
-        chart.grouping = "clustered"
+    else:  # bar / stacked / line
+        if kind == "line":
+            chart = LineChart()
+        else:
+            chart = BarChart()
+            chart.type = "col"
+            chart.grouping = "stacked" if kind == "stacked" else "clustered"
         chart.title = title
         data = Reference(ws, min_col=1, min_row=1,
                          max_col=1 + len(series),
@@ -141,6 +155,8 @@ def _build_openpyxl_chart(kind, title, categories, series, colors):
                          max_row=1 + len(categories))
         chart.add_data(data, titles_from_data=True)
         chart.set_categories(cats)
+        # thousands separator on the value-axis tick labels (e.g. 3,422)
+        chart.y_axis.number_format = "#,##0.0"
 
     return chart, wb
 
@@ -237,7 +253,7 @@ def _populate_caches(root, kind, categories, series):
 
 
 def _series_name(kind, series, si):
-    if kind == "pie":
+    if kind in ("pie", "doughnut"):
         return "Share"
     if si < len(series):
         return series[si][0]
@@ -245,7 +261,7 @@ def _series_name(kind, series, si):
 
 
 def _series_values(kind, series, si):
-    if kind == "pie":
+    if kind in ("pie", "doughnut"):
         return list(series)
     if si < len(series):
         return list(series[si][1])
@@ -277,16 +293,20 @@ def _drawing_inline(chart_r_id, doc_pr_id, name, cx, cy):
 
 
 def inject_chart(paragraph, kind, title, categories, series, colors=None,
-                 width_in=6.3, height_in=3.6, name="Chart"):
+                 width_in=6.3, height_in=3.6, name="Chart", hole_size=50):
     """Install a native editable chart into an existing *paragraph*.
 
-    kind: "bar"  -> clustered column (series = [(name,[...]), ...])
-          "pie"  -> pie            (series = [share, ...]; categories = labels)
+    kind: "bar"      -> clustered column (series = [(name,[...]), ...])
+          "stacked"  -> stacked column   (series = [(name,[...]), ...])
+          "line"     -> line             (series = [(name,[...]), ...])
+          "pie"      -> pie              (series = [share, ...]; categories = labels)
+          "doughnut" -> doughnut         (series = [share, ...]; categories = labels)
 
     Returns the document-part rId of the chart part (useful for tests).
     """
     colors = colors or THEME
-    chart, wb = _build_openpyxl_chart(kind, title, categories, series, colors)
+    chart, wb = _build_openpyxl_chart(
+        kind, title, categories, series, colors, hole_size=hole_size)
     # openpyxl builds a namespace-free tree (xmlns applied only on write), so
     # serialise then re-parse to attach real namespaces before we enrich it
     # with value caches that Word needs for reliable rendering.

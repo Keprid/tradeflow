@@ -12,8 +12,11 @@ the same display formats as the printed report.  Nothing here parses source
 workbooks or the docx: it reads the already-computed ``Analysis``/``cfg``.
 """
 
+import os
+
 import openpyxl
-from openpyxl.chart import PieChart, BarChart, Reference, Series
+from openpyxl.chart import (PieChart, DoughnutChart, BarChart, Reference,
+                            Series)
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import DataPoint
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -176,7 +179,7 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
         for i, y in enumerate(years):
             v = d["years"][i] if i < len(d.get("years") or []) else None
             vc = _put(rw, col_label + i)
-            _value_cell(vc, v if v is not None else "", '0.0')
+            _value_cell(vc, v if v is not None else "", "#,##0.0")
             vc.alignment = RIGHT if isinstance(v, (int, float)) else CENTER
         sc = _put(rw, col_share)
         if d.get("share") is not None:
@@ -315,7 +318,7 @@ def _add_balance_bar(ws, top_row, a):
             v = series[i] if i < len(series) else None
             c = ws.cell(rr, cc)
             c.value = v if v is not None else ""
-            c.number_format = '0.0'
+            c.number_format = "#,##0.0"
             c.alignment = RIGHT
 
     n = len(years)
@@ -403,7 +406,7 @@ def _write_table7_sheet(wb, a):
             c = ws.cell(rr, 3 + i)
             val = v[i] if i < len(v) else None
             c.value = val if val is not None else ""
-            c.number_format = "0.0"
+            c.number_format = "#,##0.0"
         sc = ws.cell(rr, 3 + n)
         if d.get("share") is not None:
             sc.value = round(d["share"], 6)
@@ -417,6 +420,123 @@ def _write_table7_sheet(wb, a):
     last = rr - 1 if first is not None else hr
     _apply_borders(ws, hr, 1, last, 3 + n, 3 + n)
     _fit_col_widths(ws, [8, 30] + [11] * n + [12])
+
+
+def _add_doughnut(ws, top_row, title, labels_values, colors=None,
+                  hole_size=50, offset_anchor="C"):
+    """Editable doughnut of ``labels_values`` (label, fraction)."""
+    start = top_row
+    ws.cell(start, 1).value = "Category"
+    ws.cell(start, 2).value = "Share"
+    for cc in (1, 2):
+        c = ws.cell(start, cc)
+        c.font = HDR_FONT
+        c.fill = HDR_FILL
+        c.alignment = CENTER
+    for i, (lab, v) in enumerate(labels_values, start=start + 1):
+        ws.cell(i, 1).value = lab
+        cv = ws.cell(i, 2)
+        cv.value = v
+        cv.number_format = "0.0%"
+    last = start + len(labels_values)
+
+    data = Reference(ws, min_col=2, min_row=start + 1, max_row=last)
+    cats = Reference(ws, min_col=1, min_row=start + 1, max_row=last)
+    chart = DoughnutChart()
+    chart.title = title
+    chart.holeSize = hole_size
+    chart.width = 14
+    chart.height = 8
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showPercent = True
+    chart.dataLabels.numFmt = "0.0%"
+    chart.add_data(data, titles_from_data=False)
+    chart.set_categories(cats)
+    for i in range(len(labels_values)):
+        dp = DataPoint(idx=i)
+        dp.graphicalProperties.solidFill = (colors or THEME)[i % len(colors or THEME)]
+        chart.series[0].data_points.append(dp)
+    chart.legend = None
+    ws.add_chart(chart, "%s%d" % (offset_anchor, start))
+    return chart
+
+
+def _add_bar_generic(ws, top_row, title, cats, series, colors=None,
+                     offset_anchor="A", grouping="clustered", stack=False):
+    """Editable column chart; ``series`` = [(name, [values, ...]), ...]."""
+    r0 = top_row
+    ws.cell(r0, 1).value = "Category"
+    for i, (name, _vals) in enumerate(series, start=2):
+        ws.cell(r0, i).value = name
+    n = max((len(v) for _, v in series), default=0)
+    for i, c in enumerate(cats, start=1):
+        rr = r0 + i
+        ws.cell(rr, 1).value = c
+        for si, (_name, vals) in enumerate(series, start=2):
+            v = vals[i - 1] if i - 1 < len(vals) else None
+            cell = ws.cell(rr, si)
+            cell.value = v if v is not None else ""
+            cell.number_format = "#,##0.0"
+    for cc in range(1, 2 + len(series)):
+        c = ws.cell(r0, cc)
+        c.font = HDR_FONT
+        c.fill = HDR_FILL
+        c.alignment = CENTER
+
+    chart = BarChart()
+    chart.type = "col"
+    chart.grouping = grouping
+    chart.title = title
+    chart.height = 9
+    chart.width = 18
+    data = Reference(ws, min_col=1, min_row=r0, max_col=1 + len(series),
+                     max_row=r0 + n)
+    cats_ref = Reference(ws, min_col=1, min_row=r0 + 1, max_row=r0 + n)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats_ref)
+    if colors:
+        for i, s in enumerate(chart.series):
+            s.graphicalProperties.solidFill = colors[i % len(colors)]
+    ws.add_chart(chart, "%s%d" % (offset_anchor, r0 + n + 2))
+    return chart
+
+
+def _add_series_bar(ws, top_row, title, cats, values, offset_anchor="A",
+                    colors=None):
+    return _add_bar_generic(ws, top_row, title, cats,
+                            [("Value", values or [])], colors=colors,
+                            offset_anchor=offset_anchor)
+
+
+def _region_bar_series(excel_path):
+    """Grouped-bar data from the Table 7/8 regional workbooks."""
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb.worksheets[0]
+    rows = []
+    for row in ws.iter_rows(min_row=3, values_only=True):
+        if not row or not row[0]:
+            continue
+        val = None
+        try:
+            val = float(row[3])
+        except (TypeError, ValueError):
+            val = None
+        if val is None:
+            continue
+        rows.append((str(row[0]).strip(), str(row[2]).strip(), val))
+    regions = sorted({r for r, _, _ in rows},
+                     key=lambda r: -sum(v for rr, _, v in rows if rr == r))
+    ranks = {}
+    for r, _n, val in rows:
+        ranks.setdefault(r, []).append(val)
+    series = []
+    for rank in range(3):
+        vals = []
+        for r in regions:
+            entries = sorted(ranks.get(r, []), reverse=True)
+            vals.append(round(entries[rank], 1) if rank < len(entries) else None)
+        series.append(("Rank %d" % (rank + 1), vals))
+    return regions, series
 
 
 def _write_charts_sheet(wb, a):
@@ -441,10 +561,11 @@ def _write_charts_sheet(wb, a):
 # ---------------------------------------------------------------------------
 # Services report deliverable (shared goods-style table shape)
 # ---------------------------------------------------------------------------
-def build_services_deliverable(a, cfg, out_path):
+def build_services_deliverable(a, cfg, out_path, excel_dir=None):
     """Editable Excel workbook for the services trade-flow report (Tables 1-4
-    + balance & category-share charts).  Reuses the goods table writers because
-    services tables parse to the same shape."""
+    + editable balance, category-share, regional, RCA, concentration,
+    diversification and composition charts).  Reuses the goods table writers
+    because services tables parse to the same shape."""
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     years = a.years or [a.year]
@@ -468,19 +589,85 @@ def build_services_deliverable(a, cfg, out_path):
             [], flow, unit_row=not is_prod)
 
     if a.balance and a.balance.get("years"):
-        ws = wb.create_sheet("Figure 1 - Services Balance of Trade")
+        ws = wb.create_sheet("Figure 3 - Services Balance of Trade")
         _add_balance_bar(ws, 1, a)
 
     exp = _pie_data_rows_series(a.table3.get("items") if a.table3 else [], 10)
     if exp:
-        ws = wb.create_sheet("Figure 2 - Services Exports")
-        _add_pie(ws, 1, "Share of Kenya's Service Exports by Category in %s"
-                 % a.year, exp)
+        ws = wb.create_sheet("Figure 1 - Service Export Shares")
+        _add_doughnut(ws, 1, "Share of Kenya's Service Exports by Category in %s"
+                      % a.year, exp, colors=[c.lstrip("#") for c in THEME])
     imp = _pie_data_rows_series(a.table4.get("items") if a.table4 else [], 10)
     if imp:
-        ws = wb.create_sheet("Figure 3 - Services Imports")
-        _add_pie(ws, 1, "Share of Kenya's Service Imports by Category in %s"
-                 % a.year, imp)
+        ws = wb.create_sheet("Figure 2 - Service Import Shares")
+        _add_doughnut(ws, 1, "Share of Kenya's Service Imports by Category in %s"
+                      % a.year, imp, colors=[c.lstrip("#") for c in THEME])
+
+    if excel_dir and os.path.isdir(excel_dir):
+        for sheet, fname, caption, title in (
+                ("Figure 6 - Service Exporters by Region",
+                 "Table 7 Service Exporters by Region.xlsx",
+                 "Figure 6: Top Service Exporters by Region",
+                 "Top Service Exporters by Region (USD Billion)"),
+                ("Figure 7 - Service Importers by Region",
+                 "Table 8 Service Importers by Region.xlsx",
+                 "Figure 7: Top Service Importers by Region",
+                 "Top Service Importers by Region (USD Billion)")):
+            p = os.path.join(excel_dir, fname)
+            if os.path.exists(p):
+                cats, series = _region_bar_series(p)
+                ws = wb.create_sheet(sheet)
+                _add_bar_generic(ws, 1, title, cats, series,
+                                 colors=["2E75B6", "ED7D31", "70AD47"])
+
+    rca_items = [d for d in (a.rca or {}).get("items", [])
+                 if d.get("rca") is not None]
+    if rca_items:
+        rca_items = sorted(rca_items, key=lambda d: d["rca"])
+        ws = wb.create_sheet("Figure 8 - Kenya Services RCA")
+        _add_series_bar(
+            ws, 1, "Kenya's Service Export RCA by Category",
+            [clean_label(d.get("category") or "") for d in rca_items],
+            [d["rca"] for d in rca_items], colors=["2E75B6"])
+
+    conc = a.concentration if hasattr(a, "concentration") else None
+    conc = conc or {}
+    if any(conc.get(k) is not None for k in ("kenya_hhi", "kenya_top3",
+                                             "kenya_top5")):
+        ws = wb.create_sheet("Figure 9 - Concentration Metrics")
+        _add_bar_generic(
+            ws, 1, "Kenya vs World: Export Concentration Metrics",
+            ["HHI", "Top-3 Share", "Top-5 Share"],
+            [("Kenya", [conc.get("kenya_hhi"), conc.get("kenya_top3"),
+                        conc.get("kenya_top5")]),
+             ("World", [conc.get("world_hhi"), conc.get("world_top3"),
+                        conc.get("world_top5")])],
+            colors=["2E75B6", "ED7D31"])
+
+    div_items = [d for d in (a.diversification or {}).get("items", [])
+                 if d.get("score") is not None and d.get("score", 0) > 0]
+    if div_items:
+        div_items = sorted(div_items, key=lambda d: d["score"])
+        ws = wb.create_sheet("Figure 10 - Diversification Opportunities")
+        _add_series_bar(
+            ws, 1, "Kenya's Top Diversification Opportunities in Services",
+            [clean_label(d.get("category") or "") for d in div_items],
+            [round(d["score"], 4) for d in div_items], colors=["70AD47"])
+
+    traj = getattr(a, "trajectory", {}) or {}
+    shares_t = traj.get("shares") or {}
+    years_t = traj.get("years") or []
+    if years_t and any(shares_t.get(k) for k in ("high", "traditional", "other")):
+        def _pct(vals):
+            return [round((v or 0) * 100, 1) for v in vals]
+        ws = wb.create_sheet("Figure 11 - Composition Trajectory")
+        _add_bar_generic(
+            ws, 1, "Kenya's Service Export Composition Over Time",
+            [str(y) for y in years_t],
+            [("High-Value Services", _pct(shares_t.get("high", []))),
+             ("Traditional Services", _pct(shares_t.get("traditional", []))),
+             ("Other Services", _pct(shares_t.get("other", [])))],
+            colors=["2E75B6", "70AD47", "A5A5A5"], grouping="stacked")
 
     wb.save(out_path)
     return out_path
@@ -590,20 +777,20 @@ def _write_quarterly_table(ws, table, title,
         if comparison:
             for k in range(n_m):
                 _q_value(ws.cell(body, prev_start + k),
-                         prev_vals[k] if k < len(prev_vals) else None, "0.00")
+                         prev_vals[k] if k < len(prev_vals) else None, "#,##0.0")
             _q_value(ws.cell(body, prev_start + n_m),
-                     (d.get("totals") or [None, None])[0], "0.00")
+                     (d.get("totals") or [None, None])[0], "#,##0.0")
         for k in range(n_m):
             _q_value(ws.cell(body, cur_start + k),
-                     cur_vals[k] if k < len(cur_vals) else None, "0.00")
+                     cur_vals[k] if k < len(cur_vals) else None, "#,##0.0")
         _q_value(ws.cell(body, cur_start + n_m),
-                 (d.get("totals") or [None, None])[1], "0.00")
+                 (d.get("totals") or [None, None])[1], "#,##0.0")
         if comparison:
             chg = d.get("change")
             if chg is not None:
                 chg_cell = ws.cell(body, chg_col)
                 chg_cell.value = round(chg, 2)
-                chg_cell.number_format = "+0.00;-0.00;0.00"
+                chg_cell.number_format = "+#,##0.0;-#,##0.0;0.0"
             pctv = d.get("pct")
             p = ws.cell(body, pct_col)
             if pctv is not None:
@@ -649,9 +836,61 @@ def build_quarterly_deliverable(a, cfg, out_path):
         _write_quarterly_table(ws, table, title, flow)
 
     _add_quarterly_balance(wb, a)
+    _add_quarterly_shares(wb, a)
 
     wb.save(out_path)
     return out_path
+
+
+def _quarterly_slice_rows(a, table, year="cur", other_label="Other",
+                          max_slices=8, min_pct=2.0, n=12):
+    """(label, value) pairs consolidated like the reference doughnut PNG."""
+    labels, values = [], []
+    for name, v, _s in a.shares(table, n=n, year=year):
+        if v:
+            labels.append(name)
+            values.append(v)
+    return _consolidate_labels(labels, values, max_slices=max_slices,
+                               min_pct=min_pct, other_label=other_label)
+
+
+def _consolidate_labels(labels, values, max_slices=8, min_pct=2.0,
+                        other_label="Other"):
+    total = sum(v for v in values if v is not None) or 0.0
+    if total <= 0:
+        return [(l, v or 0.0) for l, v in zip(labels, values)]
+    keep, other_v = [], 0.0
+    for label, v in zip(labels, values):
+        v = v or 0.0
+        if len(keep) < max_slices and v / total * 100 >= min_pct and v > 0:
+            keep.append((label, v))
+        else:
+            other_v += v
+    if other_v > 0:
+        keep.append((other_label, other_v))
+    return keep
+
+
+def _add_quarterly_shares(wb, a):
+    """Editable doughnuts for Figure 1 (markets) and Figure 2 (products)."""
+    for sheet, table, other, fig in (
+            ("Figure 1 - Market Shares", a.t1, "Other markets", 1),
+            ("Figure 2 - Product Shares", a.t2, "All others products", 2)):
+        if not table or not table.get("grand", {}).get("totals"):
+            continue
+        ws = wb.create_sheet(sheet)
+        top = 1
+        for yr, year in ((a.year, "cur"), (a.year_prev, "prev")):
+            if yr is None or not a.has_comparison and year == "prev":
+                continue
+            rows = _quarterly_slice_rows(
+                a, table, year=year, other_label=other)
+            if not rows:
+                continue
+            _add_doughnut(ws, top, "Share in %d" % yr, rows,
+                          colors=[c.lstrip("#") for c in THEME],
+                          offset_anchor="A")
+            top += len(rows) + 12
 
 
 def _add_quarterly_balance(wb, a):
@@ -680,7 +919,7 @@ def _add_quarterly_balance(wb, a):
         for cc, series in ((2, exp), (3, imp), (4, bal)):
             v = series[i] if i < len(series) else None
             c = ws.cell(rr, cc)
-            _q_value(c, v if v is not None else "", "0.00")
+            _q_value(c, v if v is not None else "", "#,##0.0")
             c.alignment = RIGHT
     n = len(months)
     chart = BarChart()

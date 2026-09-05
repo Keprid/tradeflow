@@ -2158,6 +2158,25 @@ def write_balance(ws, years, exports, imports, cache=None):
         else:
             put_val(ws, r_bal, c, (e - i) if (e is not None and i is not None) else None, fill=BAND_FILL)
 
+    try:
+        from openpyxl.chart import BarChart, Reference
+        chart = BarChart()
+        chart.type = "col"
+        chart.title = "Kenya Services Balance of Trade"
+        chart.y_axis.title = "USD Million"
+        chart.x_axis.title = "Year"
+        chart.height = 9
+        chart.width = 20
+        cats = Reference(ws, min_col=2, max_col=2 + len(years) - 1,
+                         min_row=r_exp - 1)
+        chart.add_data(Reference(ws, min_col=1, max_col=2 + len(years) - 1,
+                                 min_row=r_exp, max_row=r_bal),
+                       titles_from_data=True, from_rows=True)
+        chart.set_categories(cats)
+        ws.add_chart(chart, "A%d" % (r_bal + 2))
+    except Exception:
+        pass
+
 
 
 # ---------------------------------------------------------------------------

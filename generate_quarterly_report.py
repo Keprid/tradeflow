@@ -566,6 +566,18 @@ def short_prod(label, maxlen=52):
         label, maxlen=maxlen - 1)
 
 
+def _share_doughnut_data(a, table, other_label, year="cur"):
+    """(label, value) pairs for an editable share doughnut, consolidated the
+    same way as the reference PNG (make_chart_share)."""
+    labels, values = [], []
+    for name, v, _s in a.shares(table, year=year):
+        if v:
+            labels.append(short_product_name(name, 40))
+            values.append(v)
+    return consolidate(labels, values, max_slices=8, min_pct=2.0,
+                       other_label=other_label)
+
+
 # ---------------------------------------------------------------------------
 # Narrative generation (every figure derived from the analysed data)
 # ---------------------------------------------------------------------------
@@ -943,6 +955,7 @@ def make_chart_balance(a: QuarterAnalysis, out_path):
     ax.set_ylabel("Value in Ksh. Billion", fontsize=10)
     ax.set_title("Kenya Balance of Trade %s %d" % (a.quarter, a.year),
                  fontsize=12, weight="bold")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:,.1f}"))
     ax.yaxis.grid(True, linestyle="--", alpha=0.35)
     ax.set_axisbelow(True)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.10), ncol=3,
@@ -1335,10 +1348,19 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
     b.add_heading("1. Overview")
     for key in ("overview_p1", "overview_p2", "overview_p3"):
         b.add_para(narr[key])
-    # uncaptioned balance chart, as in the reference report
-    bal_png = os.path.join(tmp_dir, "chart_balance.png")
-    make_chart_balance(a, bal_png)
-    b.add_figure(bal_png)
+    # uncaptioned editable balance chart, as in the reference report
+    if a.balance_months():
+        b.add_word_chart(
+            "bar", "Kenya Balance of Trade %s %d" % (a.quarter, a.year),
+            list(a.month_names),
+            [("Exports", list(a.exp_months())),
+             ("Imports", list(a.imp_months())),
+             ("Balance of Trade", list(a.balance_months()))],
+            width_in=6.3, height_in=3.6,
+            name="Balance of Trade %s %d" % (a.quarter, a.year),
+            colors=[lighten(THEME_ACCENTS[0], 0.30).lstrip("#"),
+                    lighten(THEME_ACCENTS[1], 0.30).lstrip("#"),
+                    lighten(THEME_ACCENTS[2], 0.30).lstrip("#")])
     b.add_source(SRC_KRA)
     b.page_break()
 
@@ -1377,10 +1399,24 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
                   "Markets %s %s" % (q_t, cmp_span))
     b.add_table_caption("Figure 1: Share of Exports by Market, %s %s"
                         % (q_t, cmp_span))
-    fig1 = os.path.join(tmp_dir, "chart_export_markets.png")
-    make_chart_share(a, a.t1, "Share of Exports by Market", fig1,
-                     other_label="Other markets")
-    b.add_figure(fig1, width_in=6.3 if a.has_comparison else 6.4)
+    for _yr in (a.year, a.year_prev):
+        if _yr is None:
+            continue
+        _cur = (_yr == a.year)
+        if not _cur and not a.has_comparison:
+            break
+        _labels, _values = _share_doughnut_data(a, a.t1, "Other markets",
+                                                year=("cur" if _cur else "prev"))
+        if not _labels or not _values:
+            b.add_para("[Market share chart data not available]", italic=True,
+                       color=RGBColor(0x9A, 0x1F, 0x1F))
+            break
+        b.add_word_chart(
+            "doughnut", "Share of Exports by Market: %d" % _yr,
+            [short_prod(l, 42) for l in _labels], list(_values),
+            width_in=6.3, height_in=(4.6 if _cur else 3.6),
+            name="Figure 1 - Export Shares %d" % _yr,
+            colors=[c.lstrip("#") for c in PIE_PALETTE])
     b.add_source(SRC_KRA)
     b.page_break()
 
@@ -1409,10 +1445,24 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
                   % (q_t, cmp_span))
     b.add_table_caption("Figure 2: Share of Top Exports by Products, %s "
                         "%s" % (q_t, cmp_span))
-    fig2 = os.path.join(tmp_dir, "chart_export_products.png")
-    make_chart_share(a, a.t2, "Share of Top Exports by Products", fig2,
-                     other_label="All others products")
-    b.add_figure(fig2, width_in=6.3 if a.has_comparison else 6.4)
+    for _yr in (a.year, a.year_prev):
+        if _yr is None:
+            continue
+        _cur = (_yr == a.year)
+        if not _cur and not a.has_comparison:
+            break
+        _labels, _values = _share_doughnut_data(a, a.t2, "All others products",
+                                                year=("cur" if _cur else "prev"))
+        if not _labels or not _values:
+            b.add_para("[Product share chart data not available]", italic=True,
+                       color=RGBColor(0x9A, 0x1F, 0x1F))
+            break
+        b.add_word_chart(
+            "doughnut", "Share of Top Exports by Products: %d" % _yr,
+            [short_prod(l, 42) for l in _labels], list(_values),
+            width_in=6.3, height_in=(4.6 if _cur else 3.6),
+            name="Figure 2 - Product Shares %d" % _yr,
+            colors=[c.lstrip("#") for c in PIE_PALETTE])
     b.add_source(SRC_KRA)
     b.page_break()
 
