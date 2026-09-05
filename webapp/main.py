@@ -689,7 +689,7 @@ def _resolve_cfg(excel_dir, cfg_id, logs):
     return gr.load_config(gr.cfg_path), new_id
 
 
-def _run_pipeline(job_dir, cfg_id, top_n, mode, logs):
+def _run_pipeline(job_dir, cfg_id, top_n, mode, logs, promotion=False):
     uploads = job_dir / "uploads"
     tables = job_dir / "tables"
     charts = job_dir / "charts"
@@ -724,6 +724,18 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs):
         "excel_dir": os.path.relpath(excel_dir, job_dir),
         "config": cfg_id,
     }
+    if promotion:
+        promo_name = (os.path.splitext(report_name)[0]
+                      + " Export Promotion.xlsx")
+        promo_path = job_dir / promo_name
+        try:
+            import export_promotion_analysis
+            export_promotion_analysis.build_from_dir(
+                cfg, excel_dir, str(promo_path))
+            manifest["promotion_name"] = promo_name
+            logs.append(f"Export promotion workbook saved as {promo_name}")
+        except Exception as exc:
+            logs.append(f"Warning: promotion workbook skipped: {exc}")
     (job_dir / "manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8")
     return report_path, manifest
@@ -902,11 +914,14 @@ def api_status(job_id: str):
                 "log": log_lines}
     if man_path.exists():
         m = json.loads(man_path.read_text(encoding="utf-8"))
-        return {"state": "done", "job_id": job_id,
+        resp = {"state": "done", "job_id": job_id,
                 "report_name": m.get("report_name"),
                 "report_url": f"/api/download/{job_id}",
                 "tables_url": f"/api/tables/{job_id}",
                 "mode": m.get("mode"), "log": log_lines}
+        if m.get("promotion_name"):
+            resp["promotion_url"] = f"/api/promotion/{job_id}"
+        return resp
     try:
         started = json.loads((job_dir / "meta.json").read_text())["started"]
     except Exception:
@@ -921,6 +936,7 @@ def api_status(job_id: str):
 @app.post("/api/run")
 async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                   report_type: str = Form("goods"),
+                  promotion: bool = Form(False),
                   files: list[UploadFile] = File(default=None),
                   zipfile: UploadFile | None = File(default=None)):
     files = files or []
@@ -967,7 +983,7 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                 job_dir, config, top, logs)
         else:
             job_fn = lambda logs: _run_pipeline(             # noqa: E731
-                job_dir, config, top, mode, logs)
+                job_dir, config, top, mode, logs, promotion=promotion)
 
         # The heavy build runs in a background thread; the request answers
         # immediately and the page polls /api/status/<job>. Long synchronous
@@ -1004,6 +1020,19 @@ def api_download(job_id: str):
         raise HTTPException(404, "Report not found.")
     return FileResponse(str(report), filename=report.name,
                         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+@app.get("/api/promotion/{job_id}")
+def api_promotion(job_id: str):
+    """Download the additive export-promotion workbook (if requested)."""
+    job_dir = JOBS_DIR / job_id
+    manifest = json.loads((job_dir / "manifest.json").read_text(
+        encoding="utf-8"))
+    promo = job_dir / manifest["promotion_name"]
+    if not promo.exists():
+        raise HTTPException(404, "Promotion workbook not found.")
+    return FileResponse(str(promo), filename=promo.name,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.get("/api/tables/{job_id}")

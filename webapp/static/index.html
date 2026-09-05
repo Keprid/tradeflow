@@ -899,6 +899,16 @@ input[type=file]::file-selector-button:hover {
       </div>
     </div>
 
+    <div class="row" style="margin-top:4px;">
+      <div style="display:flex;align-items:center;gap:10px;" id="promotion-wrap">
+        <input type="checkbox" id="promotion" style="width:auto;">
+        <label for="promotion" style="margin:0;">
+          Also build <b>Export Promotion workbook</b> (additive price &amp;
+          positioning analysis, goods report only)
+        </label>
+      </div>
+    </div>
+
     <div class="hint" id="upload-hint" style="margin-top:16px;">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       &nbsp;
@@ -931,6 +941,7 @@ input[type=file]::file-selector-button:hover {
       <div class="result-actions">
         <a id="dl-report" href="#"><i class="fas fa-file-word"></i> Download Word Report (.docx)</a>
         <a id="dl-tables" href="#" class="btn-secondary-link"><i class="fas fa-file-archive"></i> Download Tables (.zip)</a>
+        <a id="dl-promotion" href="#" class="btn-secondary-link" style="display:none;"><i class="fas fa-file-excel"></i> Download Promotion Workbook (.xlsx)</a>
       </div>
     </div>
   </div>
@@ -959,6 +970,7 @@ input[type=file]::file-selector-button:hover {
   const partnerInput = $('partner');
   const prepBtn = $('prep-checklist');
   const checklistBox = $('checklist');
+  const promotionWrap = $('promotion-wrap');
 
   const STAGES = [
     'Uploading files\u2026',
@@ -1166,6 +1178,7 @@ input[type=file]::file-selector-button:hover {
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'block';
         partnerWrap.style.display = 'none';
+        promotionWrap.style.display = 'none';
       } else if (r.value === 'services') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them). ' +
@@ -1176,6 +1189,7 @@ input[type=file]::file-selector-button:hover {
         servicesInfo.style.display = 'block';
         quarterlyInfo.style.display = 'none';
         partnerWrap.style.display = 'none';
+        promotionWrap.style.display = 'none';
       } else {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
@@ -1186,6 +1200,7 @@ input[type=file]::file-selector-button:hover {
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'none';
         partnerWrap.style.display = 'block';
+        promotionWrap.style.display = 'flex';
       }
     });
   });
@@ -1203,6 +1218,7 @@ input[type=file]::file-selector-button:hover {
     fd.append('config', $('cfg').value);
     fd.append('top', $('top').value);
     fd.append('report_type', document.querySelector('input[name="report_type"]:checked').value);
+    fd.append('promotion', $('promotion').checked ? 'true' : 'false');
     let zips = 0, others = 0;
     for (const f of files) {
       if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
@@ -1265,6 +1281,13 @@ input[type=file]::file-selector-button:hover {
         ` &middot; job ${final.job_id}`;
       $('dl-report').href = final.report_url;
       $('dl-tables').href = final.tables_url;
+      const dlPromo = $('dl-promotion');
+      if (final.promotion_url) {
+        dlPromo.href = final.promotion_url;
+        dlPromo.style.display = 'flex';
+      } else {
+        dlPromo.style.display = 'none';
+      }
       $('result').style.display = 'block';
       $('result').classList.add('showing');
       confetti();

@@ -2174,7 +2174,7 @@ def bilateral_bullets(a):
 # ---------------------------------------------------------------------------
 # Main report assembly
 # ---------------------------------------------------------------------------
-def build_report(cfg, excel_dir, out_path, tmp_dir):
+def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     os.makedirs(tmp_dir, exist_ok=True)
     a = Analysis(cfg).load(excel_dir)
     narr = build_narratives(a, cfg)
@@ -2417,6 +2417,17 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     except Exception as _e:  # additive; never break the report build
         print(f"      [warn] Excel deliverable skipped: {_e}")
 
+    # Optional additive export-promotion workbook (--promotion-analysis).
+    if promo_path:
+        try:
+            import export_promotion_analysis
+            pr_out = os.path.abspath(promo_path)
+            export_promotion_analysis.build_promotion_analysis(
+                a, cfg, excel_dir, pr_out)
+            print(f"      Promotion workbook saved to    : {pr_out}")
+        except Exception as _e:  # additive; never break the report build
+            print(f"      [warn] Promotion workbook skipped: {_e}")
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -2435,6 +2446,9 @@ def main():
     ap.add_argument("--output", default=None, help="Output .docx path")
     ap.add_argument("--tmp", default=os.path.join(BASE_DIR, "output", ".tmp"),
                     help="Temporary directory for chart images")
+    ap.add_argument("--promotion-analysis", default=None,
+                    help="OPTIONAL: also write an additive export-promotion "
+                         "workbook to this path (report output is unchanged)")
     args = ap.parse_args()
 
     global cfg_path
@@ -2453,7 +2467,8 @@ def main():
 
     print(f"[1/3] Reading Excel data from   : {os.path.abspath(args.excel_dir)}")
     print(f"[2/3] Building report for       : {cfg['country']['name']}")
-    build_report(cfg, args.excel_dir, out, args.tmp)
+    build_report(cfg, args.excel_dir, out, args.tmp,
+                 promo_path=args.promotion_analysis)
     print(f"[3/3] Report saved to           : {out}")
 
 

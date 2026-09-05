@@ -134,6 +134,30 @@ series. `generate_report.py` uses the latest available year as the report
 year (falling back from `report.year` in the config if it is not present in
 the data).
 
+## Optional: export-promotion workbook (additive)
+
+`generate_report.py --promotion-analysis <out.xlsx>` additionally writes a
+standalone **Export Promotion Positioning** workbook for KEPROBA's marketing
+effort. The web app exposes the same option as an opt-in **"Export Promotion
+workbook"** checkbox on the Goods form. It never touches the `.docx` report or
+the `TABLES.xlsx` deliverable — unless the option is enabled, reports are
+byte-identical to before.
+
+| Workbook tab     | What it gives KEPROBA                        | Data used        |
+|------------------|----------------------------------------------|------------------|
+| `Kenya-<P> Mix`  | product drivers/laggards in that market, share, 5-yr CAGR, promotion action + export-basket concentration (HHI) | Table 5 |
+| `Competitor Map` | who supplies the partner today, whose share Kenya could contest | Table 1 |
+| `Price Positioning` | Kenya unit values vs world (premium = brand & protect) | *optional* |
+
+The first two tabs work from the **same six ITC downloads** you already
+provide. Price positioning additionally needs a Trade Map **Time Series**
+download for Kenya's exported products (the only sheet that carries the
+**Quantity** column); drop it into the same `--excel-dir` folder (or upload it
+with the other files in the web app). ITC Trade Map has **no public
+API**, so these files are always downloaded from trademap.org and uploaded
+manually; the services pipeline, by contrast, fetches the UNCTAD data
+automatically via `fetch_unctad_tradeserv.py`.
+
 ## Kenya Quarterly Performance Report
 
 A second, self-contained pipeline reproduces KEPROBA's quarterly
