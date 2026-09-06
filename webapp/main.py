@@ -470,7 +470,8 @@ def _startup():
 
 @app.get("/", include_in_schema=False)
 def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html",
+                        headers={"Cache-Control": "no-cache"})
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -731,7 +732,7 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs, promotion=False):
         try:
             import export_promotion_analysis
             export_promotion_analysis.build_from_dir(
-                cfg, excel_dir, str(promo_path))
+                cfg, excel_dir, str(promo_path), extra_dirs=[str(uploads)])
             manifest["promotion_name"] = promo_name
             logs.append(f"Export promotion workbook saved as {promo_name}")
         except Exception as exc:

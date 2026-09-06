@@ -147,16 +147,52 @@ byte-identical to before.
 |------------------|----------------------------------------------|------------------|
 | `Kenya-<P> Mix`  | product drivers/laggards in that market, share, 5-yr CAGR, promotion action + export-basket concentration (HHI) | Table 5 |
 | `Competitor Map` | who supplies the partner today, whose share Kenya could contest | Table 1 |
-| `Price Positioning` | Kenya unit values vs world (premium = brand & protect) | *optional* |
+| `Price Competitiveness` | Kenya's per-unit price vs what the partner pays the rest of the world, product by product | *bilateral* workbook |
+| `Market Access` | duties Kenya faces, next to the partner's total world-import demand | *bilateral* workbook |
+| `Global Champions` | Kenya's world export leaders: growth vs world demand, share, world rank | *List of products exported by Kenya* download |
+| `Price Positioning` | Kenya unit values vs world (premium = brand & protect) | *bilateral* workbook |
 
 The first two tabs work from the **same six ITC downloads** you already
-provide. Price positioning additionally needs a Trade Map **Time Series**
-download for Kenya's exported products (the only sheet that carries the
-**Quantity** column); drop it into the same `--excel-dir` folder (or upload it
-with the other files in the web app). ITC Trade Map has **no public
-API**, so these files are always downloaded from trademap.org and uploaded
-manually; the services pipeline, by contrast, fetches the UNCTAD data
-automatically via `fetch_unctad_tradeserv.py`.
+provide. The `Price Competitiveness`, `Market Access` and `Price Positioning`
+tabs need the Kenya–partner **bilateral** download (already part of the six,
+so usually no extra download). `Global Champions` needs the Trade Map
+**List of products exported by Kenya** download (4-digit level). Any extra
+download can be dropped in the same folder or uploaded with the others. ITC
+Trade Map has **no public API**, so these files are always downloaded from
+trademap.org and uploaded manually; the services pipeline, by contrast,
+fetches the UNCTAD data automatically via `fetch_unctad_tradeserv.py`.
+
+Value columns are labelled with the **actual year of the data** (e.g.
+`2025 (USD m)`), not a generic "Latest", so the workbook stays self-evident
+even when older files are used.
+
+### Reading the export-promotion workbook (interpretation guide)
+
+| Tab | Stat | What it measures | How to read it |
+|-----|------|------------------|----------------|
+| `Kenya-<P> Mix` | `2025 (USD m)` (actual year) | Kenya's current exports to the partner | Larger = more committed demand to defend |
+| | `Share` | product's share of Kenya's whole export basket to the partner | The top lines are what actually drive the market |
+| | `5-yr CAGR` | average annual growth over the data window | Shown with the `Status` column |
+| | `Status` / `Promotion note` | auto-classification of growth × share | **Rising star** (CAGR ≥ +5% and share ≥ 5%): grow fast and already matter → promote first, priority fairs. **Niche momentum** (CAGR ≥ +5%, small share): build demand before scaling → B2B buyer-seller targeting. **Declining** (CAGR ≤ −5% and share ≥ 5%): losing ground at scale → match rival price/quality. **Mature** (otherwise): steady → defend volume, upgrade packaging. |
+| | `HHI` (bottom line) | concentration of Kenya's export basket to the partner | `< 1500` = diversified/stable; `≥ 1500` = concentrated → a single-product risk, push diversification |
+| `Price Competitiveness` | `Kenya's unit value` (USD/unit) vs the partner's `world-import unit value` | the per-unit price Kenya actually gets vs what the partner pays the **rest of the world** for the same product | **Edge ≤ −15%**: Kenya undercuts world supply → lead with price, win volume now. **Within ±15%**: parity → differentiate on terms, reliability, packaging. **Edge ≥ +15%**: Kenya is premium → defend with brand/quality/service, avoid a price war. |
+| `Market Access` | `Kenya's tariff in <P>` | the import duty Kenya faces on that product in the partner market | `0%` = duty-free under the EAC → push volume. `> 0%` = market access is **not** automatic → check HS classification, claim the EAC preferential rate or escalate to trade advocacy. The `Demand` column (partner's world imports) sizes the prize. |
+| `Global Champions` | `Kenya's exports` / `Kenya 5-yr growth` vs `World import growth` | Kenya's exports of the product to the **world** (not just the partner) | Growth above world demand by ≥ 5 pts → gaining global share, scale up; ≤ −5 pts → losing ground, check price/costs. |
+| | `Share in world exports` / `World rank` | Kenya's global position in the product | Top-10 world exporter = real supply/pricing credibility to leverage in the partner market (rows highlighted green). |
+| `Competitor Map` | `Share` / `5-yr CAGR` | each supplier's share of the partner's imports and its momentum | **Dominant & growing** (share ≥ 15% and rising): hard to head-on → study their price/terms playbook. **Established** (share ≥ 10%): contestable edge → target adjacent products they ignore. **Contestable** (everything else): feasible share-gain targets for Kenya. |
+| `Price Positioning` | `Unit value (USD/unit)` | Kenya's average selling price per unit *in the partner market* | Compare to the same product's `vs World` column |
+| | `vs World` | % premium/discount vs Kenya's own **world-average** unit value for the same product (from the bilateral workbook's export-to-world block) | **Premium ≥ +15%**: quality-led → brand, protect, upgrade packaging/positioning. **Parity within ±15%**: volume-led → defend market share, compete on terms and reliability. **Discount ≤ −15%**: price-led → an entry point, but confirm buyers don't read "cheaper" as "lower quality". |
+
+Note: in `Price Positioning`, "world" means **Kenya's exports-to-world unit
+value** taken from the same bilateral workbook — a like-for-like, within-file
+benchmark (e.g. the product exported to other markets), not ITC's global
+average. It measures whether Kenya already sells the product into Uganda at a
+premium or discount relative to what it gets elsewhere.
+
+Because the workbook may be opened on machines that never see this README,
+every tab also prints its own `How to read` legend in the cells below its
+data — the status/position definitions, the HHI and price/tariff thresholds,
+and the definition of "world" as Kenya's exports-to-world unit value.
 
 ## Kenya Quarterly Performance Report
 
