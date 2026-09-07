@@ -1684,6 +1684,8 @@ class ReportBuilder:
                 tc.remove(child)
             tcPr = tc.get_or_add_tcPr()
             tcPr.append(OxmlElement("w:vMerge"))
+            p = OxmlElement("w:p")
+            tc.insert(len(tcPr), p)
         topPr = tcs[0].get_or_add_tcPr()
         vm = OxmlElement("w:vMerge")
         vm.set(qn("w:val"), "restart")
