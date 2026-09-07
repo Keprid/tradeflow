@@ -285,10 +285,6 @@ def _drawing_inline(chart_r_id, doc_pr_id, name, cx, cy):
     gdata = etree.SubElement(graphic, _A + "graphicData", uri=_CHART_URI)
     chart_el = etree.SubElement(gdata, _C + "chart")
     chart_el.set(_R + "id", chart_r_id)
-    etree.SubElement(chart_el, _C + "autoTitleDeleted", val="0")
-    etree.SubElement(chart_el, _C + "plotVisOnly", val="1")
-    etree.SubElement(chart_el, _C + "rAdjH", val="0")
-    etree.SubElement(chart_el, _C + "rAdjW", val="0")
     return inline
 
 
