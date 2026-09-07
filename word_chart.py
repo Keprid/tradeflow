@@ -340,7 +340,9 @@ def inject_chart(paragraph, kind, title, categories, series, colors=None,
     p = paragraph._p
     run = p.makeelement(_W + "r", {})
     p.append(run)
-    run.append(drawing)
+    drawing_el = p.makeelement(_W + "drawing", {})
+    run.append(drawing_el)
+    drawing_el.append(drawing)
     return chart_r_id
 
 
