@@ -899,7 +899,7 @@ def build_narratives(a: Analysis, cfg):
     # data are generated here; facts that must be researched externally are
     # returned as flagged segments (rendered highlighted) for manual editing.
     def mkt_summary(rows):
-        return top_phrase(rows, lambda d: f"{d['name']} ({pct(d['share'])})")
+        return top_phrase(rows, lambda d: f"{display_name(d['name'])} ({pct(d['share'])})")
 
     def top_prods(rows):
         return top_phrase(rows, lambda d: short_label(d["label"]) or d["name"])
@@ -982,7 +982,7 @@ def build_narratives(a: Analysis, cfg):
     cagr = a.imports_cagr_2021_25()
     s21_mkts = top_phrase(
         a.top(a.table1, 3),
-        lambda d: f"{d['name']} (USD {usd_auto(d['years'][a.iy])}; {pct(d['share'])})")
+        lambda d: f"{display_name(d['name'])} (USD {usd_auto(d['years'][a.iy])}; {pct(d['share'])})")
     src3 = a.top(a.table1, 3)
     top3_import_share = sum((d.get("share") or 0) for d in src3)
     s21_analysis = (
@@ -1055,7 +1055,7 @@ def build_narratives(a: Analysis, cfg):
     eg = a.exports_growth_2024_25()
     s23_dsts = top_phrase(
         a.top(a.table3, 4),
-        lambda d: f"{d['name']} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
+        lambda d: f"{display_name(d['name'])} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
     dest3 = a.top(a.table3, 3)
     top3_export_share = sum((d.get("share") or 0) for d in dest3)
     s23_analysis = (
@@ -1913,7 +1913,7 @@ class ReportBuilder:
             bold = is_kenya
             self._cell_text(table.cell(r, 0), str(d["rank"]) if d["rank"] is not None else "",
                             bold=bold, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 1), d["name"], bold=bold, color=red, wrap=True)
+            self._cell_text(table.cell(r, 1), display_name(d["name"]), bold=bold, color=red, wrap=True)
             for k in range(n):
                 self._cell_text(table.cell(r, 2 + k), num(d["years"][k]),
                                 bold=bold, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)

@@ -89,6 +89,8 @@ SHORT_NAMES = {
     "syrian arab republic": "Syria",
     # T
     "tanzania, united republic of": "Tanzania",
+    "tanzania, united rep. of the": "Tanzania",
+    "tanzania, united rep. of": "Tanzania",
     "timor-leste": "Timor-Leste",
     "turks and caicos islands": "Turks & Caicos Is.",
     # U
@@ -125,7 +127,8 @@ AFRICA_COUNTRIES = {
     "mauritius", "morocco", "mozambique", "namibia", "niger", "nigeria",
     "rwanda", "sao tome and principe", "senegal", "seychelles", "sierra leone",
     "somalia", "south africa", "south sudan", "sudan", "tanzania",
-    "tanzania, united republic of", "togo", "tunisia", "uganda", "zambia",
+    "tanzania, united republic of", "tanzania, united rep. of the",
+    "tanzania, united rep. of", "togo", "tunisia", "uganda", "zambia",
     "zimbabwe", "saint helena",
 }
 
