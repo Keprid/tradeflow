@@ -945,7 +945,10 @@ def build_promotion_analysis(a, cfg, excel_dir, out_path, extra_dirs=None):
     wb.remove(wb.active)
     partner = cfg["country"]["name"]
 
-    ws = wb.create_sheet("Kenya-%s Mix" % partner[:24])
+    suffix = " Mix"
+    room = 31 - len("Kenya-") - len(suffix)      # Excel sheet-name limit
+    mix_title = "Kenya-%s%s" % (partner[:room], suffix)
+    ws = wb.create_sheet(mix_title)
     _kenya_partner_mix(ws, a, partner)
     _fit(ws, [6, 8, 42, 13, 9, 10, 20, 44])
 
