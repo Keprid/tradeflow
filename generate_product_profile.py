@@ -332,6 +332,13 @@ def period_phrase(y1, y2):
     return "between %d and %d" % (y1, y2)
 
 
+def short_anchor(label):
+    """Human-friendly product name for headings and prose, e.g. 'Coffee'."""
+    clean = clean_label(label)
+    head = re.split(r"[,;]", clean)[0].strip()
+    return head or short_label(clean, 24)
+
+
 def ordinal_list(names, sep=", ", last=" and "):
     if not names:
         return ""
@@ -627,7 +634,7 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
 
 
 def section_kenya_exports(b, cfg, data, source, tmp_dir):
-    anchor = short_label(data.anchor_label)
+    anchor = short_anchor(data.anchor_label)
     years = data.years
     rev = data.review_year
 
@@ -658,7 +665,7 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
     if g:
         parts.append("They %s." % g)
     if yo:
-        parts.append("Between %d and %d, they %s." % (years[-2], years[-1], yo))
+        parts.append("They %s." % yo)
     for p_ in parts:
         b.add_bullet(p_)
 
@@ -681,7 +688,7 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
 
 
 def section_global(b, cfg, data, source, tmp_dir):
-    anchor = short_label(data.anchor_label)
+    anchor = short_anchor(data.anchor_label)
     family = cfg.get("family_title", "the product family")
     years = data.years
     rev = data.review_year
@@ -745,6 +752,11 @@ def section_global(b, cfg, data, source, tmp_dir):
         trend_bullets(b, g_imp, years, family, "imports")
 
 
+RESIDUE = {"exporter": "All other economies",
+           "importer": "All other economies",
+           "source": "All other sources"}
+
+
 def geo_bullets(b, rows, years, anchor_short, role):
     """'Brazil was the world's leading exporter of X in 2023...' bullets."""
     last = years[-1]
@@ -752,42 +764,65 @@ def geo_bullets(b, rows, years, anchor_short, role):
     pairs.sort(key=lambda p: p[1], reverse=True)
     if not pairs:
         return
-    label, share = pairs[0]
-    value = next((r["years"].get(last) for r in rows if r["label"] == label),
-                 None)
+    group = {"exporter": "exporters", "importer": "importers",
+             "source": "sources"}[role]
+    word = {"exporter": "exporter", "importer": "importer",
+            "source": "source"}[role]
+    residue = RESIDUE.get(role)
+    residual_share = 0.0
+    if residue:
+        for l, s in pairs:
+            if l == residue:
+                residual_share = s
+                break
+    real = [p for p in pairs if p[0] != residue]
+    if not real:
+        return
     if role == "source":
         b.add_bullet("The leading source of Kenya's imports of %s in %d was "
                      "%s (%s; %.1f%% of Kenya's imports)."
-                     % (anchor_short.lower(), last, label, usd_phrase(value),
-                        share * 100))
+                     % (anchor_short.lower(), last, real[0][0],
+                        usd_phrase(next((r["years"].get(last) for r in rows
+                                         if r["label"] == real[0][0]), None)),
+                        real[0][1] * 100))
+        denom = "Kenya's imports in %d" % last
     else:
-        place = "exporter" if role == "exporter" else "importer"
         b.add_bullet("%s was the world's leading %s of %s in %d, with %s "
                      "(%.1f%% of the world total)."
-                     % (label, place, anchor_short.lower(), last,
-                        usd_phrase(value), share * 100))
+                     % (real[0][0], word, anchor_short.lower(), last,
+                        usd_phrase(next((r["years"].get(last) for r in rows
+                                         if r["label"] == real[0][0]), None)),
+                        real[0][1] * 100))
+        denom = "the world total in %d" % last
     names = ["%s (%s; %.1f%%)" % (l, usd_phrase(next(
         (r["years"].get(last) for r in rows if r["label"] == l), None)), s * 100)
-        for l, s in pairs[:5]]
-    b.add_bullet("The top five %ss were %s." % (role, ordinal_list(names)))
-    top5 = sum(s for _, s in pairs[:5]) * 100
-    b.add_bullet("Together, the top five %ss accounted for %.1f%% of the "
-                 "world total in %d." % (role, top5, last))
+        for l, s in real[:5]]
+    b.add_bullet("The top five %s were %s." % (group, ordinal_list(names)))
+    top5 = sum(s for _, s in real[:5]) * 100
+    b.add_bullet("Together, the top five %s accounted for %.1f%% of %s."
+                 % (group, top5, denom))
+    if residual_share > 0:
+        b.add_bullet("%s together accounted for %.1f%% of %s."
+                     % (residue, residual_share * 100, denom))
 
 
-def trend_bullets(b, rows, years, family, noun):
+def trend_bullets(b, rows, years, family, noun, scope="World"):
     last = years[-1]
     pairs = _shares(rows, years)
     pairs.sort(key=lambda p: p[1], reverse=True)
     if not pairs:
         return
+    subj = ("%s %s" % (scope, noun)).strip()
+    denom = "Kenya's imports" if scope == "Kenya's" else "the world total"
     lead, share = pairs[0]
-    txt = ("World %s of %s in %d were led by %s (%.1f%% of the world total)"
-           % (noun, family.lower(), last, short_label(lead, 60), share * 100))
+    txt = ("%s of %s in %d were led by %s (%.1f%% of %s)"
+           % (subj, family.lower(), last, short_label(lead, 60), share * 100,
+              denom))
     follows = pairs[1:3]
     if follows:
         txt += ", followed by %s" % ordinal_list(
-            ["%s (%.1f%%)" % (short_label(l, 50), s * 100) for l, s in follows])
+            ["%s (%.1f%%)" % (short_label(l, 50), s * 100)
+             for l, s in follows])
     b.add_bullet(txt + ".")
     totals = _year_totals(rows)
     g = growth_phrase(cagr([totals.get(y) for y in years], years),
@@ -795,14 +830,14 @@ def trend_bullets(b, rows, years, family, noun):
     yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
                     years[-2], years[-1])
     if g:
-        sentence = "World %s of %s %s." % (noun, family.lower(), g)
+        sentence = "%s of %s %s." % (subj, family.lower(), g)
         if yo:
             sentence = sentence[:-1] + ", and %s." % yo
         b.add_bullet(sentence)
 
 
 def section_kenya_imports(b, cfg, data, source):
-    anchor = short_label(data.anchor_label)
+    anchor = short_anchor(data.anchor_label)
     family = cfg.get("family_title", "the product family")
     years = data.years
     rev = data.review_year
@@ -831,7 +866,7 @@ def section_kenya_imports(b, cfg, data, source):
         b.add_value_table("Product", products, years, "Share in %d" % rev,
                           "Kenya's Imports of %s by Product" % family, source,
                           total_label="Total")
-        trend_bullets(b, products, years, family, "imports")
+        trend_bullets(b, products, years, family, "imports", scope="Kenya's")
 
 
 def section_potential(b, cfg, data, pot, source):
@@ -918,6 +953,10 @@ def write_excel_deliverable(cfg, data, out_path):
     lm = Alignment(horizontal="left")
     val_fmt = "#,##0.0"
 
+    def sheet_name(prefix, label="", cap=31):
+        name = (prefix + " - " + label) if label else prefix
+        return name[:31]
+
     def value_sheet(name, first_col, rows, doughnut=None):
         ws = wb.create_sheet(name)
         _xc(ws, 1, 1, first_col, bold=True, fill=hdr_fill, align=cm)
@@ -1000,7 +1039,7 @@ def write_excel_deliverable(cfg, data, out_path):
     destinations = top_rows(data.destinations(), cfg.get("top_n", 10), years,
                             "All other markets")
     if destinations:
-        value_sheet("Destinations - %s" % data.anchor_label[:16],
+        value_sheet(sheet_name("Destinations", data.anchor_label),
                     "Destination market", destinations,
                     doughnut=("Kenya's exports by destination",
                               [(d["label"], _share01(d, rev, destinations))
@@ -1010,11 +1049,9 @@ def write_excel_deliverable(cfg, data, out_path):
     importers = top_rows(data.importers(), cfg.get("top_n", 10), years,
                          "All other economies")
     if exporters:
-        value_sheet("World Exporters - %s" % data.anchor_label[:20],
-                    "Exporting economy", exporters)
+        value_sheet(sheet_name("World Exporters"), "Exporting economy", exporters)
     if importers:
-        value_sheet("World Importers - %s" % data.anchor_label[:20],
-                    "Importing economy", importers)
+        value_sheet(sheet_name("World Importers"), "Importing economy", importers)
     g_exp = data.global_export_products()
     g_imp = data.global_import_products()
     if g_exp:
