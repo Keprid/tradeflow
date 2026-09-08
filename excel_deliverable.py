@@ -788,12 +788,14 @@ def _write_quarterly_body_row(ws, d, body, col_rank, col_name,
             p.value = round(pctv, 4)
             p.number_format = "0.0%"
         p.alignment = CENTER
+        p.font = Font(bold=True)
     sh = d.get("share") if mode is None else None
     sc = ws.cell(body, share_col)
     if sh is not None:
         sc.value = round(sh / 100.0, 6) if sh > 1 else round(sh, 6)
         sc.number_format = "0.0%"
     sc.alignment = CENTER
+    sc.font = Font(bold=True)
     if mode is not None:
         for cc in range(1, share_col + 1):
             ws.cell(body, cc).font = Font(bold=True)
@@ -873,7 +875,7 @@ def _write_quarterly_table(ws, table, title,
     ws.cell(hdr2, cur_start + n_m).value = "Total"
     if comparison:
         ws.cell(hdr2, pct_col).value = "%"
-    ws.cell(hdr2, share_col).value = ""
+    ws.cell(hdr2, share_col).value = "%"
 
     body = hdr2 + 1
     first = None
