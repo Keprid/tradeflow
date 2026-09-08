@@ -572,7 +572,7 @@ def _share_doughnut_data(a, table, other_label, year="cur"):
     labels, values = [], []
     for name, v, _s in a.shares(table, year=year):
         if v:
-            labels.append(short_product_name(name, 40))
+            labels.append(short_product_name(name, maxlen=40))
             values.append(v)
     return consolidate(labels, values, max_slices=8, min_pct=2.0,
                        other_label=other_label)
@@ -707,7 +707,7 @@ def build_narratives(a: QuarterAnalysis):
     if food_bits:
         p2 += ("Large food imports (%s) and capital and consumer goods "
                "sustain a structurally large import bill."
-               % ", ".join(short_product_name(x[0], 18).lower()
+               % ", ".join(short_product_name(x[0], maxlen=18).lower()
                            for x in food_bits))
     else:
         p2 += "Capital and consumer goods sustain a structurally large import bill."
@@ -756,7 +756,7 @@ def build_narratives(a: QuarterAnalysis):
     staple = [x for x in (wheat, palm, rice, maize) if x]
     if staple:
         d1 += ("Essential food items (%s) are structural imports. "
-               % ", ".join(short_product_name(x[0], 16).lower()
+               % ", ".join(short_product_name(x[0], maxlen=16).lower()
                            for x in staple[:3]))
     d1 += ("Machinery and capital goods reflect a need for imported equipment "
            "for investment and production. This reliance on imported energy, "
@@ -908,7 +908,7 @@ def build_narratives(a: QuarterAnalysis):
     if staples:
         a2p1 += (". Second, recurring imports of %s reflect domestic "
                  "production shortfalls."
-                 % ", ".join(short_product_name(x[0], 16).lower()
+                 % ", ".join(short_product_name(x[0], maxlen=16).lower()
                              for x in staples))
     else:
         a2p1 += (". Second, recurring food imports reflect domestic "
@@ -1396,7 +1396,7 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
         b.add_source(SRC_KRA)
 
     b.add_heading("3.1 Comparative Perspectives on Shares of Lead Export "
-                  "Markets %s %s" % (q_t, cmp_span))
+                  "Markets %s %s" % (q_t, cmp_span), level=2)
     b.add_table_caption("Figure 1: Share of Exports by Market, %s %s"
                         % (q_t, cmp_span))
     for _yr in (a.year, a.year_prev):
@@ -1442,7 +1442,7 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
         b.add_source(SRC_KRA)
 
     b.add_heading("4.1 Share of Lead Export Products %s %s"
-                  % (q_t, cmp_span))
+                  % (q_t, cmp_span), level=2)
     b.add_table_caption("Figure 2: Share of Top Exports by Products, %s "
                         "%s" % (q_t, cmp_span))
     for _yr in (a.year, a.year_prev):

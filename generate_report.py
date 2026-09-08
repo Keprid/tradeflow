@@ -1366,6 +1366,7 @@ class ReportBuilder:
         pf = normal.paragraph_format
         pf.space_after = Pt(8)
         pf.line_spacing = 1.16
+        pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
         h1 = self.doc.styles["Heading 1"]
         h1.font.name = "Century Gothic"
@@ -2269,8 +2270,8 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     for line in narr["s23"]:
         b.add_bullet(line)
     if a.africa_destinations():
-        b.add_para("Focus: {name}'s exports to Africa & Kenya".format(name=c["name"]), bold=True)
-        b.add_table_caption(f"Table 3a: {a.country}'s exports destined to Africa in {Y}")
+        b.add_para("Focus: {name}'s exports to Africa & Kenya (Optional – Africa breakdown)".format(name=c["name"]), bold=True)
+        b.add_table_caption(f"Table 3a (Optional): {a.country}'s exports destined to Africa in {Y}")
         b.add_africa_focus_table(a)
         b.add_source()
     b.page_break()
@@ -2286,7 +2287,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     b.page_break()
 
     # ============================== SECTION 3 ===============================
-    b.add_heading(f"3. Bilateral Trade Between Kenya and {c['title']}")
+    b.add_heading(f"3. BILATERAL TRADE BETWEEN KENYA AND {c['title'].upper()}")
 
     # 3.1 Trends
     b.add_heading(f"3.1 Kenya – {c['name']} Bilateral Trade Trends", level=2)
@@ -2347,7 +2348,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     b.page_break()
 
     # 3.5 Kenya's export composition and market alignment
-    b.add_heading(f"3.5 Kenya's Export Composition and Market Alignment with {c['name']}", level=2)
+    b.add_heading(f"3.5 Kenya's Export Composition and Market Alignment with {c['name']} (Optional)", level=2)
     if getattr(a, "table7", None) and a.table7["items"]:
         b.add_table_caption(f"Table 7: Kenya's Export Products – Market Alignment with {c['name']} in {Y}")
         b.add_bilateral_table(a)
@@ -2366,7 +2367,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     b.page_break()
 
     # ============================== SECTION 4 ===============================
-    b.add_heading(f"4. Kenya's Export Potential on {c['title']} Market")
+    b.add_heading(f"4. KENYA'S EXPORT POTENTIAL ON {c['title'].upper()} MARKET")
     ep = cfg.get("export_potential", {}) or {}
     b.add_table_caption(f"Figure 4: Kenya's products with export potential to {c['name']}.")
     img = resolve_path(cfg_path, ep.get("image"))
