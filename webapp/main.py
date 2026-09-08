@@ -490,14 +490,14 @@ def api_configs():
             continue
         try:
             cfg = gr.load_config(str(p))
+            out.append({
+                "id": p.stem,
+                "name": cfg["country"]["name"],
+                "title": cfg["country"]["title"],
+                "year": cfg["report"].get("year", 0),
+            })
         except Exception:
             continue
-        out.append({
-            "id": p.stem,
-            "name": cfg["country"]["name"],
-            "title": cfg["country"]["title"],
-            "year": cfg["report"].get("year", 0),
-        })
     return out
 
 
