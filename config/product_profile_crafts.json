@@ -1,7 +1,7 @@
 {
-  "title": "Product Profile: Crafts and Handicrafts",
+  "title": "Product Profile: Commercial Crafts",
   "subtitle": "2025 Edition",
-  "family_title": "Crafts and Handicrafts",
+  "family_title": "Commercial Crafts",
   "unit": "USD",
   "value_scale": 1e6,
   "unit_label": "USD Million",
@@ -13,10 +13,10 @@
   "month_year": "February 2025",
   "date_line": "February 2025",
   "intro": [
-    "Kenya has a long tradition of craftsmanship, ranging from wood carving and basketry to paper and plastic articles, furniture and related household goods. The sector supports a wide network of artisans, cooperatives and small enterprises across the country, mainly outside the formal manufacturing sector. Kenyan crafts are valued in export markets for their quality, originality and cultural identity, and offer significant scope for value addition and product diversification.",
-    "This profile examines Kenya's trade in the crafts and handicrafts family, which in this edition covers 454 product headings, with particular focus on the family as a whole. The analysis covers the period 2016 to 2025 and draws on trade values reported to the International Trade Centre (ITC).",
+    "Kenya has a long tradition of craftsmanship, ranging from wood carving and basketry to paper and plastic articles, furniture and related household goods. The sector supports a wide network of artisans, cooperatives and small enterprises across the country, mainly outside the formal manufacturing sector. Kenyan commercial crafts are valued in export markets for their quality, originality and cultural identity, and offer significant scope for value addition and product diversification.",
+    "This profile examines Kenya's trade in commercial crafts, which in this edition covers 454 product headings, with particular focus on the family as a whole. The analysis covers the period 2016 to 2025 and draws on trade values reported to the International Trade Centre (ITC).",
     "The family draws together products that share a common characteristic of artisanal or labour-intensive production, including articles of wood, plastics, paper and vegetable plaiting materials, as well as wooden furniture and related ornaments. Presenting them as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's craft exports."
   ],
   "data_dir": "crafts",
-  "output": "output/Product Profile - Crafts and Handicrafts 2025.docx"
+  "output": "output/Product Profile - Commercial Crafts 2025.docx"
 }
