@@ -53,6 +53,7 @@ import make_services_tables              # noqa: E402
 import generate_services_report as gsr   # noqa: E402
 import make_quarterly_tables as mqt      # noqa: E402
 import generate_quarterly_report as gqr  # noqa: E402
+import generate_product_profile as gpp   # noqa: E402
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
@@ -130,6 +131,13 @@ SERVICE_RAW_KEYWORDS = ("exported_services_for", "imported_services_for",
                         "services_commercialized", "list_of_exporters_for",
                         "list_of_importers_for")
 QUARTERLY_RAW_KEYWORDS = ("exports by hs destination", "imports by hs origin")
+# Product-profile (matrix) downloads -- distinctive Trade Map matrix names.
+PRODUCT_RAW_KEYWORDS = (
+    "exporting-economies", "importing-economies",
+    "products-exported-globally", "products-imported-globally",
+    "kenyas-exports-to-world-by-product", "kenyas-exports-to-world-by-importer",
+    "kenyas-imports-from-world-by-product", "kenyas-imports-from-world-by-exporter",
+    "export_potential")
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -501,6 +509,18 @@ def api_configs():
     return out
 
 
+@app.get("/api/product-profiles")
+def api_product_profiles():
+    """List the standalone product-profile configs (coffee, crafts, ...)."""
+    out = []
+    for p, cfg in _product_profile_configs():
+        out.append({
+            "id": p.stem,
+            "name": cfg.get("title") or cfg.get("family_title") or p.stem,
+        })
+    return out
+
+
 def _partner_slug(name):
     return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
 
@@ -610,6 +630,23 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Could not recognise the services upload set.\n"
             f"Uploaded files: {uploaded}\n"
             f"Expected filenames containing any of: {kw_list}")
+    if report_type == "product":
+        # Explicitly selected: require at least one recognisable matrix file.
+        if any(any(k in n for k in PRODUCT_RAW_KEYWORDS) for n in names):
+            return "product", ""
+        uploaded = ", ".join(sorted(names))
+        kw_list = ", ".join(PRODUCT_RAW_KEYWORDS)
+        return None, (
+            f"Could not recognise the product-profile upload set.\n"
+            f"Uploaded files: {uploaded}\n"
+            f"Expected ITC matrix filenames containing any of: {kw_list}")
+    # Auto-detect: distinctive all-countries/all-products matrix names mean a
+    # product-profile dataset (coffee/crafts) rather than a goods report.
+    if any(k in n for k in ("products-exported-globally",
+                            "products-imported-globally",
+                            "exporting-economies", "importing-economies")
+           for n in names):
+        return "product", ""
     if any(any(k in n for k in RAW_KEYWORDS + CLASSIC_RAW_KEYWORDS)
            for n in names):
         return "raw", ""
@@ -623,6 +660,23 @@ def _detect_mode(uploads_dir, report_type="goods"):
         f"Expected raw filenames containing any of: {raw_kw}\n"
         f"Or ready-made files named 'Table 1' through 'Table 6' plus "
         f"'Figure 1 Trade Balance'.")
+
+
+def _product_profile_configs():
+    """Yield (path, cfg) for config/*.json files that describe a product profile.
+
+    Product profile configs are standalone (no ``country`` key) and carry the
+    ``family_title`` field used by the product-profile builder.
+    """
+    for p in sorted(CONFIG_DIR.glob("*.json")):
+        if p.name == "config_template.json":
+            continue
+        try:
+            cfg = gr.load_config(str(p))
+        except Exception:
+            continue
+        if "family_title" in cfg and isinstance(cfg.get("country"), dict) is False:
+            yield p, cfg
 
 
 def _detect_reporter(excel_dir):
@@ -789,6 +843,58 @@ def _run_services_pipeline(job_dir, cfg_id, top_n, logs):
     return report_path, manifest
 
 
+def _run_product_pipeline(job_dir, cfg_id, top_n, logs):
+    uploads = job_dir / "uploads"
+    charts = job_dir / "charts"
+
+    if not cfg_id or cfg_id == "__auto__":
+        raise HTTPException(
+            400, "Select a product profile (coffee, crafts, ...) to generate.")
+    cfg_path = CONFIG_DIR / f"{cfg_id}.json"
+    if not cfg_path.exists():
+        raise HTTPException(404, f"Config '{cfg_id}' not found")
+    cfg = gr.load_config(str(cfg_path))
+
+    os.makedirs(charts, exist_ok=True)
+    data = gpp.ProfileData(str(uploads), cfg.get("include_codes"))
+    logs.append(f"Loading ITC matrix files from {uploads}")
+    logs.append(f"Profile: {cfg.get('family_title', cfg_id)} "
+                f"| anchor {data.anchor_hs} | period {data.start_year}-{data.review_year}")
+    for w in data.warnings:
+        logs.append(f"  [warn] {w}")
+
+    base = cfg.get("family_title") or cfg_id
+    base = re.sub(r"[^A-Za-z0-9]+", " ", base).strip().upper()
+    report_name = f"{base} PRODUCT PROFILE.docx"
+    report_path = job_dir / report_name
+    logs.append(f"Building product profile report (charts -> {charts})")
+    try:
+        doc = gpp.build_profile_document(cfg, data, str(charts))
+        doc.save(str(report_path))
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    logs.append(f"Report saved as {report_name}")
+
+    tables_name = f"{base} PRODUCT PROFILE TABLES.xlsx"
+    tables_path = job_dir / tables_name
+    try:
+        gpp.write_excel_deliverable(cfg, data, str(tables_path))
+        logs.append(f"Excel deliverable saved as {tables_name}")
+    except Exception as e:
+        logs.append(f"Warning: Excel deliverable skipped: {e}")
+
+    manifest = {
+        "mode": "product",
+        "report_type": "product",
+        "report_name": report_name,
+        "tables_name": tables_name,
+        "config": cfg_id,
+    }
+    (job_dir / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    return report_path, manifest
+
+
 def _run_quarterly_pipeline(job_dir, top_n, mode, logs):
     uploads = job_dir / "uploads"
     tables = job_dir / "tables"
@@ -921,6 +1027,9 @@ def api_status(job_id: str):
                 "report_url": f"/api/download/{job_id}",
                 "tables_url": f"/api/tables/{job_id}",
                 "mode": m.get("mode"), "log": log_lines}
+        if m.get("report_type") == "product":
+            resp["product_tables_url"] = f"/api/product-tables/{job_id}"
+            resp.pop("tables_url", None)
         if m.get("promotion_name"):
             resp["promotion_url"] = f"/api/promotion/{job_id}"
         return resp
@@ -946,8 +1055,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         raise HTTPException(400, "Please select files (or a zip) to upload.")
     if top < 1:
         raise HTTPException(400, "top must be >= 1")
-    if report_type not in ("goods", "services", "quarterly"):
-        raise HTTPException(400, "report_type must be 'goods', 'services' or 'quarterly'")
+    if report_type not in ("goods", "services", "quarterly", "product"):
+        raise HTTPException(400, "report_type must be 'goods', 'services', 'quarterly' or 'product'")
 
     job_dir = _new_job_dir()
     try:
@@ -971,6 +1080,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
             report_type = "services"
         elif mode.startswith("quarterly"):
             report_type = "quarterly"
+        elif mode == "product":
+            report_type = "product"
         elif mode in ("raw", "ready"):
             report_type = "goods"
 
@@ -982,6 +1093,9 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                 job_dir, top, mode, logs)
         elif report_type == "services":
             job_fn = lambda logs: _run_services_pipeline(    # noqa: E731
+                job_dir, config, top, logs)
+        elif report_type == "product":
+            job_fn = lambda logs: _run_product_pipeline(     # noqa: E731
                 job_dir, config, top, logs)
         else:
             job_fn = lambda logs: _run_pipeline(             # noqa: E731
@@ -1055,6 +1169,22 @@ def api_tables(job_id: str):
     return Response(content=buf.getvalue(),
                     media_type="application/zip",
                     headers={"Content-Disposition": f"attachment; filename=tables-{job_id}.zip"})
+
+
+@app.get("/api/product-tables/{job_id}")
+def api_product_tables(job_id: str):
+    """Download the Excel deliverable of a product-profile job."""
+    job_dir = JOBS_DIR / job_id
+    manifest_path = job_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(404, "Job not found (or expired).")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    tables = job_dir / manifest.get("tables_name", "")
+    if not tables.exists():
+        raise HTTPException(404, "Excel deliverable not found.")
+    return FileResponse(
+        str(tables), filename=tables.name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ---------------------------------------------------------------------------

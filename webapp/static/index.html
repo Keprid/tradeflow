@@ -855,10 +855,19 @@ input[type=file]::file-selector-button:hover {
         <input type="radio" name="report_type" value="quarterly" id="rt-quarterly">
         <label for="rt-quarterly"><i class="fas fa-calendar-alt"></i> Quarterly Performance</label>
       </div>
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="product" id="rt-product">
+        <label for="rt-product"><i class="fas fa-boxes"></i> Product Profile</label>
+      </div>
     </div>
 
     <div id="cfg-wrapper" style="display:none;" aria-hidden="true">
       <select id="cfg"><option value="">Loading configs...</option></select>
+    </div>
+
+    <div id="product-cfg-wrapper" style="display:none;" aria-hidden="true">
+      <label for="product-cfg">Product Profile</label>
+      <select id="product-cfg"><option value="">Loading profiles...</option></select>
     </div>
 
     <div id="goods-partner-wrap" class="info-box">
@@ -884,6 +893,11 @@ input[type=file]::file-selector-button:hover {
     <div id="quarterly-info" class="info-box">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       &nbsp;<b>Quarterly Mode:</b> Upload the raw KRA extracts (<i>&hellip;Exports by HS Destination&hellip;</i> and <i>&hellip;Imports by HS Origin&hellip;</i>) &mdash; for both years if you want the year-on-year comparison (up to 4 files, or a .zip) &mdash; or the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. Top N controls rows per market/product table (markets default to 25).
+    </div>
+
+    <div id="product-profile-wrap" class="info-box">
+      <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i>
+      &nbsp;<b>Product Profile Mode:</b> Upload the <b>ITC matrix files</b> for a product family (or a <b>.zip</b> containing them). Pick the product profile (e.g. coffee, crafts) below. A Word report plus an editable Excel deliverable are generated.
     </div>
 
     <div class="row">
@@ -958,6 +972,9 @@ input[type=file]::file-selector-button:hover {
   const cfgWrapper = $('cfg-wrapper');
   const servicesInfo = $('services-info');
   const quarterlyInfo = $('quarterly-info');
+  const productInfo = $('product-profile-wrap');
+  const productCfgWrapper = $('product-cfg-wrapper');
+  const productCfgSelect = $('product-cfg');
   const filesInput = $('files');
   const runBtn = $('run');
   const runCta = $('run-cta');
@@ -1122,6 +1139,24 @@ input[type=file]::file-selector-button:hover {
     }
   }
 
+  async function loadProductProfiles() {
+    try {
+      const r = await fetch('/api/product-profiles');
+      const profiles = await r.json();
+      const sel = $('product-cfg');
+      sel.innerHTML = '';
+      for (const c of profiles) {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.name;
+        sel.appendChild(o);
+      }
+      if (!profiles.length) appendLog('No product profiles found in config/.', 'err');
+    } catch (e) {
+      appendLog('Could not load product profiles: ' + e, 'err');
+    }
+  }
+
   prepBtn.addEventListener('click', async () => {
     const p = (partnerInput.value || '').trim();
     if (!p) {
@@ -1179,6 +1214,8 @@ input[type=file]::file-selector-button:hover {
         quarterlyInfo.style.display = 'block';
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
+        productInfo.style.display = 'none';
+        productCfgWrapper.style.display = 'none';
       } else if (r.value === 'services') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them). ' +
@@ -1190,6 +1227,21 @@ input[type=file]::file-selector-button:hover {
         quarterlyInfo.style.display = 'none';
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
+        productInfo.style.display = 'none';
+        productCfgWrapper.style.display = 'none';
+      } else if (r.value === 'product') {
+        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
+          'Upload the <b>ITC matrix downloads</b> for a product family (or a <b>.zip</b> containing them). ' +
+          'Expected filenames contain keywords like "exporting_economies", "kenyas_exports_to_world_by_product", etc. ' +
+          '<b>.xls</b> files are converted automatically.';
+        cfgSelect.value = '__auto__';
+        cfgWrapper.style.display = 'none';
+        servicesInfo.style.display = 'none';
+        quarterlyInfo.style.display = 'none';
+        partnerWrap.style.display = 'none';
+        promotionWrap.style.display = 'none';
+        productInfo.style.display = 'block';
+        productCfgWrapper.style.display = 'block';
       } else {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
@@ -1201,6 +1253,8 @@ input[type=file]::file-selector-button:hover {
         quarterlyInfo.style.display = 'none';
         partnerWrap.style.display = 'block';
         promotionWrap.style.display = 'flex';
+        productInfo.style.display = 'none';
+        productCfgWrapper.style.display = 'none';
       }
     });
   });
@@ -1215,9 +1269,10 @@ input[type=file]::file-selector-button:hover {
     }
 
     const fd = new FormData();
-    fd.append('config', $('cfg').value);
+    const rt = document.querySelector('input[name="report_type"]:checked').value;
+    fd.append('config', rt === 'product' ? $('product-cfg').value : $('cfg').value);
     fd.append('top', $('top').value);
-    fd.append('report_type', document.querySelector('input[name="report_type"]:checked').value);
+    fd.append('report_type', rt);
     fd.append('promotion', $('promotion').checked ? 'true' : 'false');
     let zips = 0, others = 0;
     for (const f of files) {
@@ -1276,11 +1331,15 @@ input[type=file]::file-selector-button:hover {
         return;
       }
       appendLog('Done.', 'ok');
+      const isProduct = final.mode === 'product';
       $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
-        `${final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'}` +
+        `${isProduct ? 'Product profile' : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables')}` +
         ` &middot; job ${final.job_id}`;
       $('dl-report').href = final.report_url;
-      $('dl-tables').href = final.tables_url;
+      $('dl-tables').href = isProduct ? (final.product_tables_url || '#') : final.tables_url;
+      $('dl-tables').innerHTML = isProduct
+        ? '<i class="fas fa-file-excel"></i> Download Excel Deliverable'
+        : '<i class="fas fa-file-archive"></i> Download Tables (.zip)';
       const dlPromo = $('dl-promotion');
       if (final.promotion_url) {
         dlPromo.href = final.promotion_url;
@@ -1291,7 +1350,7 @@ input[type=file]::file-selector-button:hover {
       $('result').style.display = 'block';
       $('result').classList.add('showing');
       confetti();
-      showToast('success', 'Your report is ready!', 'Word report and tables ZIP are waiting below — click here to jump to them.');
+      showToast('success', 'Your report is ready!', 'Word report and Excel deliverable are waiting below — click here to jump to them.');
       flashTitle('\u2714 Report ready!');
       setTimeout(() => {
         document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1309,6 +1368,7 @@ input[type=file]::file-selector-button:hover {
   });
 
   loadConfigs();
+  loadProductProfiles();
 </script>
 </body>
 </html>
