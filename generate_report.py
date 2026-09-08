@@ -1883,16 +1883,20 @@ class ReportBuilder:
         title_n = n_title or a.country_top_markets_title_n(parsed)
 
         # header row 0
-        self._cell_text(table.cell(0, 0), f"Rank in {last}", bold=True)
-        self._cell_text(table.cell(0, 1), label_col, bold=True, wrap=True)
+        self._cell_text(table.cell(0, 0), f"Rank in {last}", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._cell_text(table.cell(0, 1), label_col, bold=True, wrap=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
         hdr = table.cell(0, 2)
         title = f"{verb} {c['name']}"
         if not unit_row:
             title += "\nValue in USD Billion"
-        self._cell_text(hdr, title, bold=True)
+        self._cell_text(hdr, title, bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
         hdr.merge(table.cell(0, 1 + n))
         sh = table.cell(0, 2 + n)
-        self._cell_text(sh, f"Share in {last} %", bold=True)
+        self._cell_text(sh, f"Share in {last} %", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
 
         # header row 1 (years)
         for k in range(n):
@@ -1902,7 +1906,8 @@ class ReportBuilder:
         if unit_row:
             # header row 2 (unit label), as in the original template
             unit = table.cell(2, 2)
-            self._cell_text(unit, "Value in USD Billion", bold=True)
+            self._cell_text(unit, "Value in USD Billion", bold=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
             unit.merge(table.cell(2, 1 + n))
             self._cell_text(table.cell(2, 2 + n), "%", bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
@@ -1949,9 +1954,12 @@ class ReportBuilder:
         t.style = "Table Grid"
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
         self._set_table_widths(t, [730, 3600, 2440])
-        self._cell_text(t.cell(0, 0), f"Rank in {a.year}", bold=True)
-        self._cell_text(t.cell(0, 1), "African destination", bold=True)
-        self._cell_text(t.cell(0, 2), f"Share of {a.country} exports in {a.year} %", bold=True)
+        self._cell_text(t.cell(0, 0), f"Rank in {a.year}", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._cell_text(t.cell(0, 1), "African destination", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._cell_text(t.cell(0, 2), f"Share of {a.country} exports in {a.year} %",
+                        bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
         afr_total = a.africa_export_share(table)
         for ri, d in enumerate(afr, start=1):
             is_kenya = d["name"].lower() == "kenya"
@@ -1960,7 +1968,7 @@ class ReportBuilder:
                             bold=is_kenya, color=red, align=WD_ALIGN_PARAGRAPH.CENTER)
             self._cell_text(t.cell(ri, 1), display_name(d["name"]), bold=is_kenya,
                             color=red, wrap=True)
-            self._cell_text(t.cell(ri, 2), pct(d["share"]), bold=is_kenya, color=red,
+            self._cell_text(t.cell(ri, 2), pct(d["share"]), bold=True, color=red,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
         rsum = len(afr) + 1
         self._cell_text(t.cell(rsum, 0), "", bold=True)
@@ -1986,15 +1994,20 @@ class ReportBuilder:
                       733, 733, 733, 733, 733, 866]
         self._set_table_widths(table, fit_widths(widths, n))
 
-        self._cell_text(table.cell(0, 0), f"Rank in {last}", bold=True)
-        self._cell_text(table.cell(0, 1), "Code", bold=True)
-        self._cell_text(table.cell(0, 2), "Product label", bold=True, wrap=True)
+        self._cell_text(table.cell(0, 0), f"Rank in {last}", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._cell_text(table.cell(0, 1), "Code", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._cell_text(table.cell(0, 2), "Product label", bold=True, wrap=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
         hdr = table.cell(0, 3)
         title = flow_label if unit_row else f"{flow_label}  {unit}"
-        self._cell_text(hdr, title, bold=True)
+        self._cell_text(hdr, title, bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
         hdr.merge(table.cell(0, 2 + n))
         sh = table.cell(0, 3 + n)
-        self._cell_text(sh, f"Share in {last} %", bold=True)
+        self._cell_text(sh, f"Share in {last} %", bold=True,
+                        align=WD_ALIGN_PARAGRAPH.CENTER)
 
         for k in range(n):
             self._cell_text(table.cell(1, 3 + k), str(years[k]), bold=True,
@@ -2002,7 +2015,8 @@ class ReportBuilder:
 
         if unit_row:
             unit = table.cell(2, 3)
-            self._cell_text(unit, "Value in USD Billion", bold=True)
+            self._cell_text(unit, "Value in USD Billion", bold=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
             unit.merge(table.cell(2, 2 + n))
             self._cell_text(table.cell(2, 3 + n), "%", bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
@@ -2133,11 +2147,11 @@ class ReportBuilder:
             self._cell_text(table.cell(r, 2), it["label"], wrap=True)
             self._cell_text(table.cell(r, 3), num(it["value"]),
                             align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 4), pct(it["kenya_share"]),
+            self._cell_text(table.cell(r, 4), pct(it["kenya_share"]), bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 5), pct(it["partner_share"]),
+            self._cell_text(table.cell(r, 5), pct(it["partner_share"]), bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
-            self._cell_text(table.cell(r, 6), pct(it["growth"]),
+            self._cell_text(table.cell(r, 6), pct(it["growth"]), bold=True,
                             align=WD_ALIGN_PARAGRAPH.CENTER)
         self._fit_table_on_page(table)
         return table

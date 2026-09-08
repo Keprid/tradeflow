@@ -190,6 +190,7 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
             sc.value = round(d["share"], 6)
             sc.number_format = "0.0%"
         sc.alignment = CENTER
+        sc.font = Font(bold=True)
         for cc in range(col0, last_col + 1):
             cell = ws.cell(rw, cc)
             if cell.font is None or not cell.font.bold:
@@ -447,6 +448,7 @@ def _write_table7_sheet(wb, a):
         if d.get("share") is not None:
             sc.value = round(d["share"], 6)
             sc.number_format = "0.0%"
+        sc.font = Font(bold=True)
         for cc in range(1, 4 + n):
             ws.cell(rr, cc).alignment = CENTER
             ws.cell(rr, cc).border = Border(left=THIN, right=THIN,
@@ -802,17 +804,17 @@ def _write_quarterly_body_row(ws, d, body, col_rank, col_name,
 
 
 def _write_quarterly_table(ws, table, title,
-                           flow_label="Value in Ksh. Billion"):
+                           flow_label="Value in Ksh. Billion", cur_year=None):
     """Write one parsed quarterly rank table (current vs previous-year quarter).
 
     Quarterly items carry per-month values for both years, a current/previous
     Total, a share, and (when comparing) an absolute change + % change.
     """
     months = table["months"]
-    years = table["years"]
+    years = table.get("years") or []
     comparison = bool(table.get("comparison"))
-    y_prev = years[0] if years and comparison else None
-    y_cur = years[1] if years and len(years) > 1 else None
+    y_prev = years[0] if comparison and years else None
+    y_cur = cur_year or (years[1] if len(years) > 1 else None)
     n_m = len(months)
     col_rank, col_name = 1, 2
     # column plan
@@ -840,7 +842,7 @@ def _write_quarterly_table(ws, table, title,
         c.font = HDR_FONT
         c.fill = HDR_FILL
         c.alignment = CENTER
-    ws.cell(hdr, col_rank).value = "Rank"
+    ws.cell(hdr, col_rank).value = "Rank in %s" % (y_cur or "")
     ws.cell(hdr, col_name).value = flow_label
     if comparison:
         ws.merge_cells(start_row=hdr, start_column=prev_start,
@@ -950,7 +952,7 @@ def build_quarterly_deliverable(a, cfg, out_path):
         if not table:
             continue
         ws = wb.create_sheet(title[:31])
-        _write_quarterly_table(ws, table, title, flow)
+        _write_quarterly_table(ws, table, title, flow, cur_year=a.year)
 
     _add_quarterly_balance(wb, a)
     _add_quarterly_shares(wb, a)

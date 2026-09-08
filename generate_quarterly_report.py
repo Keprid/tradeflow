@@ -1078,6 +1078,7 @@ def _fill_arrow_cell(b, cell, value, kind):
     r2 = p.add_run(txt)
     r2.font.name = "Century Gothic"
     r2.font.size = Pt(10)
+    r2.font.bold = True
     r2.font.color.rgb = color
 
 
@@ -1095,18 +1096,24 @@ def _add_q_table_simple(b: ReportBuilder, parsed, item_header):
     widths = [700, 2750] + [900] * n + [1000, 950]
     b._set_table_widths(table, widths)
 
-    b._cell_text(table.cell(0, 0), "Rank \nin\n%d" % Y, bold=True)
-    b._cell_text(table.cell(0, 1), item_header, bold=True, wrap=True)
+    b._cell_text(table.cell(0, 0), "Rank \nin\n%d" % Y, bold=True,
+                 align=WD_ALIGN_PARAGRAPH.CENTER)
+    b._cell_text(table.cell(0, 1), item_header, bold=True, wrap=True,
+                 align=WD_ALIGN_PARAGRAPH.CENTER)
     for k, m in enumerate(parsed["months"]):
         b._cell_text(table.cell(0, 2 + k), m, bold=True,
                      align=WD_ALIGN_PARAGRAPH.CENTER)
-    b._cell_text(table.cell(0, 2 + n), "%d\nTotal" % Y, bold=True)
-    b._cell_text(table.cell(0, 3 + n), "Share \nin\n%d" % Y, bold=True)
-    table.cell(0, 3 + n).merge(table.cell(1, 3 + n))
+    b._cell_text(table.cell(0, 2 + n), "%d\nTotal" % Y, bold=True,
+                 align=WD_ALIGN_PARAGRAPH.CENTER)
+    b._cell_text(table.cell(0, 3 + n), "Share \nin\n%d" % Y, bold=True,
+                 align=WD_ALIGN_PARAGRAPH.CENTER)
+    b._cell_text(table.cell(1, 3 + n), "%", bold=True,
+                 align=WD_ALIGN_PARAGRAPH.CENTER)
 
     ucell = table.cell(1, 2)
-    b._cell_text(ucell, "Value in Ksh. Billion", bold=True)
-    ucell.merge(table.cell(1, 1 + n))
+    b._cell_text(ucell, "Value in Ksh. Billion", bold=True,
+                 align=WD_ALIGN_PARAGRAPH.CENTER)
+    ucell.merge(table.cell(1, 2 + n))
 
     def emit(d, ri, bold=False):
         b._cell_text(table.cell(ri, 0),
@@ -1123,8 +1130,8 @@ def _add_q_table_simple(b: ReportBuilder, parsed, item_header):
                      bold=bold, align=WD_ALIGN_PARAGRAPH.CENTER)
         sh = d.get("share")
         b._cell_text(table.cell(ri, 3 + n),
-                     ("%.2f" % (sh * 100)) if sh is not None else "",
-                     bold=bold, align=WD_ALIGN_PARAGRAPH.CENTER)
+                     ("%.1f%%" % (sh * 100)) if sh is not None else "",
+                     bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
 
     ri = 2
     for d in parsed["items"]:
@@ -1176,7 +1183,8 @@ def add_q_table(b: ReportBuilder, parsed, item_header):
     b._set_table_widths(table, widths)
 
     def hcell(r, c, text):
-        b._cell_text(table.cell(r, c), text, bold=True)
+        b._cell_text(table.cell(r, c), text, bold=True,
+                     align=WD_ALIGN_PARAGRAPH.CENTER)
 
     # header row 0: merged group headers
     hcell(0, c_rank, "Rank")

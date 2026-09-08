@@ -679,15 +679,13 @@ def write_report_table_simple(wb, rows, all_other, grand, title, month_names,
     # unit sub-header row
     unit_row = 2
     put(ws, unit_row, 1, "", fill=HDR_FILL)
-    hdr_unit = ws.cell(row=unit_row, column=2, value=KSH_BILLION)
+    put(ws, unit_row, 2, "", fill=HDR_FILL)
+    hdr_unit = ws.cell(row=unit_row, column=3, value=KSH_BILLION)
     style_cell(hdr_unit, bold=True, fill=HDR_FILL)
     hdr_unit.font = Font(name=FONT, size=FONT_SIZE, bold=True,
                          color=HDR_FONT_COLOR)
-    ws.merge_cells(start_row=unit_row, start_column=2,
-                   end_row=unit_row, end_column=2 + n)
-    put(ws, unit_row, 3 + n, KSH_BILLION, bold=True, fill=HDR_FILL)
-    ws.cell(row=unit_row, column=3 + n).font = Font(
-        name=FONT, size=FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+    ws.merge_cells(start_row=unit_row, start_column=3,
+                   end_row=unit_row, end_column=3 + n)
     put(ws, unit_row, 4 + n, "%", bold=True, fill=HDR_FILL)
 
     first_data = 3
