@@ -29,8 +29,8 @@ from generate_report import num, pct, clean_label
 NAVY = "1F3864"
 GRID_COLOR = "D6DCE4"
 THICK_COLOR = "1F3864"
-HDR_FILL = PatternFill(fill_type="solid", fgColor=NAVY)
-HDR_FONT = Font(name="Century Gothic", size=11, bold=True, color="FFFFFF")
+HDR_FILL = PatternFill(fill_type=None)
+HDR_FONT = Font(name="Century Gothic", size=11, bold=True, color="1F3864")
 THIN = Side(style="thin", color=GRID_COLOR)
 THICK = Side(style="thick", color=THICK_COLOR)
 CENTER = Alignment(horizontal="center", vertical="center")
@@ -94,7 +94,7 @@ def _value_cell(cell, v, fmt):
     if v is None:
         cell.value = ""
         return
-    cell.value = v
+    cell.value = round(v, 1) if isinstance(v, (int, float)) else v
     cell.number_format = fmt
 
 
@@ -163,6 +163,9 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
 
     rows = _iter_table_rows(table)
     first_body = None
+    item_rows = []            # body row numbers of kind == "item"
+    total_row = None          # body row number of kind == "total"
+    all_row = None            # body row number of kind == "all_other"
     for d in rows:
         body_start = body_start if body_start is not None else rbody
         is_total = d["kind"] == "total"
@@ -191,9 +194,36 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
             if cell.font is None or not cell.font.bold:
                 if b:
                     cell.font = Font(bold=True)
+        # record positions for formula cells (All-other / Total)
+        if is_total:
+            total_row = rw
+        elif is_all:
+            all_row = rw
+        elif d["kind"] == "item":
+            item_rows.append(rw)
         if first_body is None:
             first_body = rw
         rbody += 1
+
+    # Embed formulas so the derived "All other" row recalculates from the
+    # listed products:  All other = Total - SUM(all listed items).
+    # The Total row keeps its literal value (the observed grand total); giving
+    # it a formula that references All-other would create a circular reference.
+    if item_rows and all_row is not None and total_row is not None:
+        for i in range(n_years):
+            valc = col_label + i
+            items_ref = ",".join("%s%d" % (get_column_letter(valc), rw)
+                                 for rw in item_rows)
+            tot_cell = "%s%d" % (get_column_letter(valc), total_row)
+            ws.cell(all_row, valc).value = "=%s-SUM(%s)" % (tot_cell, items_ref)
+            ws.cell(all_row, valc).number_format = "#,##0.0"
+    elif item_rows and total_row is not None and all_row is None:
+        for i in range(n_years):
+            valc = col_label + i
+            items_ref = ",".join("%s%d" % (get_column_letter(valc), rw)
+                                 for rw in item_rows)
+            ws.cell(total_row, valc).value = "=SUM(%s)" % items_ref
+            ws.cell(total_row, valc).number_format = "#,##0.0"
 
     body_end = rbody - 1 if first_body is not None else r2
 
@@ -317,7 +347,7 @@ def _add_balance_bar(ws, top_row, a):
         for cc, series in ((2, exports), (3, imports), (4, balance)):
             v = series[i] if i < len(series) else None
             c = ws.cell(rr, cc)
-            c.value = v if v is not None else ""
+            c.value = round(v, 1) if isinstance(v, (int, float)) else ""
             c.number_format = "#,##0.0"
             c.alignment = RIGHT
 
@@ -405,7 +435,7 @@ def _write_table7_sheet(wb, a):
             v = d.get("years") or []
             c = ws.cell(rr, 3 + i)
             val = v[i] if i < len(v) else None
-            c.value = val if val is not None else ""
+            c.value = round(val, 1) if isinstance(val, (int, float)) else ""
             c.number_format = "#,##0.0"
         sc = ws.cell(rr, 3 + n)
         if d.get("share") is not None:
@@ -475,7 +505,7 @@ def _add_bar_generic(ws, top_row, title, cats, series, colors=None,
         for si, (_name, vals) in enumerate(series, start=2):
             v = vals[i - 1] if i - 1 < len(vals) else None
             cell = ws.cell(rr, si)
-            cell.value = v if v is not None else ""
+            cell.value = round(v, 1) if isinstance(v, (int, float)) else ""
             cell.number_format = "#,##0.0"
     for cc in range(1, 2 + len(series)):
         c = ws.cell(r0, cc)
@@ -680,8 +710,83 @@ def _q_value(cell, v, fmt):
     if v is None:
         cell.value = ""
         return
-    cell.value = v
+    cell.value = round(v, 1) if isinstance(v, (int, float)) else v
     cell.number_format = fmt
+
+
+def _write_quarterly_body_row(ws, d, body, col_rank, col_name,
+                              cur_start, prev_start, n_m, comparison,
+                              chg_col, pct_col, share_col,
+                              mode=None, item_rows=(), grand_row=None,
+                              all_row=None):
+    """Write one quarterly table body row.
+
+    ``mode`` controls how the value cells are produced:
+      * ``None``        -- literal values (the listed items, and the grand total)
+      * ``"all_other"`` -- formula: ``= Grand Total - SUM(listed items)``
+      * ``"grand_total"`` -- literal values (kept non-circular; only the
+        All-other row carries a formula that references this row).
+    """
+    ws.cell(body, col_rank).value = d.get("rank")
+    nc = ws.cell(body, col_name)
+    nc.value = clean_label(d.get("label") or d.get("name"))
+    nc.alignment = LEFT
+    mvals = d.get("months") or [[], []]
+    prev_vals = mvals[0] if len(mvals) > 0 else []
+    cur_vals = mvals[1] if len(mvals) > 1 else []
+    totals = d.get("totals") or [None, None]
+
+    def val_cell(col, lit):
+        c = ws.cell(body, col)
+        if mode is None or mode == "grand_total":
+            _q_value(c, lit, "#,##0.0")
+            c.alignment = RIGHT if isinstance(lit, (int, float)) else CENTER
+            return
+        if mode == "all_other" and grand_row is not None:
+            g = "%s%d" % (get_column_letter(col), grand_row)
+            s = "SUM(%s)" % ",".join(
+                "%s%d" % (get_column_letter(col), r) for r in item_rows)
+            c.value = "=%s-%s" % (g, s)
+        else:
+            _q_value(c, lit, "#,##0.0")
+        c.number_format = "#,##0.0"
+        c.alignment = RIGHT
+
+    if comparison:
+        for k in range(n_m):
+            v = prev_vals[k] if k < len(prev_vals) else None
+            val_cell(prev_start + k, v)
+        vp = totals[0]
+        val_cell(prev_start + n_m, vp)
+    for k in range(n_m):
+        v = cur_vals[k] if k < len(cur_vals) else None
+        val_cell(cur_start + k, v)
+    vc = totals[1]
+    val_cell(cur_start + n_m, vc)
+
+    # Change / % / Share are shown only for the literal item rows; the
+    # all-other and grand-total rows are recalculable from the value columns.
+    if mode is None and comparison:
+        chg = d.get("change")
+        if chg is not None:
+            c = ws.cell(body, chg_col)
+            c.value = round(chg, 1)
+            c.number_format = "+#,##0.0;-#,##0.0;0.0"
+        pctv = d.get("pct")
+        p = ws.cell(body, pct_col)
+        if pctv is not None:
+            p.value = round(pctv, 4)
+            p.number_format = "0.0%"
+        p.alignment = CENTER
+    sh = d.get("share") if mode is None else None
+    sc = ws.cell(body, share_col)
+    if sh is not None:
+        sc.value = round(sh / 100.0, 6) if sh > 1 else round(sh, 6)
+        sc.number_format = "0.0%"
+    sc.alignment = CENTER
+    if mode is not None:
+        for cc in range(1, share_col + 1):
+            ws.cell(body, cc).font = Font(bold=True)
 
 
 def _write_quarterly_table(ws, table, title,
@@ -762,53 +867,53 @@ def _write_quarterly_table(ws, table, title,
 
     body = hdr2 + 1
     first = None
-    last = None
-    for d in table.get("orows", table["items"]):
-        if first is None:
-            first = body
-        b = d.get("kind") in ("total", "all_other")
-        ws.cell(body, col_rank).value = d.get("rank")
-        nc = ws.cell(body, col_name)
-        nc.value = clean_label(d.get("label") or d.get("name"))
-        nc.alignment = LEFT
-        mvals = d.get("months") or [[], []]
-        prev_vals = mvals[0] if len(mvals) > 0 else []
-        cur_vals = mvals[1] if len(mvals) > 1 else []
-        if comparison:
-            for k in range(n_m):
-                _q_value(ws.cell(body, prev_start + k),
-                         prev_vals[k] if k < len(prev_vals) else None, "#,##0.0")
-            _q_value(ws.cell(body, prev_start + n_m),
-                     (d.get("totals") or [None, None])[0], "#,##0.0")
-        for k in range(n_m):
-            _q_value(ws.cell(body, cur_start + k),
-                     cur_vals[k] if k < len(cur_vals) else None, "#,##0.0")
-        _q_value(ws.cell(body, cur_start + n_m),
-                 (d.get("totals") or [None, None])[1], "#,##0.0")
-        if comparison:
-            chg = d.get("change")
-            if chg is not None:
-                chg_cell = ws.cell(body, chg_col)
-                chg_cell.value = round(chg, 2)
-                chg_cell.number_format = "+#,##0.0;-#,##0.0;0.0"
-            pctv = d.get("pct")
-            p = ws.cell(body, pct_col)
-            if pctv is not None:
-                p.value = round(pctv, 4)
-                p.number_format = "0.0%"
-            p.alignment = CENTER
-        sh = d.get("share")
-        sc = ws.cell(body, share_col)
-        if sh is not None:
-            sc.value = round(sh / 100.0, 6) if sh > 1 else round(sh, 6)
-            sc.number_format = "0.0%"
-        sc.alignment = CENTER
-        for cc in range(1, last_col + 1):
-            cell = ws.cell(body, cc)
-            if b:
-                cell.font = Font(bold=True)
-        last = body
-        body += 1
+    items_data = table.get("orows", table["items"])
+    all_data = table.get("all_other")
+    grand_data = table.get("grand")
+
+    # Pre-compute row numbers so All-other / Grand Total formulas can
+    # reference one another (All-other = Grand - SUM(items); Grand = SUM).
+    item_rows = []
+    all_row = None
+    grand_row = None
+    r = body
+    first = body
+    for _d in items_data:
+        item_rows.append(r)
+        r += 1
+    if all_data is not None:
+        all_row = r
+        r += 1
+    if grand_data is not None:
+        grand_row = r
+        r += 1
+
+    # --- listed items (literal source values) ---
+    last = body - 1
+    for i, d in enumerate(items_data):
+        rw = item_rows[i]
+        _write_quarterly_body_row(ws, d, rw, col_rank, col_name,
+                                  cur_start, prev_start, n_m, comparison,
+                                  chg_col, pct_col, share_col)
+        last = rw
+
+    # --- All-other row: Grand Total - SUM(listed items), per column ---
+    if all_data is not None and grand_data is not None:
+        _write_quarterly_body_row(ws, all_data, all_row, col_rank, col_name,
+                                  cur_start, prev_start, n_m, comparison,
+                                  chg_col, pct_col, share_col,
+                                  mode="all_other", item_rows=item_rows,
+                                  grand_row=grand_row)
+        last = all_row
+
+    # --- Grand Total row: SUM(items) + All-other, per column ---
+    if grand_data is not None:
+        _write_quarterly_body_row(ws, grand_data, grand_row, col_rank,
+                                  col_name, cur_start, prev_start, n_m,
+                                  comparison, chg_col, pct_col, share_col,
+                                  mode="grand_total", item_rows=item_rows,
+                                  all_row=all_row)
+        last = grand_row
 
     body_end = last if last is not None else hdr2
     _apply_borders(ws, hdr, 1, body_end, last_col, last_col)

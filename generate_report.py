@@ -1623,18 +1623,26 @@ class ReportBuilder:
     # -- tables -------------------------------------------------------------
     @staticmethod
     def _set_table_widths(table, widths):
-        """Set fixed column widths (twips) as in the original template."""
+        """Size a report table to span the full page width and fit its content.
+
+        The table is given ``autofit`` layout at 100% of the window width, so
+        Word distributes the available width to each column based on its
+        content.  The longest column contents (the product/market labels) are
+        therefore allocated the most space, mirroring the template's design.
+        The ``widths`` argument (twips) is kept as a relative hint for the grid
+        so column proportions stay sensible before Word autofits them.
+        """
         tbl = table._tbl
         tblPr = tbl.tblPr
         layout = OxmlElement("w:tblLayout")
-        layout.set(qn("w:type"), "fixed")
+        layout.set(qn("w:type"), "autofit")
         tblPr.append(layout)
         tblW = tblPr.find(qn("w:tblW"))
         if tblW is None:
             tblW = OxmlElement("w:tblW")
             tblPr.append(tblW)
-        tblW.set(qn("w:type"), "dxa")
-        tblW.set(qn("w:w"), str(sum(widths)))
+        tblW.set(qn("w:type"), "pct")
+        tblW.set(qn("w:w"), "5000")   # 5000 = 100% of the window width
         grid = tbl.find(qn("w:tblGrid"))
         if grid is not None:
             for gc, w in zip(grid.findall(qn("w:gridCol")), widths):
