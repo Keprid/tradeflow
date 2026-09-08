@@ -122,7 +122,12 @@ def _build_openpyxl_chart(kind, title, categories, series, colors,
     ws = wb.active
 
     if kind in ("pie", "doughnut"):
-        chart = DoughnutChart() if kind == "doughnut" else PieChart()
+        # Word's chart engine crashes trying to open a *doughnut* whose data
+        # labels are positioned "outEnd" (verified empirically against this
+        # Office build); pies handle outEnd fine, so every Word share chart
+        # is rendered as a pie with native outside labels + leader lines.
+        # ("doughnut" is accepted as an alias for compatibility.)
+        chart = PieChart()
         chart.title = title
         labels = Reference(ws, min_col=1, min_row=2,
                            max_row=1 + len(categories))
@@ -132,18 +137,18 @@ def _build_openpyxl_chart(kind, title, categories, series, colors,
         chart.dataLabels = DataLabelList()
         chart.dataLabels.showPercent = True
         chart.dataLabels.numFmt = "0.0%"
-        # Word's chart engine crashes trying to open a *doughnut* whose data
-        # labels are positioned "outEnd" (verified empirically against this
-        # Office build); pies handle outEnd fine, doughnuts keep the default
-        # label placement and are still fully editable in Word.
-        if kind == "pie":
-            chart.dataLabels.dLblPos = "outEnd"
+        chart.dataLabels.dLblPos = "outEnd"
         chart.dataLabels.showLeaderLines = True
+        # Unset show* flags default to TRUE in Word, which renders the labels
+        # as "Series, Category, value, %" garbage; pin them off explicitly so
+        # the editable charts show clean percents only.
+        chart.dataLabels.showSerName = False
+        chart.dataLabels.showCatName = False
+        chart.dataLabels.showVal = False
+        chart.dataLabels.showLegendKey = False
         chart.legend = Legend()
         chart.legend.position = "r"
         chart.legend.overlay = False
-        if kind == "doughnut":
-            chart.holeSize = hole_size
         # per-point fill colours (openpyxl keeps default Office palette when
         # points aren't specified; setting them keeps parity with the pie).
         chart.series[0].data_points = [
