@@ -61,6 +61,26 @@ MONTH_NAMES = {1: "January", 2: "February", 3: "March", 4: "April",
                5: "May", 6: "June", 7: "July", 8: "August", 9: "September",
                10: "October", 11: "November", 12: "December"}
 
+
+def _staple_name(name):
+    """Concise, prose-friendly noun for a staple-food import label.
+
+    The raw HS descriptions are verbose and punctuated (e.g. ``Rice.
+    - Semi-milled or wholly milled rice, whether or not polished or
+    glazed``), which reads poorly inside a narrative sentence. Map the
+    known staple patterns to short common names instead.
+    """
+    low = name.lower()
+    if "palm oil" in low:
+        return "palm oil"
+    if "wheat" in low or "meslin" in low:
+        return "wheat and meslin"
+    if "maize" in low or "corn" in low:
+        return "maize (corn)"
+    if "rice" in low:
+        return "rice"
+    return short_product_name(name, maxlen=20)
+
 # Regional groupings used by the narrative -------------------------------
 EAC = {"kenya", "uganda", "tanzania", "rwanda", "burundi",
        "democratic rep of congo", "democratic republic of congo",
@@ -756,8 +776,7 @@ def build_narratives(a: QuarterAnalysis):
     staple = [x for x in (wheat, palm, rice, maize) if x]
     if staple:
         d1 += ("Essential food items (%s) are structural imports. "
-               % ", ".join(short_product_name(x[0], maxlen=16).lower()
-                           for x in staple[:3]))
+               % ", ".join(_staple_name(x[0]) for x in staple[:3]))
     d1 += ("Machinery and capital goods reflect a need for imported equipment "
            "for investment and production. This reliance on imported energy, "
            "food and capital goods weighs on the shilling and on foreign "
@@ -908,12 +927,11 @@ def build_narratives(a: QuarterAnalysis):
     if staples:
         a2p1 += (". Second, recurring imports of %s reflect domestic "
                  "production shortfalls."
-                 % ", ".join(short_product_name(x[0], maxlen=16).lower()
-                             for x in staples))
+                 % ", ".join(_staple_name(x[0]) for x in staples))
     else:
         a2p1 += (". Second, recurring food imports reflect domestic "
                  "production shortfalls.")
-    a2p1 += (". Third, machinery, vehicles and equipment linked to "
+    a2p1 += (" Third, machinery, vehicles and equipment linked to "
              "construction, ICT, transport and investment activity. Fourth, "
              "consumables and industrial inputs such as medicaments, plastic "
              "polymers and electronic materials, which support manufacturing "
