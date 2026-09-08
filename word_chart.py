@@ -132,7 +132,12 @@ def _build_openpyxl_chart(kind, title, categories, series, colors,
         chart.dataLabels = DataLabelList()
         chart.dataLabels.showPercent = True
         chart.dataLabels.numFmt = "0.0%"
-        chart.dataLabels.dLblPos = "outEnd"
+        # Word's chart engine crashes trying to open a *doughnut* whose data
+        # labels are positioned "outEnd" (verified empirically against this
+        # Office build); pies handle outEnd fine, doughnuts keep the default
+        # label placement and are still fully editable in Word.
+        if kind == "pie":
+            chart.dataLabels.dLblPos = "outEnd"
         chart.dataLabels.showLeaderLines = True
         chart.legend = Legend()
         chart.legend.position = "r"
@@ -293,6 +298,10 @@ def _drawing_inline(chart_r_id, doc_pr_id, name, cx, cy):
     chart_el.set(_R + "id", chart_r_id)
     return inline
 
+
+# ---------------------------------------------------------------------------
+# pie/doughnut label options
+# ---------------------------------------------------------------------------
 
 def inject_chart(paragraph, kind, title, categories, series, colors=None,
                  width_in=6.3, height_in=3.6, name="Chart", hole_size=50):
