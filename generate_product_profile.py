@@ -168,17 +168,47 @@ class ProfileData:
             (r["product_label"] for r in partner_rows
              if r["product"] == anchor_product), "")
 
-        # Family members (chapter rows of the by-product download)
-        chapter = self.anchor_hs[:2]
+        # Total rows: a product code whose series equals the sum of all the
+        # other codes in the same file (the basket aggregate of a selection
+        # download). They are header rows, not family members.
+        self._file_totals = {}
+        for key in ("kenya_exports_by_product", "kenya_imports_by_product",
+                    "world_exports_by_product", "world_imports_by_product"):
+            if key in self.files:
+                self._file_totals[key] = self._total_codes(key)
+
+        # Family members: product detail rows of the by-product download
+        # (its total row, if any, is excluded).
+        total = self._file_totals.get("kenya_exports_by_product", set())
         members = []
         for r in self._rows("kenya_exports_by_product"):
-            if r["partner"] != "000" or not r["product"].startswith(chapter):
+            if r["partner"] != "000" or r["product"] in total:
                 continue
             members.append({"code": r["product"], "label": r["product_label"],
                             "years": r["years"]})
         members.sort(key=lambda m: m["years"].get(self.review_year) or 0.0,
                      reverse=True)
         self.members = members
+        self.anchor_is_total = anchor_product in total
+
+    def _total_codes(self, key):
+        """Codes in ``key`` whose review-year value equals the sum of all the
+        other codes in the same file (the selection total row)."""
+        by_code = {}
+        for r in self._rows(key):
+            if r["partner"] != "000":
+                continue
+            by_code.setdefault(r["product"], r["years"])
+        codes = [c for c in by_code if by_code[c].get(self.review_year)]
+        if len(codes) < 3:
+            return set()
+        grand = sum(by_code[c].get(self.review_year) or 0.0 for c in codes)
+        out = set()
+        for c in codes:
+            v = by_code[c].get(self.review_year) or 0.0
+            if grand and abs(v - (grand - v)) / grand < 0.01:
+                out.add(c)
+        return out
 
     # -- accessors ----------------------------------------------------------
     def _rows(self, key):
@@ -195,16 +225,6 @@ class ProfileData:
     @property
     def years(self):
         return self.all_years
-
-    def _world_rows(self, key, chapter=None):
-        out = []
-        for r in self._rows(key):
-            if r["partner"] != "000":
-                continue
-            if chapter and not r["product"].startswith(chapter):
-                continue
-            out.append(r)
-        return out
 
     def destinations(self):
         rows = sorted((r for r in self._rows("kenya_exports_by_partner")
@@ -239,24 +259,27 @@ class ProfileData:
                 for r in rows]
 
     def kenya_import_products(self):
-        rows = sorted(self._world_rows("kenya_imports_by_product",
-                                       self.anchor_hs[:2]),
+        total = self._file_totals.get("kenya_imports_by_product", set())
+        rows = sorted((r for r in self._rows("kenya_imports_by_product")
+                       if r["partner"] == "000" and r["product"] not in total),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": r["product_label"], "years": r["years"]}
                 for r in rows]
 
     def global_export_products(self):
-        rows = sorted(self._world_rows("world_exports_by_product",
-                                       self.anchor_hs[:2]),
+        total = self._file_totals.get("world_exports_by_product", set())
+        rows = sorted((r for r in self._rows("world_exports_by_product")
+                       if r["partner"] == "000" and r["product"] not in total),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": r["product_label"], "years": r["years"]}
                 for r in rows]
 
     def global_import_products(self):
-        rows = sorted(self._world_rows("world_imports_by_product",
-                                       self.anchor_hs[:2]),
+        total = self._file_totals.get("world_imports_by_product", set())
+        rows = sorted((r for r in self._rows("world_imports_by_product")
+                       if r["partner"] == "000" and r["product"] not in total),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": r["product_label"], "years": r["years"]}
@@ -564,16 +587,20 @@ def make_donut(pairs, tmp_dir, name, title):
     return path
 
 
-def family_members_line(data):
+def family_members_line(data, top=12):
     members = data.members
     if not members:
         return ""
     by_code = {m["code"]: m["label"] for m in members}
+    shown = members[:top]
     items = ["%s (%s)" % (m["code"], short_label(by_code[m["code"]], 60))
-             for m in members]
+             for m in shown]
+    tail = ""
+    if len(members) > top:
+        tail = ", among %d product headings in total" % len(members)
     return ("The family covers the following product headings, ranked by the "
-            "value of Kenya's exports in %d: %s."
-            % (data.review_year, ordinal_list(items)))
+            "value of Kenya's exports in %d: %s%s."
+            % (data.review_year, ordinal_list(items), tail))
 
 
 def section_trade_family(b, cfg, data, source, tmp_dir):
@@ -593,7 +620,9 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
         return
     b._next_table("Trend on %s: Kenya's Exports by Product, %d" % (family, rev),
                   source)
-    b.add_value_table("Product", members, years, "Share in %d" % rev,
+    members_tbl = top_rows(members, cfg.get("top_n", 10), years,
+                           "All other products")
+    b.add_value_table("Product", members_tbl, years, "Share in %d" % rev,
                       "Kenya's Exports of %s by Product" % family, source,
                       total_label="Total")
 
@@ -733,7 +762,8 @@ def section_global(b, cfg, data, source, tmp_dir):
                                % (anchor, rev), source)
                 b.add_figure(img)
 
-    g_exp = data.global_export_products()
+    g_exp = top_rows(data.global_export_products(),
+                     cfg.get("top_n", 10), years, "All other products")
     if g_exp:
         b._next_table("Trend on %s Globally - Export, %d" % (family, rev),
                       source)
@@ -742,7 +772,8 @@ def section_global(b, cfg, data, source, tmp_dir):
                           total_label="Total")
         trend_bullets(b, g_exp, years, family, "exports")
 
-    g_imp = data.global_import_products()
+    g_imp = top_rows(data.global_import_products(),
+                     cfg.get("top_n", 10), years, "All other products")
     if g_imp:
         b._next_table("Trend on %s Globally - Import, %d" % (family, rev),
                       source)
@@ -806,24 +837,31 @@ def geo_bullets(b, rows, years, anchor_short, role):
                      % (residue, residual_share * 100, denom))
 
 
-def trend_bullets(b, rows, years, family, noun, scope="World"):
+def trend_bullets(b, rows, years, family, noun, scope="World",
+                  residual="All other products"):
     last = years[-1]
     pairs = _shares(rows, years)
     pairs.sort(key=lambda p: p[1], reverse=True)
     if not pairs:
         return
+    real = [p for p in pairs if p[0] != residual]
+    if not real:
+        return
     subj = ("%s %s" % (scope, noun)).strip()
     denom = "Kenya's imports" if scope == "Kenya's" else "the world total"
-    lead, share = pairs[0]
+    lead, share = real[0]
     txt = ("%s of %s in %d were led by %s (%.1f%% of %s)"
            % (subj, family.lower(), last, short_label(lead, 60), share * 100,
               denom))
-    follows = pairs[1:3]
+    follows = real[1:3]
     if follows:
         txt += ", followed by %s" % ordinal_list(
             ["%s (%.1f%%)" % (short_label(l, 50), s * 100)
              for l, s in follows])
     b.add_bullet(txt + ".")
+    lead_share = sum(s for _, s in real)
+    b.add_bullet("Together, the leading product headings accounted for %.1f%% "
+                 "of %s." % (lead_share * 100, denom))
     totals = _year_totals(rows)
     g = growth_phrase(cagr([totals.get(y) for y in years], years),
                       period_phrase(years[0], last))
@@ -861,6 +899,8 @@ def section_kenya_imports(b, cfg, data, source):
         geo_bullets(b, sources, years, anchor, "source")
 
     if products:
+        products = top_rows(products, cfg.get("top_n", 10), years,
+                            "All other products")
         b._next_table("Kenya's Imports of %s by Product, %d" % (family, rev),
                       source)
         b.add_value_table("Product", products, years, "Share in %d" % rev,
@@ -1030,7 +1070,8 @@ def write_excel_deliverable(cfg, data, out_path):
 
     # ---- sheets -----------------------------------------------------------
     if data.members:
-        members = data.members
+        members = top_rows(data.members, cfg.get("top_n", 10), years,
+                           "All other products")
         value_sheet("Kenya Exports by Product", "Product", members,
                     doughnut=("Share of Kenya's %s by Product"
                               % cfg.get("family_title"),
@@ -1052,8 +1093,10 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet(sheet_name("World Exporters"), "Exporting economy", exporters)
     if importers:
         value_sheet(sheet_name("World Importers"), "Importing economy", importers)
-    g_exp = data.global_export_products()
-    g_imp = data.global_import_products()
+    g_exp = top_rows(data.global_export_products(), cfg.get("top_n", 10),
+                     years, "All other products")
+    g_imp = top_rows(data.global_import_products(), cfg.get("top_n", 10),
+                     years, "All other products")
     if g_exp:
         value_sheet("Global Exports by Product", "Product", g_exp)
     if g_imp:
@@ -1062,7 +1105,8 @@ def write_excel_deliverable(cfg, data, out_path):
                        years, "All other sources")
     if sources:
         value_sheet("Kenya Imports by Source", "Source market", sources)
-    prods = data.kenya_import_products()
+    prods = top_rows(data.kenya_import_products(), cfg.get("top_n", 10),
+                     years, "All other products")
     if prods:
         value_sheet("Kenya Imports by Product", "Product", prods)
 
@@ -1103,12 +1147,14 @@ def main():
     out = os.path.abspath(out)
 
     data = ProfileData(data_dir)
+    if data.anchor_is_total:
+        data.anchor_label = cfg.get("family_title", "")
     print("[1/4] Loading ITC files from      : %s" % data_dir)
     print("      family    = %s" % cfg.get("family_title"))
     print("      anchor    = %s (%s)" % (data.anchor_hs, data.anchor_label))
     print("      period    = %d - %d" % (data.start_year, data.review_year))
-    print("      members   = %s"
-          % ", ".join(m["code"] for m in data.members))
+    print("      members   = %s (product detail rows)"
+          % len(data.members))
 
     print("[2/4] Building report             : %s" % out)
     doc = build_profile_document(cfg, data, args.tmp)
