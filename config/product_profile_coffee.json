@@ -1,12 +1,13 @@
 {
-  "title": "Product Profile: Coffee, Tea, Mate and Spices",
+  "title": "Product Profile: Coffee",
   "subtitle": "2025 Edition",
-  "family_title": "Coffee, Tea, Mate and Spices",
+  "family_title": "Coffee",
   "unit": "USD",
   "value_scale": 1e6,
   "unit_label": "USD Million",
   "top_n": 10,
   "include_imports": true,
+  "include_codes": ["0901"],
   "source": "International Trade Centre (ITC), Trade Map, 2025",
   "org": "Kenya Export Promotion and Branding Agency",
   "directorate": "Research and Innovation Directorate (RI)",
@@ -14,9 +15,9 @@
   "date_line": "February 2025",
   "intro": [
     "Kenya's coffee value chain is one of the country's most important economic assets. Coffee is a leading export earner and supports the livelihoods of more than 700,000 smallholder farmers and their families. Kenyan coffee, grown mainly on small farms in the highlands, is highly regarded in international markets for its bright acidity, full body and distinctive fruity and floral notes. The industry also benefits from an established auction system that rewards quality and from long-running relationships with roasters and traders in Europe, Asia and the Americas.",
-    "This profile examines Kenya's trade in the coffee, tea, mate and spices family, with particular focus on coffee (HS 0901), Kenya's flagship product in the family. The analysis covers the period 2016 to 2025 and draws on trade values reported to the International Trade Centre (ITC).",
-    "Beyond coffee, the family includes tea (HS 0902), Kenya's largest export crop, as well as pepper, vanilla, cinnamon, cloves, nutmeg and cardamom, seeds, and ginger, saffron and turmeric. These products give Kenya a diversified agro-processing base and growing opportunities in world markets for speciality and value-added goods."
+    "This profile examines Kenya's trade in coffee (HS 0901 - coffee, whether or not roasted or decaffeinated; coffee husks and skins; coffee substitutes containing coffee), based on trade values reported to the International Trade Centre (ITC). The analysis covers the period 2016 to 2025.",
+    "Only product headings that relate to coffee are included in this profile; other headings under the spices section, such as tea and mate, are excluded to keep the analysis focused on the coffee value chain."
   ],
   "data_dir": "Coffee",
-  "output": "output/Product Profile - Coffee, Tea, Mate and Spices 2025.docx"
+  "output": "output/Product Profile - Coffee 2025.docx"
 }

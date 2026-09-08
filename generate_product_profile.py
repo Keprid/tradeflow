@@ -131,23 +131,22 @@ def load_matrix(path):
 class ProfileData:
     """Loads every ITC file in the folder and derives the analysis tables."""
 
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, include_codes=None):
         self.data_dir = os.path.abspath(data_dir)
+        self.include_codes = list(include_codes or [])
+        self.warnings = []
         self.files = {}
-        missing = []
         for prefix, key in FILE_PREFIXES.items():
             path = _find_file(self.data_dir, prefix)
             if path is None:
-                if key == "export_potential":
-                    continue
-                missing.append(prefix)
+                if key not in ("export_potential", "kenya_exports_by_partner"):
+                    self.warnings.append(
+                        "missing %s file(s) in %s - related sections skipped"
+                        % (prefix, self.data_dir))
                 continue
             years, records = load_matrix(path)
             self.files[key] = {"path": path, "years": years,
                                "records": records}
-        if missing:
-            raise OSError("Missing ITC files in %s: %s"
-                          % (self.data_dir, ", ".join(missing)))
 
         self.all_years = sorted({y for k in self.files.values()
                                  for y in k["years"]})
@@ -161,8 +160,8 @@ class ProfileData:
                 counts[r["product"]] = counts.get(r["product"], 0) + 1
             anchor_product = max(counts, key=counts.get)
         if anchor_product is None:
-            raise OSError("Could not detect the anchor product from the "
-                          "by-importer file.")
+            raise OSError("Missing the by-importer file; cannot detect the "
+                          "anchor product in %s." % self.data_dir)
         self.anchor_hs = anchor_product
         self.anchor_label = next(
             (r["product_label"] for r in partner_rows
@@ -178,11 +177,13 @@ class ProfileData:
                 self._file_totals[key] = self._total_codes(key)
 
         # Family members: product detail rows of the by-product download
-        # (its total row, if any, is excluded).
+        # (its total row, if any, is excluded), filtered by include_codes.
         total = self._file_totals.get("kenya_exports_by_product", set())
         members = []
         for r in self._rows("kenya_exports_by_product"):
             if r["partner"] != "000" or r["product"] in total:
+                continue
+            if not self._code_ok(r["product"]):
                 continue
             members.append({"code": r["product"], "label": r["product_label"],
                             "years": r["years"]})
@@ -190,6 +191,12 @@ class ProfileData:
                      reverse=True)
         self.members = members
         self.anchor_is_total = anchor_product in total
+
+    def _code_ok(self, code):
+        """True when ``code`` matches the configured include_codes prefixes."""
+        if not self.include_codes:
+            return True
+        return any(str(code).startswith(p) for p in self.include_codes)
 
     def _total_codes(self, key):
         """Codes in ``key`` whose review-year value equals the sum of all the
@@ -261,29 +268,32 @@ class ProfileData:
     def kenya_import_products(self):
         total = self._file_totals.get("kenya_imports_by_product", set())
         rows = sorted((r for r in self._rows("kenya_imports_by_product")
-                       if r["partner"] == "000" and r["product"] not in total),
+                       if r["partner"] == "000" and r["product"] not in total
+                       and self._code_ok(r["product"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["product_label"], "years": r["years"]}
-                for r in rows]
+        return [{"code": r["product"], "label": r["product_label"],
+                 "years": r["years"]} for r in rows]
 
     def global_export_products(self):
         total = self._file_totals.get("world_exports_by_product", set())
         rows = sorted((r for r in self._rows("world_exports_by_product")
-                       if r["partner"] == "000" and r["product"] not in total),
+                       if r["partner"] == "000" and r["product"] not in total
+                       and self._code_ok(r["product"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["product_label"], "years": r["years"]}
-                for r in rows]
+        return [{"code": r["product"], "label": r["product_label"],
+                 "years": r["years"]} for r in rows]
 
     def global_import_products(self):
         total = self._file_totals.get("world_imports_by_product", set())
         rows = sorted((r for r in self._rows("world_imports_by_product")
-                       if r["partner"] == "000" and r["product"] not in total),
+                       if r["partner"] == "000" and r["product"] not in total
+                       and self._code_ok(r["product"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["product_label"], "years": r["years"]}
-                for r in rows]
+        return [{"code": r["product"], "label": r["product_label"],
+                 "years": r["years"]} for r in rows]
 
 
 # --------------------------------------------------------------------------
@@ -464,7 +474,10 @@ class ProfileBuilder(ReportBuilder):
         for ri, row in enumerate(rows, start=2):
             if rank:
                 table.rows[ri].cells[0].text = str(ri - 1)
-            table.rows[ri].cells[rank].text = row["label"]
+            label = row["label"]
+            if "code" in row:
+                label = "%s %s" % (row["code"], short_label(label, 44))
+            table.rows[ri].cells[rank].text = label
             for i, y in enumerate(years):
                 table.rows[ri].cells[label_cols + i].text = fmt(row["years"].get(y))
             cur = row["years"].get(rev)
@@ -589,7 +602,7 @@ def make_donut(pairs, tmp_dir, name, title):
 
 def family_members_line(data, top=12):
     members = data.members
-    if not members:
+    if len(members) <= 1:
         return ""
     by_code = {m["code"]: m["label"] for m in members}
     shown = members[:top]
@@ -629,7 +642,7 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
     lead, follows = ([], [])
     pairs = _shares(members, years)
     pairs.sort(key=lambda p: p[1], reverse=True)
-    if pairs:
+    if pairs and len(members) > 1:
         lead = pairs[0]
         follows = pairs[1:3]
     if lead:
@@ -1006,7 +1019,10 @@ def write_excel_deliverable(cfg, data, out_path):
             fill=hdr_fill, align=cm)
         rev_total = sum(display(r["years"].get(rev)) or 0.0 for r in rows)
         for ri, row in enumerate(rows, start=2):
-            _xc(ws, ri, 1, row["label"], align=lm)
+            label = row["label"]
+            if "code" in row:
+                label = "%s  %s" % (row["code"], short_label(label, 44))
+            _xc(ws, ri, 1, label, align=lm)
             for i, y in enumerate(years):
                 v = display(row["years"].get(y))
                 c = _xc(ws, ri, 2 + i,
@@ -1020,7 +1036,7 @@ def write_excel_deliverable(cfg, data, out_path):
         ws.column_dimensions["A"].width = min(width, 60)
         for i in range(len(years)):
             ws.column_dimensions[chr(ord("B") + i)].width = 11
-        if doughnut:
+        if doughnut and len(doughnut[1]) >= 2:
             anchor = ws.cell(2 + len(rows), 1).row + 2
             _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1])
         return ws
@@ -1146,7 +1162,7 @@ def main():
                                              "output/Product Profile.docx"))
     out = os.path.abspath(out)
 
-    data = ProfileData(data_dir)
+    data = ProfileData(data_dir, cfg.get("include_codes"))
     if data.anchor_is_total:
         data.anchor_label = cfg.get("family_title", "")
     print("[1/4] Loading ITC files from      : %s" % data_dir)
@@ -1155,6 +1171,8 @@ def main():
     print("      period    = %d - %d" % (data.start_year, data.review_year))
     print("      members   = %s (product detail rows)"
           % len(data.members))
+    for w in data.warnings:
+        print("      [warn] %s" % w)
 
     print("[2/4] Building report             : %s" % out)
     doc = build_profile_document(cfg, data, args.tmp)
