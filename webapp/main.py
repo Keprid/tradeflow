@@ -677,9 +677,10 @@ def _resolve_cfg(excel_dir, cfg_id, logs):
             continue
         try:
             existing = gr.load_config(str(p))
+            name = existing["country"]["name"]
         except Exception:
             continue
-        if _norm(existing["country"]["name"]) == _norm(detected):
+        if _norm(name) == _norm(detected):
             gr.cfg_path = os.path.abspath(str(p))
             logs.append(f"Country detected from data: {detected} -> using existing config '{p.stem}'")
             return gr.load_config(gr.cfg_path), p.stem
