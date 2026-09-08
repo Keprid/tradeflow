@@ -25,7 +25,9 @@ import io
 from lxml import etree
 
 import openpyxl
-from openpyxl.chart import BarChart, DoughnutChart, LineChart, PieChart, Reference
+from openpyxl.chart import (BarChart, DoughnutChart, LineChart,
+                           PieChart, Reference)
+from openpyxl.chart.legend import Legend
 from openpyxl.chart.series import DataPoint
 from openpyxl.chart.label import DataLabelList
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -130,7 +132,11 @@ def _build_openpyxl_chart(kind, title, categories, series, colors,
         chart.dataLabels = DataLabelList()
         chart.dataLabels.showPercent = True
         chart.dataLabels.numFmt = "0.0%"
-        chart.legend = None
+        chart.dataLabels.dLblPos = "outEnd"
+        chart.dataLabels.showLeaderLines = True
+        chart.legend = Legend()
+        chart.legend.position = "r"
+        chart.legend.overlay = False
         if kind == "doughnut":
             chart.holeSize = hole_size
         # per-point fill colours (openpyxl keeps default Office palette when

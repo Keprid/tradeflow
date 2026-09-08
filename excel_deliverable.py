@@ -15,9 +15,10 @@ workbooks or the docx: it reads the already-computed ``Analysis``/``cfg``.
 import os
 
 import openpyxl
-from openpyxl.chart import (PieChart, DoughnutChart, BarChart, Reference,
-                            Series)
+from openpyxl.chart import (PieChart, DoughnutChart, BarChart,
+                            Reference, Series)
 from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.legend import Legend
 from openpyxl.chart.series import DataPoint
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -311,9 +312,12 @@ def _add_pie(ws, top_row, title, labels_values):
     pie = PieChart()
     pie.title = title
     pie.width = 14
-    pie.height = 8
+    pie.height = 9
     pie.dataLabels = DataLabelList()
     pie.dataLabels.showPercent = True
+    pie.dataLabels.numFmt = "0.0%"
+    pie.dataLabels.dLblPos = "outEnd"
+    pie.dataLabels.showLeaderLines = True
     pie.add_data(data, titles_from_data=False)
     pie.set_categories(cats)
     pie.series[0].data_points = [
@@ -321,7 +325,9 @@ def _add_pie(ws, top_row, title, labels_values):
     for i in range(len(labels_values)):
         pie.series[0].data_points[i].graphicalProperties.solidFill = \
             THEME[i % len(THEME)]
-    pie.legend = None
+    pie.legend = Legend()
+    pie.legend.position = "r"
+    pie.legend.overlay = False
     ws.add_chart(pie, "D%d" % start)
     return pie
 
@@ -476,17 +482,21 @@ def _add_doughnut(ws, top_row, title, labels_values, colors=None,
     chart.title = title
     chart.holeSize = hole_size
     chart.width = 14
-    chart.height = 8
+    chart.height = 9
     chart.dataLabels = DataLabelList()
     chart.dataLabels.showPercent = True
     chart.dataLabels.numFmt = "0.0%"
+    chart.dataLabels.dLblPos = "outEnd"
+    chart.dataLabels.showLeaderLines = True
     chart.add_data(data, titles_from_data=False)
     chart.set_categories(cats)
     for i in range(len(labels_values)):
         dp = DataPoint(idx=i)
         dp.graphicalProperties.solidFill = (colors or THEME)[i % len(colors or THEME)]
         chart.series[0].data_points.append(dp)
-    chart.legend = None
+    chart.legend = Legend()
+    chart.legend.position = "r"
+    chart.legend.overlay = False
     ws.add_chart(chart, "%s%d" % (offset_anchor, start))
     return chart
 
