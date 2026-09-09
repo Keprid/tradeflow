@@ -62,9 +62,10 @@ from docx.shared import Inches, Pt, RGBColor
 
 from generate_report import (ReportBuilder, num, pct, clean_label, short_label,
                              to_float)
-from country_names import display_name, is_africa
+from country_names import display_name, fix_label, is_africa
 import charts
 from excel_deliverable import THEME
+import xlsx_compat
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -91,6 +92,9 @@ FILE_PREFIXES = {
 def _find_file(data_dir, prefix):
     hits = [p for p in glob.glob(os.path.join(data_dir, "*")) if
             os.path.basename(p).lower().startswith(prefix)]
+    if not hits:
+        hits = [p for p in glob.glob(os.path.join(data_dir, "*")) if
+                prefix in os.path.basename(p).lower()]
     return sorted(hits)[0] if hits else None
 
 
@@ -129,12 +133,78 @@ def load_matrix(path):
     return years, records
 
 
+def load_html_matrix(path):
+    """Parse an ITC HTML ``.xls`` matrix (label columns + year columns).
+
+    These files (e.g. ``List of products exported by Kenya``, or the
+    product-group listings) are HTML tables saved under an ``.xls`` name.
+    Returns ``(years, records)`` with ``{"code", "label", "years"}`` rows.
+    Returns ``(None, None)`` when the file has no usable year columns.
+    """
+    for loader in ("read_text", "csv", "html"):
+        try:
+            if loader == "read_text":
+                with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+            elif loader == "html":
+                text = xlsx_compat._read_text_any(path)
+            else:
+                continue
+            if not text:
+                continue
+            parser = xlsx_compat.HTMLTableParser()
+            parser.feed(text)
+            if not parser.tables:
+                return None, None
+            table = max(parser.tables, key=len)
+            break
+        except Exception:
+            continue
+    else:
+        return None, None
+    rows = [["" if c is None else str(c).strip() for c in row]
+            for row in table if row]
+    header = next((r for r in rows
+                   if any(re.search(r"20\d\d", c) for c in r)), None)
+    if header is None:
+        return None, None
+    years, year_cols = [], []
+    for i, h in enumerate(header):
+        m = re.search(r"(20\d\d)", h)
+        if m:
+            y = int(m.group(1))
+            if 2000 <= y <= 2100:
+                years.append(y)
+                year_cols.append(i)
+    if not years:
+        return None, None
+    start = rows.index(header) + 1
+    records = []
+    for r in rows[start:]:
+        if not r or not any(c for c in r):
+            continue
+        code = r[0].lstrip("'").strip() if r[0] else ""
+        label = next((c for c in r[1:4] if c and not re.match(r"^20\d\d", c)),
+                     "") if len(r) > 1 else ""
+        if "Product label" in label or "Code" in label.lower():
+            continue
+        val = {y: to_float(r[c]) if c < len(r) else None
+               for y, c in zip(years, year_cols)}
+        if not code and not label:
+            continue
+        if not any(v for v in val.values()) and not code:
+            continue
+        records.append({"code": code, "label": label, "years": val})
+    return years, records
+
+
 class ProfileData:
     """Loads every ITC file in the folder and derives the analysis tables."""
 
-    def __init__(self, data_dir, include_codes=None):
+    def __init__(self, data_dir, include_codes=None, family_title=None):
         self.data_dir = os.path.abspath(data_dir)
         self.include_codes = list(include_codes or [])
+        self.family_title = family_title
         self.warnings = []
         self.files = {}
         for prefix, key in FILE_PREFIXES.items():
@@ -148,6 +218,32 @@ class ProfileData:
             years, records = load_matrix(path)
             self.files[key] = {"path": path, "years": years,
                                "records": records}
+
+        # ---- supplementary ITC HTML .xls downloads (optional) -------------
+        # Kenya's total merchandise exports (RCA / specialization) and the
+        # world / Kenya product-group breakout come from the "List of
+        # products..." HTML workbooks.  Each is optional: if the file is not
+        # present the related section simply uses whatever is available.
+        self.kenya_total_exports = {}          # {year: USD thous}
+        self.supplement = {}                   # lowercased stem -> {"years","records"}
+        for stem, key in (("list_of_products_exported_by_kenya",
+                           "kenya_total_exports"),
+                          ("list_of_exported_products_for_the_selected",
+                           "world_group_products")):
+            path = _find_file(self.data_dir, stem)
+            if path is None:
+                continue
+            years, records = load_html_matrix(path)
+            if records is None:
+                continue
+            self.supplement[key] = {"years": years, "records": records}
+        if "kenya_total_exports" in self.supplement:
+            for r in self.supplement["kenya_total_exports"]["records"]:
+                code = (r.get("code") or "").upper()
+                label = (r.get("label") or "").lower()
+                if code.startswith("TOTAL") or "all products" in label:
+                    self.kenya_total_exports = dict(r["years"])
+                    break
 
         self.all_years = sorted({y for k in self.files.values()
                                  for y in k["years"]})
@@ -192,6 +288,11 @@ class ProfileData:
                      reverse=True)
         self.members = members
         self.anchor_is_total = anchor_product in total
+        if self.anchor_is_total and self.family_title:
+            # The anchor is the ITC selection group (e.g. "coffee one"), whose
+            # group name is not meaningful on its own.  Use the configured
+            # family title ("Coffee") for headings and tables instead.
+            self.anchor_label = self.family_title
 
     def _code_ok(self, code):
         """True when ``code`` matches the configured include_codes.
@@ -289,7 +390,7 @@ class ProfileData:
                        if r["partner"] != "000"),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["partner_label"], "years": r["years"]}
+        return [{"label": fix_label(r["partner_label"]), "years": r["years"]}
                 for r in rows]
 
     def exporters(self):
@@ -297,7 +398,7 @@ class ProfileData:
                        if r["reporter"] != "000"),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["reporter_label"], "years": r["years"]}
+        return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
                 for r in rows]
 
     def importers(self):
@@ -305,7 +406,7 @@ class ProfileData:
                        if r["reporter"] != "000"),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["reporter_label"], "years": r["years"]}
+        return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
                 for r in rows]
 
     def kenya_import_sources(self):
@@ -313,7 +414,7 @@ class ProfileData:
                        if r["partner"] != "000"),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"label": r["partner_label"], "years": r["years"]}
+        return [{"label": fix_label(r["partner_label"]), "years": r["years"]}
                 for r in rows]
 
     def kenya_import_products(self):
@@ -395,6 +496,91 @@ class ProfileData:
             "africa_rank": africa_rank,
             "n_africa": len(africa),
         }
+
+    def market_share_series(self):
+        """Kenya's share of world exports of the family, year by year.
+
+        ``None`` if the world-exports-by-economy file is missing. Returns
+        a list of ``(year, kenya, world, share)`` tuples for the years where
+        both values are available.
+        """
+        rows = [r for r in self._rows("world_exports_by_economy")
+                if r["reporter"] != "000"]
+        if not rows:
+            return None
+        kenya = next((r for r in rows if self._is_kenya_label(
+            r["reporter_label"])), None)
+        if kenya is None:
+            return None
+        years = sorted({y for r in rows for y in r["years"]})
+        world_by_year = {}
+        for r in rows:
+            for y, v in r["years"].items():
+                world_by_year[y] = (world_by_year.get(y) or 0.0) + (v or 0.0)
+        out = []
+        for y in sorted(years):
+            w = world_by_year.get(y) or 0.0
+            k = kenya["years"].get(y) or 0.0
+            if w and k:
+                out.append((y, k, w, k / w))
+        return out or None
+
+    def specialization_metrics(self):
+        """Export specialization for the family (RCA-style).
+
+        Computes the family's share of Kenya's *total* merchandise exports
+        each year from the optional Kenya "List of products exported" total
+        row.  ``None`` when that total is unavailable.
+
+        Returns ``{"years": [(year, family_value, kenya_total,
+                             family_share)], "review_family": ...}``.
+        The full RCA ratio needs world total exports which are not part of
+        the standard downloads, so the share of Kenya's own exports is used
+        as the specialization measure (the ratio would require the world
+        total-exports denominator).
+        """
+        if not self.kenya_total_exports:
+            return None
+        rows = [r for r in self._rows("world_exports_by_economy")
+                if self._is_kenya_label(r["reporter_label"])]
+        if not rows:
+            return None
+        kenya = rows[0]
+        rev = self.review_year
+        years = sorted(self.kenya_total_exports)
+        out = []
+        for y in years:
+            total = self.kenya_total_exports.get(y)
+            fam = kenya["years"].get(y)
+            if total and fam is not None:
+                out.append({"year": y, "family": fam, "total": total,
+                            "share": fam / total})
+        if not out:
+            return None
+        return {"years": out,
+                "review_family": next((r["family"] for r in out
+                                       if r["year"] == rev), None),
+                "review_total": next((r["total"] for r in out
+                                      if r["year"] == rev), None)}
+
+    def african_peers(self, n=5):
+        """Top ``n`` African exporters of the family (excluding Kenya), by
+        review-year value.  Returns ``None`` when there are fewer than one
+        other African economies with data.
+        """
+        rows = [r for r in self._rows("world_exports_by_economy")
+                if r["reporter"] != "000"]
+        rev = self.review_year
+        if not rows:
+            return None
+        peers = [r for r in rows
+                 if is_africa(r["reporter_label"]) and not self._is_kenya_label(
+                     r["reporter_label"]) and (r["years"].get(rev) or 0.0) > 0]
+        if not peers:
+            return None
+        peers.sort(key=lambda r: r["years"].get(rev) or 0.0, reverse=True)
+        return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
+                for r in peers[:n]]
 
     def kenya_world_shares(self):
         """Kenya's exports vs the world by 6-digit HS code.
@@ -922,6 +1108,37 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
                      % (anchor.lower(), first["label"],
                         usd_phrase(first["years"].get(rev)), share))
 
+    # Kenya's standing among its destination markets: leading African market
+    # and its position within the overall destination list.
+    all_dests = data.destinations()
+    afr_dests = [d for d in all_dests if is_africa(d.get("label", ""))
+                 and (d["years"].get(rev) or 0.0) > 0]
+    if afr_dests:
+        afr_dests.sort(key=lambda d: d["years"].get(rev) or 0.0, reverse=True)
+        lead_afr = afr_dests[0]
+        rev_val = lead_afr["years"].get(rev) or 0.0
+        rank = next((i for i, d in enumerate(
+            sorted(all_dests,
+                   key=lambda d: d["years"].get(rev) or 0.0, reverse=True), 1)
+                     if d["label"] == lead_afr["label"]), None)
+        text = ("Kenya's leading African destination for %s was %s "
+                "(%s; %.1f%% of Kenya's exports of the product)"
+                % (anchor.lower(), lead_afr["label"],
+                   usd_phrase(rev_val),
+                   rev_val / (total_last or 1.0) * 100))
+        if rank:
+            text += ", ranked %s among all destination markets" % _ordinal(rank)
+        b.add_bullet(text + ".")
+
+    # Market-risk callout: heavy reliance on a single destination.
+    if first and first["years"].get(rev):
+        top_share = (first["years"].get(rev) or 0.0) / (total_last or 1.0) * 100
+        if top_share >= 15.0:
+            b.add_bullet("Concentration warning: Kenya's leading destination "
+                         "for %s accounts for %.1f%% of exports, leaving "
+                         "exports exposed to that market's demand." %
+                         (anchor.lower(), top_share))
+
     pairs = _shares(destinations, years)
     if len(pairs) >= 2:
         img = make_donut(pairs, tmp_dir, "f2_dest.png",
@@ -930,6 +1147,107 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
             b._next_figure("Kenya's %s Exports by Destination, %d"
                            % (anchor, rev), source)
             b.add_figure(img)
+
+
+def section_competitiveness(b, cfg, data, source):
+    """Competitive-intelligence paragraphs: Kenya's market-share trend,
+    export specialization, product diversification within the family and a
+    comparison with leading African peers.  Each sub-feature silently
+    degrades when the underlying data is not available."""
+    anchor = short_anchor(data.anchor_label)
+    family = cfg.get("family_title", "the product family")
+    years = data.years
+    rev = data.review_year
+
+    parts = []
+
+    # -- Kenya's share of world exports over time -------------------------
+    share_series = data.market_share_series()
+    if share_series:
+        first_y, first_k, first_w, first_s = share_series[0]
+        last_y, last_k, last_w, last_s = share_series[-1]
+        txt = ("Kenya's share of world exports of %s %s between %d and %d "
+               "(%.2f%% in %d; %.2f%% in %d)."
+               % (anchor.lower(),
+                  "rose" if last_s >= first_s else "fell",
+                  first_y, last_y,
+                  first_s * 100, first_y, last_s * 100, last_y))
+        if last_s >= first_s:
+            txt += " Kenya exported %s of %s in %d." % (
+                usd_phrase(last_k), family.lower(), last_y)
+        parts.append(txt)
+
+    # -- Export specialization --------------------------------------------
+    spec = data.specialization_metrics()
+    if spec and spec["years"]:
+        speclast = spec["years"][-1]
+        fam_share = speclast["share"]
+        txt = ("%s accounted for %.2f%% of Kenya's total merchandise exports "
+               "in %d (%s of %s), reflecting Kenya's export specialization."
+               % (family.title(), fam_share * 100, speclast["year"],
+                  usd_phrase(speclast["family"]),
+                  usd_phrase(speclast["total"])))
+        if len(spec["years"]) >= 2:
+            first_s = spec["years"][0]["share"]
+            txt += " This share was %.2f%% in %d." % (
+                first_s * 100, spec["years"][0]["year"])
+        parts.append(txt)
+
+    # -- Product diversification within the family ------------------------
+    members = [m for m in data.members
+               if (m["years"].get(rev) or 0.0) > 0]
+    if len(members) >= 2:
+        total = sum(m["years"].get(rev) or 0.0 for m in members)
+        lead = max(members, key=lambda m: m["years"].get(rev) or 0.0)
+        lead_share = (lead["years"].get(rev) or 0.0) / total * 100
+        hhi = sum(((m["years"].get(rev) or 0.0) / total * 100) ** 2
+                  for m in members)
+        label = ""
+        if len(members) > 1:
+            second = sorted(members,
+                            key=lambda m: m["years"].get(rev) or 0.0,
+                            reverse=True)[1]
+            second_share = (second["years"].get(rev) or 0.0) / total * 100
+            if len(members) == 2:
+                label = " %s was the runner-up with %.1f%%." % (
+                    short_label(second["label"], 50), second_share)
+            else:
+                label = " %s was the runner-up with %.1f%%; the remaining %d " \
+                    "headings together accounted for %.1f%%." % (
+                        short_label(second["label"], 50), second_share,
+                        len(members) - 2,
+                        max(0.0, 100 - lead_share - second_share))
+        concentration = ("highly concentrated" if hhi >= 2500 else
+                         "moderately concentrated" if hhi >= 1500 else
+                         "diversified")
+        txt = ("Kenya's exports of %s are %s across %d product headings: "
+               "the leading heading (%s) accounted for %.1f%% of the family "
+               "total in %d.%s"
+               % (family.lower(), concentration, len(members),
+                  short_label(lead["label"], 50), lead_share, rev, label))
+        parts.append(txt)
+
+    if parts:
+        b.add_heading("KENYA'S COMPETITIVE POSITION IN %s" % anchor.upper(),
+                      level=1)
+        for p_ in parts:
+            b.add_bullet(p_)
+
+    # -- Kenya vs leading African peers -----------------------------------
+    peers = data.african_peers(5)
+    if peers:
+        kenya_row = {"label": "Kenya", "years": {}}
+        for y in years:
+            kenya_row["years"][y] = next(
+                (r["years"].get(y) for r in data._rows("world_exports_by_economy")
+                 if data._is_kenya_label(r["reporter_label"])), None)
+        peers = [kenya_row] + peers
+        b._next_table("Kenya vs Leading African Exporters of %s, %d"
+                      % (anchor, rev), source)
+        b.add_value_table("Exporting economy", peers, years,
+                          "Share in %d" % rev,
+                          "African Exporters of %s" % anchor, source,
+                          total_label="Total")
 
 
 def section_global(b, cfg, data, source, tmp_dir):
@@ -1331,6 +1649,7 @@ def build_profile_document(cfg, data, tmp_dir):
     section_trade_family(b, cfg, data, source, tmp_dir)
     section_kenya_global_position(b, cfg, data, source)
     section_kenya_exports(b, cfg, data, source, tmp_dir)
+    section_competitiveness(b, cfg, data, source)
     section_global(b, cfg, data, source, tmp_dir)
     if cfg.get("include_imports", True):
         section_kenya_imports(b, cfg, data, source)
@@ -1512,6 +1831,52 @@ def write_excel_deliverable(cfg, data, out_path):
             number_format="0.0%", align=cm)
         ws.column_dimensions["A"].width = 60
 
+    # Kenya vs leading African exporters
+    peers = data.african_peers(5)
+    if peers:
+        kenya_row = {"label": "Kenya", "years": {}}
+        for y in years:
+            kenya_row["years"][y] = next(
+                (r["years"].get(y) for r in data._rows("world_exports_by_economy")
+                 if data._is_kenya_label(r["reporter_label"])), None)
+        value_sheet("African Peers", "Exporting economy",
+                    [kenya_row] + peers)
+
+    # Kenya's share of world exports over time + specialization
+    share_series = data.market_share_series()
+    spec = data.specialization_metrics()
+    if share_series or (spec and spec["years"]):
+        ws = wb.create_sheet(sheet_name("Kenya Standing"))
+        _xc(ws, 1, 1, "Year", bold=True, fill=hdr_fill, align=cm)
+        if share_series:
+            _xc(ws, 1, 2, "Kenya exports (USD Million)", bold=True,
+                fill=hdr_fill, align=cm)
+            _xc(ws, 1, 3, "World exports (USD Million)", bold=True,
+                fill=hdr_fill, align=cm)
+            _xc(ws, 1, 4, "Kenya share of world", bold=True,
+                fill=hdr_fill, align=cm)
+        if spec and spec["years"]:
+            _xc(ws, 1, 5, "Family share of Kenya exports", bold=True,
+                fill=hdr_fill, align=cm)
+        ri = 2
+        for y in years:
+            _xc(ws, ri, 1, y, align=cm)
+            if share_series:
+                m = next((t for t in share_series if t[0] == y), None)
+                if m:
+                    _xc(ws, ri, 2, round(display(m[1]), 1),
+                        number_format=val_fmt, align=cm)
+                    _xc(ws, ri, 3, round(display(m[2]), 1),
+                        number_format=val_fmt, align=cm)
+                    _xc(ws, ri, 4, m[3], bold=True, number_format="0.0%",
+                        align=cm)
+            if spec and spec["years"]:
+                sp = next((s for s in spec["years"] if s["year"] == y), None)
+                if sp:
+                    _xc(ws, ri, 5, sp["share"], number_format="0.0%", align=cm)
+            ri += 1
+        ws.column_dimensions["A"].width = 8
+
     if cfg.get("include_imports", True):
         sources = top_rows(data.kenya_import_sources(), cfg.get("top_n", 10),
                            years, "All other sources")
@@ -1558,9 +1923,8 @@ def main():
                                              "output/Product Profile.docx"))
     out = os.path.abspath(out)
 
-    data = ProfileData(data_dir, cfg.get("include_codes"))
-    if data.anchor_is_total:
-        data.anchor_label = cfg.get("family_title", "")
+    data = ProfileData(data_dir, cfg.get("include_codes"),
+                       cfg.get("family_title"))
     print("[1/4] Loading ITC files from      : %s" % data_dir)
     print("      family    = %s" % cfg.get("family_title"))
     print("      anchor    = %s (%s)" % (data.anchor_hs, data.anchor_label))

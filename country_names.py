@@ -28,6 +28,16 @@ marked with ``,...`` so the reader can tell the description continues.
 
 import re
 
+# Mojibake repair.  ITC Trade Map downloads occasionally lose an accented
+# character and replace it with the Unicode replacement character U+FFFD
+# (e.g. "Côte d'Ivoire" arrives as "C?te d'Ivoire").  Map the mangled
+# lowercased spellings back to the intended ones so the name resolves both
+# as a display label and (via `is_africa`) as an African country.
+MOJIBAKE = {
+    "c\ufffdte d'ivoire": "côte d'ivoire",
+    "c\ufffdte d’ivoire": "côte d'ivoire",
+}
+
 # Verbose / official name (lowercase) -> professional short display name.
 SHORT_NAMES = {
     # A
@@ -133,12 +143,43 @@ AFRICA_COUNTRIES = {
 }
 
 
+def _repair_mojibake(text):
+    """Replace a known mojibake spelling (U+FFFD lost character) with the
+    intended accented name, and otherwise keep the text unchanged."""
+    if text and "\ufffd" in text:
+        text = MOJIBAKE.get(" ".join(text.lower().split()), text)
+    return text
+
+
+def fix_label(name, maxlen=None):
+    """Repair a mangled ITC label (e.g. "C?te d'Ivoire" -> "Côte d'Ivoire").
+
+    Unlike ``display_name`` this only corrects the mojibake / spelling, so
+    journals that prefer to keep the official names (e.g. "United States of
+    America", "Korea, Republic of") can do so without the short-form
+    remapping.  Unmangled names pass through unchanged (tidied).
+    """
+    if name is None:
+        return ""
+    text = re.sub(r"\s+", " ", str(name)).strip().rstrip(" ,;:")
+    repaired = _repair_mojibake(text)
+    if repaired != text:
+        mapped = SHORT_NAMES.get(repaired.lower())
+        if mapped:
+            return mapped if maxlen is None else mapped
+    elif maxlen and len(text) > maxlen:
+        head = text[: maxlen - 1]
+        cut = head.rsplit(" ", 1)[0].rstrip(" ,;:")
+        text = (cut or head).rstrip(" ,;:") + "..."
+    return text
+
+
 def is_africa(name):
     """Return True if ``name`` (raw ITC label or short form) is an African
     country.  Handles the verbose ITC forms used for DR Congo and Tanzania."""
     if name is None:
         return False
-    text = " ".join(str(name).lower().split())
+    text = _repair_mojibake(" ".join(str(name).lower().split()))
     if text in AFRICA_COUNTRIES:
         return True
     return display_name(name).lower() in AFRICA_COUNTRIES
@@ -156,6 +197,7 @@ def display_name(name, maxlen=None):
     if name is None:
         return ""
     text = re.sub(r"\s+", " ", str(name)).strip().rstrip(" ,;:")
+    text = _repair_mojibake(text)
     mapped = SHORT_NAMES.get(text.lower())
     if mapped:
         return mapped

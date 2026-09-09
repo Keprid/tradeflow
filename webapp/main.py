@@ -909,7 +909,8 @@ def _run_product_pipeline(job_dir, cfg_id, top_n, logs):
         cfg = gr.load_config(str(cfg_path))
 
     os.makedirs(charts, exist_ok=True)
-    data = gpp.ProfileData(str(uploads), cfg.get("include_codes"))
+    data = gpp.ProfileData(str(uploads), cfg.get("include_codes"),
+                           cfg.get("family_title"))
     logs.append(f"Loading ITC matrix files from {uploads}")
     logs.append(f"Profile: {cfg.get('family_title', cfg_id)} "
                 f"| anchor {data.anchor_hs} | period {data.start_year}-{data.review_year}")
