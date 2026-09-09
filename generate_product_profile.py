@@ -62,6 +62,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 from generate_report import (ReportBuilder, num, pct, clean_label, short_label,
                              to_float)
+from country_names import display_name, is_africa
 import charts
 from excel_deliverable import THEME
 
@@ -193,10 +194,60 @@ class ProfileData:
         self.anchor_is_total = anchor_product in total
 
     def _code_ok(self, code):
-        """True when ``code`` matches the configured include_codes prefixes."""
+        """True when ``code`` matches the configured include_codes.
+
+        HS codes are hierarchical: a 6-digit code belongs to its 4-digit
+        heading and its 2-digit chapter, so the check is prefix-based.
+
+        Each entry in ``include_codes`` is either
+          * a plain code at any digit depth (``"0901"``, ``"4420.10"``), which
+            matches that heading together with every code under it, or
+          * a closed range of siblings (``"4419.11-4419.90"``), which matches
+            every code numerically in [lo, hi] plus any heading that covers
+            a part of that range.
+
+        Codes are normalised to digits (dots/spaces removed), so ``"4420.10"``
+        and ``"442010"`` are equivalent.  This lets the config express a whole
+        product group (e.g. commercial crafts spanning many HS chapters) by
+        listing its headings; all revised HS 2022 codes beneath them are
+        picked up automatically.
+        """
         if not self.include_codes:
             return True
-        return any(str(code).startswith(p) for p in self.include_codes)
+        c = self._norm_code(code)
+        if not c:
+            return False
+        for spec in self.include_codes:
+            spec = str(spec).strip()
+            if "-" in spec:
+                lo, hi = spec.split("-", 1)
+                lo, hi = self._norm_code(lo), self._norm_code(hi)
+                if not (lo and hi):
+                    continue
+                if lo <= c <= hi:
+                    return True
+                # A 4-digit heading that contains an endpoint is inside the
+                # range (e.g. "5701" with "5701.10-5702.99").  Chapter-level
+                # (2-digit) codes never match a heading range, so they can't
+                # drag whole chapters into a group that spans only some of it.
+                if len(c) >= 4 and (lo.startswith(c) or hi.startswith(c)):
+                    return True
+            else:
+                p = self._norm_code(spec)
+                if not p:
+                    continue
+                if c == p or c.startswith(p):
+                    return True
+                # A deeper spec (e.g. "4420.10") also covers its 4-digit
+                # parent heading (e.g. "4420"), but never the 2-digit chapter.
+                if len(c) >= 4 and p.startswith(c):
+                    return True
+        return False
+
+    @staticmethod
+    def _norm_code(code):
+        """Normalise an HS code to its digits (e.g. "4420.10" -> "442010")."""
+        return re.sub(r"[^0-9]", "", str(code or ""))
 
     def _total_codes(self, key):
         """Codes in ``key`` whose review-year value equals the sum of all the
@@ -294,6 +345,92 @@ class ProfileData:
                       reverse=True)
         return [{"code": r["product"], "label": r["product_label"],
                  "years": r["years"]} for r in rows]
+
+    @staticmethod
+    def _is_kenya_label(label):
+        text = " ".join(str(label or "").lower().split())
+        return text == "kenya" or display_name(text).lower() == "kenya"
+
+    def kenya_exporters(self):
+        """Export rows of ``world_exports_by_economy`` that reference Kenya."""
+        return [r for r in self._rows("world_exports_by_economy")
+                if r["reporter"] != "000" and self._is_kenya_label(
+                    r["reporter_label"])]
+
+    def kenya_global_metrics(self):
+        """Kenya's standing in the world exports of the family.
+
+        Returns a dict with Kenya's export value, world total, Kenya's share
+        of the world total and Kenya's rank among *all* exporters and among
+        *African* exporters, in the review year:
+        ``{"value", "world_total", "share", "global_rank", "n_exporters",
+           "africa_rank", "n_africa"}`` (ranks are 1-based, ties keep the
+        highest rank).  ``None`` when Kenya is not present in the file.
+        """
+        rows = [r for r in self._rows("world_exports_by_economy")
+                if r["reporter"] != "000"]
+        rev = self.review_year
+        if not rows:
+            return None
+        key = lambda r: r["years"].get(rev) or 0.0  # noqa: E731
+        rows.sort(key=key, reverse=True)
+        world_total = sum(key(r) for r in rows)
+        ranked = [r for r in rows if key(r) > 0]
+        kenya = next((r for r in rows if self._is_kenya_label(
+            r["reporter_label"])), None)
+        if kenya is None or not world_total:
+            return None
+        value = key(kenya)
+        global_rank = next((i for i, r in enumerate(ranked, 1)
+                            if self._is_kenya_label(r["reporter_label"])), None)
+        africa = [r for r in ranked if is_africa(r["reporter_label"])]
+        africa_rank = next((i for i, r in enumerate(africa, 1)
+                            if self._is_kenya_label(r["reporter_label"])), None)
+        return {
+            "value": value,
+            "world_total": world_total,
+            "share": value / world_total if world_total else None,
+            "global_rank": global_rank,
+            "n_exporters": len(ranked),
+            "africa_rank": africa_rank,
+            "n_africa": len(africa),
+        }
+
+    def kenya_world_shares(self):
+        """Kenya's exports vs the world by 6-digit HS code.
+
+        Joins Kenya's member rows (``kenya_exports_by_product``) with the
+        corresponding world rows (``world_exports_by_product``) on product
+        code.  Returns a list (already ranked by Kenya's review-year value) of
+        ``{"code", "label", "kenya": {y: v}, "world": {y: v}}`` plus
+        ``_kenya_total`` / ``_world_total`` keys holding the review-year
+        totals, so callers can compute Kenya's share of the world by code and
+        overall.
+        """
+        kenya_total = self._file_totals.get("kenya_exports_by_product", set())
+        world_total = self._file_totals.get("world_exports_by_product", set())
+        kenya_rows = {r["product"]: r["years"] for r in
+                      self._rows("kenya_exports_by_product")
+                      if r["partner"] == "000" and r["product"] not in kenya_total
+                      and self._code_ok(r["product"])}
+        world_rows = {r["product"]: r["years"] for r in
+                      self._rows("world_exports_by_product")
+                      if r["partner"] == "000" and r["product"] not in world_total
+                      and self._code_ok(r["product"])}
+        rev = self.review_year
+        out = []
+        for code, ky in kenya_rows.items():
+            out.append({"code": code,
+                        "label": next((r["product_label"] for r in
+                                       self._rows("kenya_exports_by_product")
+                                       if r["product"] == code), ""),
+                        "kenya": ky,
+                        "world": world_rows.get(code, {})})
+        out.sort(key=lambda r: (r["kenya"].get(rev) or 0.0), reverse=True)
+        k_tot = sum(r["kenya"].get(rev) or 0.0 for r in out)
+        w_tot = sum(r["world"].get(rev) or 0.0 for r in out)
+        return {"rows": out, "_kenya_total": k_tot, "_world_total": w_tot,
+                "year": rev}
 
 
 # --------------------------------------------------------------------------
@@ -887,6 +1024,123 @@ def trend_bullets(b, rows, years, family, noun, scope="World",
         b.add_bullet(sentence)
 
 
+def section_kenya_global_position(b, cfg, data, source):
+    """Kenya's exports of the family vs the world, by 6-digit HS code.
+
+    Centers the profile on the export side: Kenya's share of world exports of
+    each member code, Kenya's overall share of the world market, Kenya's rank
+    among world exporters and among African exporters.
+    """
+    family = cfg.get("family_title", "the product family")
+    years = data.years
+    rev = data.review_year
+    shares = data.kenya_world_shares()
+    rows = shares["rows"]
+    metrics = data.kenya_global_metrics()
+
+    if not rows:
+        return
+
+    b.add_heading("KENYA'S EXPORTS OF %s VS THE WORLD" % family.upper(),
+                  level=1)
+    b.add_para("This section compares Kenya's exports of %s with world "
+               "exports, heading by heading at the six-digit HS code level, "
+               "and positions Kenya within the global and African markets in "
+               "%d." % (family.lower(), rev))
+
+    # -- Kenya vs World by 6-digit HS code ------------------------------
+    k_tot = shares.get("_kenya_total") or 0.0
+    w_tot = shares.get("_world_total") or 0.0
+
+    b._next_table("Kenya's Exports of %s vs the World by Product, %d"
+                  % (family, rev), source)
+    display_rows = []
+    for r in rows[: cfg.get("top_n", 10)]:
+        k = r["kenya"].get(rev) or 0.0
+        w = r["world"].get(rev) or 0.0
+        display_rows.append({
+            "label": "%s %s" % (r["code"], short_label(r["label"], 44)),
+            "years": {"Kenya": k, "World": w},
+            "code": r["code"],
+            "share": (k / w * 100.0) if w else None,
+        })
+    _kenya_world_table(b, display_rows, rev, k_tot, w_tot,
+                       first_col="Six-digit HS code")
+
+    # -- bullet point on Kenya's share and position ----------------------
+    overall = (k_tot / w_tot * 100.0) if w_tot else None
+    if overall is not None:
+        b.add_bullet("Kenya accounted for %.1f%% of world exports of %s in "
+                     "%d (%s of %s)."
+                     % (overall, family.lower(), rev, usd_phrase(k_tot),
+                        usd_phrase(w_tot)))
+    if rows:
+        code, k, w = rows[0]["code"], rows[0]["kenya"].get(rev) or 0.0, \
+            rows[0]["world"].get(rev) or 0.0
+        share = (k / w * 100.0) if w else None
+        txt = ("Kenya's leading export heading of %s in %d was %s, valued "
+               "at %s." % (family.lower(), rev, code, usd_phrase(k)))
+        if share is not None:
+            txt += (" That heading accounted for %.1f%% of Kenya's exports "
+                    "of the family." % share)
+        b.add_bullet(txt)
+    if metrics:
+        gr = metrics.get("global_rank")
+        nr = metrics.get("n_exporters")
+        ar = metrics.get("africa_rank")
+        na = metrics.get("n_africa")
+        parts = ["Kenya ranked"]
+        if gr and nr:
+            parts.append("%s among %d world exporters of %s"
+                         % (_ordinal(gr), nr, family.lower()))
+        if ar and na:
+            if len(parts) > 1:
+                parts.append("and")
+            parts.append("%s among %d African exporters" % (_ordinal(ar), na))
+        if len(parts) > 1:
+            b.add_bullet(" ".join(parts) + " in %d." % rev)
+
+
+def _ordinal(n):
+    return "%d%s" % (n, "th" if 10 <= n % 100 <= 20 else
+                     {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th"))
+
+
+def _kenya_world_table(b, rows, year, kenya_total, world_total, first_col):
+    """Table with a Kenya / World value pair per row plus overall totals.
+
+    Columns: label | Kenya exports | World exports | share.  Reuses
+    ``add_value_table``'s styling by treating this as a 2 data-column
+    matrix (n=2) plus a share column.
+    """
+    table = b.doc.add_table(rows=2 + len(rows) + 1, cols=4, style="Table Grid")
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0]
+    hdr.cells[0].text = "%s, %d" % (first_col, year)
+    hdr.cells[1].text = "Kenya exports (USD Million)"
+    hdr.cells[2].text = "World exports (USD Million)"
+    hdr.cells[3].text = "Kenya share of world"
+    r2 = table.rows[1]
+    r2.cells[1].text = str(year)
+    r2.cells[2].text = str(year)
+    r2.cells[3].text = str(year)
+    for ri, r in enumerate(rows, start=2):
+        table.rows[ri].cells[0].text = r["label"]
+        table.rows[ri].cells[1].text = fmt(r["years"].get("Kenya"))
+        table.rows[ri].cells[2].text = fmt(r["years"].get("World"))
+        table.rows[ri].cells[3].text = (
+            "%.1f%%" % r["share"] if r["share"] is not None else "")
+    t = table.rows[2 + len(rows)]
+    t.cells[0].text = "Total, %s" % first_col
+    t.cells[1].text = fmt(kenya_total if kenya_total else None)
+    t.cells[2].text = fmt(world_total if world_total else None)
+    t.cells[3].text = (
+        "%.1f%%" % (kenya_total / world_total * 100.0) if world_total else "")
+    b._set_table_widths(table, [3900, 1500, 1500, 1500])
+    b._style_table(table, rank=False, label_cols=1, n=2, total_label=True)
+    b._fit_table_on_page(table)
+
+
 def section_kenya_imports(b, cfg, data, source):
     anchor = short_anchor(data.anchor_label)
     family = cfg.get("family_title", "the product family")
@@ -969,6 +1223,7 @@ def build_profile_document(cfg, data, tmp_dir):
     b = ProfileBuilder(cfg, {})
     b.title_page(cfg)
     section_trade_family(b, cfg, data, source, tmp_dir)
+    section_kenya_global_position(b, cfg, data, source)
     section_kenya_exports(b, cfg, data, source, tmp_dir)
     section_global(b, cfg, data, source, tmp_dir)
     if cfg.get("include_imports", True):
@@ -1117,14 +1372,48 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet("Global Exports by Product", "Product", g_exp)
     if g_imp:
         value_sheet("Global Imports by Product", "Product", g_imp)
-    sources = top_rows(data.kenya_import_sources(), cfg.get("top_n", 10),
-                       years, "All other sources")
-    if sources:
-        value_sheet("Kenya Imports by Source", "Source market", sources)
-    prods = top_rows(data.kenya_import_products(), cfg.get("top_n", 10),
-                     years, "All other products")
-    if prods:
-        value_sheet("Kenya Imports by Product", "Product", prods)
+
+    # Kenya vs the World, by six-digit HS code (export focus)
+    shares = data.kenya_world_shares()
+    if shares["rows"]:
+        ws = wb.create_sheet(sheet_name("Kenya vs World"))
+        _xc(ws, 1, 1, "Six-digit HS code", bold=True, fill=hdr_fill, align=cm)
+        _xc(ws, 1, 2, "Kenya exports (%d)" % rev, bold=True, fill=hdr_fill,
+            align=cm)
+        _xc(ws, 1, 3, "World exports (%d)" % rev, bold=True, fill=hdr_fill,
+            align=cm)
+        _xc(ws, 1, 4, "Kenya share of world", bold=True, fill=hdr_fill,
+            align=cm)
+        for ri, r in enumerate(shares["rows"], start=2):
+            k = display(r["kenya"].get(rev)) or 0.0
+            w = display(r["world"].get(rev)) or 0.0
+            label = "%s  %s" % (r["code"], short_label(r["label"], 44))
+            _xc(ws, ri, 1, label, align=lm)
+            _xc(ws, ri, 2, round(k, 1), number_format=val_fmt, align=cm)
+            _xc(ws, ri, 3, round(w, 1), number_format=val_fmt, align=cm)
+            _xc(ws, ri, 4, (k / w if w else None), bold=True,
+                number_format="0.0%", align=cm)
+        ri += 1
+        k_tot = display(shares.get("_kenya_total")) or 0.0
+        w_tot = display(shares.get("_world_total")) or 0.0
+        _xc(ws, ri, 1, "Total", bold=True)
+        _xc(ws, ri, 2, round(k_tot, 1), bold=True, number_format=val_fmt,
+            align=cm)
+        _xc(ws, ri, 3, round(w_tot, 1), bold=True, number_format=val_fmt,
+            align=cm)
+        _xc(ws, ri, 4, (k_tot / w_tot if w_tot else None), bold=True,
+            number_format="0.0%", align=cm)
+        ws.column_dimensions["A"].width = 60
+
+    if cfg.get("include_imports", True):
+        sources = top_rows(data.kenya_import_sources(), cfg.get("top_n", 10),
+                           years, "All other sources")
+        if sources:
+            value_sheet("Kenya Imports by Source", "Source market", sources)
+        prods = top_rows(data.kenya_import_products(), cfg.get("top_n", 10),
+                         years, "All other products")
+        if prods:
+            value_sheet("Kenya Imports by Product", "Product", prods)
 
     # default "Sheet" removed by the first create_sheet call? keep membership
     if "Sheet" in wb.sheetnames:

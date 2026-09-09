@@ -6,7 +6,15 @@
   "value_scale": 1e6,
   "unit_label": "USD Million",
   "top_n": 12,
-  "include_imports": true,
+  "include_imports": false,
+  "include_codes": [
+    "4420.10", "4420.90", "4419.11-4419.90", "4421.91-4421.99",
+    "7419.80", "7616.99", "7326.90", "7117.19-7117.90",
+    "6307.90", "5810.10-5810.99", "6214.10-6214.90", "5701.10-5702.99",
+    "6912.00", "6914.10-6914.90", "7018.10", "7020.00", "6802.91-6802.99",
+    "4602.11-4602.19",
+    "9505.90", "9601.90", "4823.90"
+  ],
   "source": "International Trade Centre (ITC), Trade Map, 2025",
   "org": "Kenya Export Promotion and Branding Agency",
   "directorate": "Research and Innovation Directorate (RI)",
@@ -14,8 +22,8 @@
   "date_line": "February 2025",
   "intro": [
     "Kenya has a long tradition of craftsmanship, ranging from wood carving and basketry to paper and plastic articles, furniture and related household goods. The sector supports a wide network of artisans, cooperatives and small enterprises across the country, mainly outside the formal manufacturing sector. Kenyan commercial crafts are valued in export markets for their quality, originality and cultural identity, and offer significant scope for value addition and product diversification.",
-    "This profile examines Kenya's trade in commercial crafts, which in this edition covers 454 product headings, with particular focus on the family as a whole. The analysis covers the period 2016 to 2025 and draws on trade values reported to the International Trade Centre (ITC).",
-    "The family draws together products that share a common characteristic of artisanal or labour-intensive production, including articles of wood, plastics, paper and vegetable plaiting materials, as well as wooden furniture and related ornaments. Presenting them as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's craft exports."
+    "This profile examines Kenya's trade in commercial crafts, which in this edition covers a defined group of HS 2022 headings spanning woodwares and carvings, art metalwares and imitation jewellery, handprinted textiles and embroidered goods, ceramics, glassware and stone crafts, plaiting materials and basketwork, and miscellaneous crafts and festive items. The analysis covers the period 2016 to 2025 and draws on trade values reported to the International Trade Centre (ITC).",
+    "The family draws together products that share a common characteristic of artisanal or labour-intensive production, including articles of wood, metal, textiles, ceramic, glass, stone and vegetable plaiting materials. Presenting them as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's craft exports."
   ],
   "data_dir": "crafts",
   "output": "output/Product Profile - Commercial Crafts 2025.docx"
