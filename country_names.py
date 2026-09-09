@@ -167,7 +167,8 @@ def fix_label(name, maxlen=None):
         mapped = SHORT_NAMES.get(repaired.lower())
         if mapped:
             return mapped if maxlen is None else mapped
-    elif maxlen and len(text) > maxlen:
+        return repaired
+    if maxlen and len(text) > maxlen:
         head = text[: maxlen - 1]
         cut = head.rsplit(" ", 1)[0].rstrip(" ,;:")
         text = (cut or head).rstrip(" ,;:") + "..."

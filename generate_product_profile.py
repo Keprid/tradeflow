@@ -484,7 +484,12 @@ class ProfileData:
         value = key(kenya)
         global_rank = next((i for i, r in enumerate(ranked, 1)
                             if self._is_kenya_label(r["reporter_label"])), None)
-        africa = [r for r in ranked if is_africa(r["reporter_label"])]
+        # The African standing uses the latest available export value (review
+        # year, or the most recent year with data) so economies whose latest
+        # ITC figure predates the review year - e.g. Ethiopia - still rank.
+        africa = [r for r in rows
+                  if is_africa(r["reporter_label"]) and _latest_value(r, rev) > 0]
+        africa.sort(key=lambda r: _latest_value(r, rev), reverse=True)
         africa_rank = next((i for i, r in enumerate(africa, 1)
                             if self._is_kenya_label(r["reporter_label"])), None)
         return {
@@ -564,23 +569,35 @@ class ProfileData:
                                       if r["year"] == rev), None)}
 
     def african_peers(self, n=5):
-        """Top ``n`` African exporters of the family (excluding Kenya), by
-        review-year value.  Returns ``None`` when there are fewer than one
-        other African economies with data.
+        """``n`` leading African exporters of the family plus Kenya, ranked
+        by export value - largest to smallest (review year, falling back to
+        the most recent year with data, so e.g. Ethiopia - whose latest ITC
+        figure predates the review year - still ranks on its newest value).
+        Returns ``None`` when no African economy other than Kenya has data.
         """
         rows = [r for r in self._rows("world_exports_by_economy")
                 if r["reporter"] != "000"]
         rev = self.review_year
         if not rows:
             return None
+        kenya = next((r for r in rows
+                      if self._is_kenya_label(r["reporter_label"])), None)
         peers = [r for r in rows
                  if is_africa(r["reporter_label"]) and not self._is_kenya_label(
-                     r["reporter_label"]) and (r["years"].get(rev) or 0.0) > 0]
+                     r["reporter_label"]) and _latest_value(r, rev) > 0]
         if not peers:
             return None
-        peers.sort(key=lambda r: r["years"].get(rev) or 0.0, reverse=True)
-        return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
-                for r in peers[:n]]
+        combined = ([kenya] if kenya else []) + peers
+        seen, out = set(), []
+        for r in combined:
+            key = fix_label(r["reporter_label"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"label": key, "years": r["years"],
+                        "src_year": _latest_year(r, rev)})
+        out.sort(key=lambda r: _latest_value(r, rev), reverse=True)
+        return out[:n + 1]
 
     def kenya_world_shares(self):
         """Kenya's exports vs the world by 6-digit HS code.
@@ -695,6 +712,29 @@ def short_anchor(label):
     return head or short_label(clean, 24)
 
 
+def _latest_value(row, rev):
+    """Review-year export value, falling back to the most recent year that
+    has data.  Used so economies whose latest figures ITC has not yet
+    published (e.g. Ethiopia for 2024-2025) still rank fairly."""
+    v = row["years"].get(rev)
+    if v:
+        return v
+    for y in sorted(row["years"], reverse=True):
+        if row["years"].get(y):
+            return row["years"][y]
+    return 0.0
+
+
+def _latest_year(row, rev):
+    """Year behind ``_latest_value`` (the review year, or an earlier one)."""
+    if row["years"].get(rev):
+        return rev
+    for y in sorted(row["years"], reverse=True):
+        if row["years"].get(y):
+            return y
+    return None
+
+
 def ordinal_list(names, sep=", ", last=" and "):
     if not names:
         return ""
@@ -768,15 +808,17 @@ def _ranked_rows(rows, n, years, ensure_label=None,
 
 def _africa_rank(rows, ensure_label):
     """Position of ``ensure_label`` among African rows (1-based), by
-    review-year value.  ``rows`` must be sorted descending by review year.
-    Returns ``None`` when there is no Africa match for ``ensure_label``.
+    latest available export value (review year, falling back to the most
+    recent year with data).  ``rows`` must be sorted descending by review
+    year.  Returns ``None`` when there is no Africa match for
+    ``ensure_label``.
     """
     rev = max((y for r in rows for y in r["years"]), default=None)
     africa = [r for r in rows
               if is_africa(r.get("label", "")) and
-              (r["years"].get(rev) or 0.0) > 0]
+              _latest_value(r, rev) > 0]
     africa_sorted = sorted(africa,
-                           key=lambda r: r["years"].get(rev) or 0.0,
+                           key=lambda r: _latest_value(r, rev),
                            reverse=True)
     for i, r in enumerate(africa_sorted, 1):
         if r.get("label") == ensure_label:
@@ -785,11 +827,11 @@ def _africa_rank(rows, ensure_label):
 
 
 def _africa_count(rows):
-    """Number of distinct African rows (by review-year value > 0)."""
+    """Number of distinct African rows (latest available value > 0)."""
     rev = max((y for r in rows for y in r["years"]), default=None)
     return sum(1 for r in rows
                if is_africa(r.get("label", "")) and
-               (r["years"].get(rev) or 0.0) > 0)
+               _latest_value(r, rev) > 0)
 
 
 def _year_totals(rows):
@@ -869,7 +911,10 @@ class ProfileBuilder(ReportBuilder):
             for i, y in enumerate(years):
                 table.rows[ri].cells[label_cols + i].text = fmt(row["years"].get(y))
             cur = row["years"].get(rev)
-            share = ((cur or 0.0) / rev_total * 100.0) if rev_total else None
+            if cur is None:
+                share = None
+            else:
+                share = (cur / rev_total * 100.0) if rev_total else None
             table.rows[ri].cells[label_cols + n].text = \
                 "" if share is None else "%.1f%%" % share
 
@@ -1236,18 +1281,18 @@ def section_competitiveness(b, cfg, data, source):
     # -- Kenya vs leading African peers -----------------------------------
     peers = data.african_peers(5)
     if peers:
-        kenya_row = {"label": "Kenya", "years": {}}
-        for y in years:
-            kenya_row["years"][y] = next(
-                (r["years"].get(y) for r in data._rows("world_exports_by_economy")
-                 if data._is_kenya_label(r["reporter_label"])), None)
-        peers = [kenya_row] + peers
+        older = [p for p in peers if p.get("src_year") and p["src_year"] != rev]
         b._next_table("Kenya vs Leading African Exporters of %s, %d"
                       % (anchor, rev), source)
         b.add_value_table("Exporting economy", peers, years,
                           "Share in %d" % rev,
                           "African Exporters of %s" % anchor, source,
                           total_label="Total")
+        if older:
+            b.add_para(
+                "Note: %s did not report a %d figure in the source download; "
+                "the value shown is for their most recent available year."
+                % (ordinal_list([p["label"] for p in older]), rev))
 
 
 def section_global(b, cfg, data, source, tmp_dir):
@@ -1708,9 +1753,9 @@ def write_excel_deliverable(cfg, data, out_path):
                 c = _xc(ws, ri, 2 + i,
                         None if v is None else round(v, 1),
                         number_format=val_fmt, align=cm)
-            v = display(row["years"].get(rev)) or 0.0
+            v = display(row["years"].get(rev))
             _xc(ws, ri, 2 + len(years),
-                (v / rev_total if rev_total else None),
+                (v / rev_total if v is not None and rev_total else None),
                 bold=True, number_format="0.0%", align=cm)
         width = max([30] + [len(str(r["label"])) for r in rows])
         ws.column_dimensions["A"].width = min(width, 60)
@@ -1834,13 +1879,7 @@ def write_excel_deliverable(cfg, data, out_path):
     # Kenya vs leading African exporters
     peers = data.african_peers(5)
     if peers:
-        kenya_row = {"label": "Kenya", "years": {}}
-        for y in years:
-            kenya_row["years"][y] = next(
-                (r["years"].get(y) for r in data._rows("world_exports_by_economy")
-                 if data._is_kenya_label(r["reporter_label"])), None)
-        value_sheet("African Peers", "Exporting economy",
-                    [kenya_row] + peers)
+        value_sheet("African Peers", "Exporting economy", peers)
 
     # Kenya's share of world exports over time + specialization
     share_series = data.market_share_series()
@@ -1896,7 +1935,9 @@ def write_excel_deliverable(cfg, data, out_path):
 
 def _share01(row, rev, rows):
     total = sum(display(r["years"].get(rev)) or 0.0 for r in rows)
-    v = display(row["years"].get(rev)) or 0.0
+    v = display(row["years"].get(rev))
+    if v is None:
+        return None
     return (v / total) if total else None
 
 
