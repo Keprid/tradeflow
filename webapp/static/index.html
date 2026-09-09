@@ -897,7 +897,7 @@ input[type=file]::file-selector-button:hover {
 
     <div id="product-profile-wrap" class="info-box">
       <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Product Profile Mode:</b> Upload the <b>ITC matrix files</b> for a product family (or a <b>.zip</b> containing them). Pick the product profile (e.g. coffee, crafts) below. A Word report plus an editable Excel deliverable are generated.
+      &nbsp;<b>Product Profile Mode:</b> Upload the <b>ITC matrix files</b> for a product family (or a <b>.zip</b> containing them). The product family is <b>auto-detected</b> from the files; pick a specific profile (e.g. coffee, crafts) only if you prefer. A Word report plus an editable Excel deliverable are generated.
     </div>
 
     <div class="row">
@@ -1145,12 +1145,17 @@ input[type=file]::file-selector-button:hover {
       const profiles = await r.json();
       const sel = $('product-cfg');
       sel.innerHTML = '';
+      const auto = document.createElement('option');
+      auto.value = '__auto__';
+      auto.textContent = 'Auto-detect from files';
+      sel.appendChild(auto);
       for (const c of profiles) {
         const o = document.createElement('option');
         o.value = c.id;
         o.textContent = c.name;
         sel.appendChild(o);
       }
+      sel.value = '__auto__';
       if (!profiles.length) appendLog('No product profiles found in config/.', 'err');
     } catch (e) {
       appendLog('Could not load product profiles: ' + e, 'err');

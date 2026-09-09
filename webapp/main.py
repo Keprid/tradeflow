@@ -679,6 +679,49 @@ def _product_profile_configs():
             yield p, cfg
 
 
+def _autodetect_product_profile(uploads, configs):
+    """Pick the product-profile config whose ``include_codes`` match the
+    family actually present in the uploaded ITC matrices.
+
+    Collects every product code appearing in the by-product matrix files
+    (kenya/world x export/import) and scores each config by the fraction of
+    those codes it covers (the same HS 2022 hierarchical matching used by the
+    generator).  Returns ``(config_path, cfg)`` for the best match, or None
+    when nothing covers a meaningful share of the uploaded codes.
+    """
+    codes = set()
+    for prefix in ("kenyas-exports-to-world-by-product",
+                   "products-exported-globally",
+                   "kenyas-imports-from-world-by-product",
+                   "products-imported-globally"):
+        path = gpp._find_file(str(uploads), prefix)
+        if path is None:
+            continue
+        _, records = gpp.load_matrix(path)
+        for r in records:
+            c = gpp.ProfileData._norm_code(r["product"])
+            if c:
+                codes.add(c)
+    if not codes:
+        return None
+
+    best = None  # (frac, matched, config_path, cfg)
+    for path, cfg in configs:
+        inc = cfg.get("include_codes")
+        if not inc:
+            continue
+        tester = gpp.ProfileData.__new__(gpp.ProfileData)
+        tester.include_codes = list(inc)
+        matched = sum(1 for c in codes if tester._code_ok(c))
+        frac = matched / len(codes)
+        if best is None or frac > best[0] or (
+                frac == best[0] and matched > best[1]):
+            best = (frac, matched, path, cfg)
+    if best is None or best[0] < 0.5:
+        return None
+    return best[2], best[3]
+
+
 def _detect_reporter(excel_dir):
     """Return the country the data actually describes, from Table 1's title."""
     return make_config.read_table1_meta(excel_dir)[0]
@@ -848,12 +891,22 @@ def _run_product_pipeline(job_dir, cfg_id, top_n, logs):
     charts = job_dir / "charts"
 
     if not cfg_id or cfg_id == "__auto__":
-        raise HTTPException(
-            400, "Select a product profile (coffee, crafts, ...) to generate.")
-    cfg_path = CONFIG_DIR / f"{cfg_id}.json"
-    if not cfg_path.exists():
-        raise HTTPException(404, f"Config '{cfg_id}' not found")
-    cfg = gr.load_config(str(cfg_path))
+        auto = _autodetect_product_profile(
+            uploads, list(_product_profile_configs()))
+        if auto is None:
+            raise HTTPException(
+                400, "Could not recognise which product family the files "
+                     "describe. Select a product profile (coffee, crafts, ...) "
+                     "manually.")
+        cfg_path, cfg = auto
+        cfg_id = cfg_path.stem
+        logs.append(f"Auto-detected product profile: "
+                    f"{cfg.get('family_title', cfg_id)}")
+    else:
+        cfg_path = CONFIG_DIR / f"{cfg_id}.json"
+        if not cfg_path.exists():
+            raise HTTPException(404, f"Config '{cfg_id}' not found")
+        cfg = gr.load_config(str(cfg_path))
 
     os.makedirs(charts, exist_ok=True)
     data = gpp.ProfileData(str(uploads), cfg.get("include_codes"))
