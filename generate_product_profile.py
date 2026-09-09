@@ -1796,7 +1796,6 @@ def write_excel_deliverable(cfg, data, out_path):
         chart.dataLabels = DataLabelList()
         chart.dataLabels.showPercent = True
         chart.dataLabels.numFmt = "0.0%"
-        chart.dataLabels.dLblPos = "outEnd"
         chart.dataLabels.showLeaderLines = True
         chart.add_data(data, titles_from_data=False)
         chart.set_categories(cats)

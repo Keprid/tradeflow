@@ -488,7 +488,6 @@ def _add_doughnut(ws, top_row, title, labels_values, colors=None,
     chart.dataLabels = DataLabelList()
     chart.dataLabels.showPercent = True
     chart.dataLabels.numFmt = "0.0%"
-    chart.dataLabels.dLblPos = "outEnd"
     chart.dataLabels.showLeaderLines = True
     chart.add_data(data, titles_from_data=False)
     chart.set_categories(cats)
