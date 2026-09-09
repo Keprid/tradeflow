@@ -542,6 +542,70 @@ def top_rows(rows, n, years, residual="All other markets"):
     return top + [{"label": residual, "years": residual_years}]
 
 
+def _ranked_rows(rows, n, years, ensure_label=None,
+                 residual="All other economies"):
+    """Like ``top_rows`` but records each row's true overall position and
+    keeps ``ensure_label`` (e.g. Kenya) in the list even when it falls
+    outside the top ``n`` -- so it is reported with its overall rank, before
+    the remainder is consolidated into the residual row.
+
+    ``rows`` must already be sorted descending by review-year value (as the
+    ``data.exporters()`` / ``data.importers()`` accessors return).  Rows are
+    assigned a shared ``rank`` when their review-year values are tied.
+    """
+    rows = [dict(r) for r in rows]
+    rev = years[-1]
+    prev_val, prev_rank = None, 0
+    for idx, r in enumerate(rows, 1):
+        v = r["years"].get(rev) or 0.0
+        rank = prev_rank if (prev_val is not None and v == prev_val) else idx
+        prev_val, prev_rank = v, rank
+        r["rank"] = rank
+
+    extra = 1 if ensure_label and ensure_label not in \
+        {r["label"] for r in rows[:n]} else 0
+    if len(rows) <= n + extra:
+        return rows
+
+    top = rows[:n]
+    if ensure_label and ensure_label not in {r["label"] for r in top}:
+        k = next((r for r in rows if r["label"] == ensure_label), None)
+        if k is not None:
+            top = top + [k]
+    residual_years = {}
+    for y in years:
+        shown = sum((r["years"].get(y) or 0.0) for r in top)
+        total = sum((r["years"].get(y) or 0.0) for r in rows)
+        residual_years[y] = max(0.0, total - shown)
+    return top + [{"label": residual, "years": residual_years}]
+
+
+def _africa_rank(rows, ensure_label):
+    """Position of ``ensure_label`` among African rows (1-based), by
+    review-year value.  ``rows`` must be sorted descending by review year.
+    Returns ``None`` when there is no Africa match for ``ensure_label``.
+    """
+    rev = max((y for r in rows for y in r["years"]), default=None)
+    africa = [r for r in rows
+              if is_africa(r.get("label", "")) and
+              (r["years"].get(rev) or 0.0) > 0]
+    africa_sorted = sorted(africa,
+                           key=lambda r: r["years"].get(rev) or 0.0,
+                           reverse=True)
+    for i, r in enumerate(africa_sorted, 1):
+        if r.get("label") == ensure_label:
+            return i
+    return None
+
+
+def _africa_count(rows):
+    """Number of distinct African rows (by review-year value > 0)."""
+    rev = max((y for r in rows for y in r["years"]), default=None)
+    return sum(1 for r in rows
+               if is_africa(r.get("label", "")) and
+               (r["years"].get(rev) or 0.0) > 0)
+
+
 def _year_totals(rows):
     years = set()
     for r in rows:
@@ -610,7 +674,8 @@ class ProfileBuilder(ReportBuilder):
         rev_total = sum((r["years"].get(rev) or 0.0) for r in rows)
         for ri, row in enumerate(rows, start=2):
             if rank:
-                table.rows[ri].cells[0].text = str(ri - 1)
+                rk = row.get("rank")
+                table.rows[ri].cells[0].text = "" if rk is None else str(rk)
             label = row["label"]
             if "code" in row:
                 label = "%s %s" % (row["code"], short_label(label, 44))
@@ -819,8 +884,9 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
 
     b.add_heading("KENYA'S EXPORTS OF %s TO THE WORLD" % anchor.upper(), level=1)
 
-    destinations = top_rows(data.destinations(), cfg.get("top_n", 10), years,
-                            "All other markets")
+    destinations = _ranked_rows(data.destinations(), 25, years,
+                                ensure_label="Kenya",
+                                residual="All other markets")
     if not destinations:
         return
     b._next_table("Destination Markets for Kenya's %s, %d" % (anchor, rev),
@@ -828,7 +894,7 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
     b.add_value_table("Destination market", destinations, years,
                       "Share in %d" % rev,
                       "Kenya's Exports of %s by Destination" % anchor, source,
-                      total_label="Total")
+                      total_label="Total", rank=True)
 
     totals = _year_totals(destinations)
     total_last = totals.get(rev)
@@ -874,15 +940,17 @@ def section_global(b, cfg, data, source, tmp_dir):
 
     b.add_heading("EXPORT OF %s GLOBALLY" % anchor.upper(), level=1)
 
-    exporters = top_rows(data.exporters(), cfg.get("top_n", 10), years,
-                         "All other economies")
+    all_exporters = data.exporters()
+    exporters = _ranked_rows(all_exporters, cfg.get("top_n", 10), years,
+                             ensure_label="Kenya", residual="All other economies")
     if exporters:
         b._next_table("World Exports of %s by Economy, %d" % (anchor, rev),
                       source)
         b.add_value_table("Exporting economy", exporters, years,
                           "Share in %d" % rev,
                           "Countries Exporting %s" % anchor, source,
-                          total_label="Total")
+                          total_label="Total", rank=True)
+        _kenya_standing_bullets(b, all_exporters, years, anchor, "exporter")
         geo_bullets(b, exporters, years, anchor, "exporter")
         pairs = _shares(exporters, years)
         if len(pairs) >= 2:
@@ -893,15 +961,17 @@ def section_global(b, cfg, data, source, tmp_dir):
                                % (anchor, rev), source)
                 b.add_figure(img)
 
-    importers = top_rows(data.importers(), cfg.get("top_n", 10), years,
-                         "All other economies")
+    all_importers = data.importers()
+    importers = _ranked_rows(all_importers, cfg.get("top_n", 10), years,
+                             ensure_label="Kenya", residual="All other economies")
     if importers:
         b._next_table("World Imports of %s by Economy, %d" % (anchor, rev),
                       source)
         b.add_value_table("Importing economy", importers, years,
                           "Share in %d" % rev,
                           "Countries Importing %s" % anchor, source,
-                          total_label="Total")
+                          total_label="Total", rank=True)
+        _kenya_standing_bullets(b, all_importers, years, anchor, "importer")
         geo_bullets(b, importers, years, anchor, "importer")
         pairs = _shares(importers, years)
         if len(pairs) >= 2:
@@ -931,6 +1001,42 @@ def section_global(b, cfg, data, source, tmp_dir):
                           "Global Imports of %s by Product" % family, source,
                           total_label="Total")
         trend_bullets(b, g_imp, years, family, "imports")
+
+
+def _kenya_standing_bullets(b, rows, years, anchor_short, role):
+    """Kenya's standing bullets: position in the overall list and within
+    Africa, drawn from the *full* (un-truncated) ``rows`` so the rank refers
+    to the complete list of economies, not just the displayed top-N."""
+    rev = years[-1]
+    anchor = anchor_short.lower()
+    group = {"exporter": "world exporters", "importer": "world importers"}[role]
+    africa_group = {"exporter": "African exporters",
+                    "importer": "African importers"}[role]
+    action = {"exporter": "exports", "importer": "imports"}[role]
+    kenya_row = next((r for r in rows if r.get("label") == "Kenya"), None)
+    if kenya_row is None:
+        return
+    value = kenya_row["years"].get(rev) or 0.0
+    ranked = sorted(rows, key=lambda r: r["years"].get(rev) or 0.0, reverse=True)
+    global_rank = next((i for i, r in enumerate(ranked, 1)
+                        if r.get("label") == "Kenya"), None)
+    n_total = sum(1 for r in ranked if (r["years"].get(rev) or 0.0) > 0)
+    africa_rank = _africa_rank(ranked, "Kenya")
+    n_africa = _africa_count(ranked)
+
+    if value <= 0:
+        return
+    parts = ["Kenya ranked"]
+    if global_rank and n_total:
+        parts.append("%s of %d %s" % (_ordinal(global_rank), n_total, group))
+    if africa_rank and n_africa:
+        if len(parts) > 1:
+            parts.append("and")
+        parts.append("%s of %d %s"
+                     % (_ordinal(africa_rank), n_africa, africa_group))
+    if len(parts) > 1:
+        b.add_bullet(" ".join(parts) + " of %s in %d, with %s valued at "
+                     "%s." % (anchor, rev, action, usd_phrase(value)))
 
 
 RESIDUE = {"exporter": "All other economies",
@@ -1348,18 +1454,19 @@ def write_excel_deliverable(cfg, data, out_path):
                               % cfg.get("family_title"),
                               [(m["label"], _share01(m, rev, members))
                                for m in members]))
-    destinations = top_rows(data.destinations(), cfg.get("top_n", 10), years,
-                            "All other markets")
+    destinations = _ranked_rows(data.destinations(), 25, years,
+                                ensure_label="Kenya",
+                                residual="All other markets")
     if destinations:
         value_sheet(sheet_name("Destinations", data.anchor_label),
                     "Destination market", destinations,
                     doughnut=("Kenya's exports by destination",
                               [(d["label"], _share01(d, rev, destinations))
                                for d in destinations]))
-    exporters = top_rows(data.exporters(), cfg.get("top_n", 10), years,
-                         "All other economies")
-    importers = top_rows(data.importers(), cfg.get("top_n", 10), years,
-                         "All other economies")
+    exporters = _ranked_rows(data.exporters(), cfg.get("top_n", 10), years,
+                             ensure_label="Kenya", residual="All other economies")
+    importers = _ranked_rows(data.importers(), cfg.get("top_n", 10), years,
+                             ensure_label="Kenya", residual="All other economies")
     if exporters:
         value_sheet(sheet_name("World Exporters"), "Exporting economy", exporters)
     if importers:
