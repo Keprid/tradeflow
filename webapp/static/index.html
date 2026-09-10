@@ -1336,7 +1336,7 @@ input[type=file]::file-selector-button:hover {
         return;
       }
       appendLog('Done.', 'ok');
-      const isProduct = final.mode === 'product';
+      const isProduct = final.mode === 'product' || final.mode === 'crafts';
       $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
         `${isProduct ? 'Product profile' : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables')}` +
         ` &middot; job ${final.job_id}`;

@@ -1164,7 +1164,7 @@ def api_status(job_id: str):
                 "report_url": f"/api/download/{job_id}",
                 "tables_url": f"/api/tables/{job_id}",
                 "mode": m.get("mode"), "log": log_lines}
-        if m.get("report_type") == "product":
+        if m.get("report_type") in ("product", "crafts"):
             resp["product_tables_url"] = f"/api/product-tables/{job_id}"
             resp.pop("tables_url", None)
         if m.get("promotion_name"):
