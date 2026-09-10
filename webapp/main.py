@@ -54,6 +54,7 @@ import generate_services_report as gsr   # noqa: E402
 import make_quarterly_tables as mqt      # noqa: E402
 import generate_quarterly_report as gqr  # noqa: E402
 import generate_product_profile as gpp   # noqa: E402
+import generate_crafts_report as gcr     # noqa: E402
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
@@ -138,6 +139,15 @@ PRODUCT_RAW_KEYWORDS = (
     "kenyas-exports-to-world-by-product", "kenyas-exports-to-world-by-importer",
     "kenyas-imports-from-world-by-product", "kenyas-imports-from-world-by-exporter",
     "export_potential")
+# Crafts "product group" downloads (Trade Map query-level workbooks).  A few of
+# these names overlap the services/classic goods keywords (e.g.
+# "list_of_exporters_for" is also in SERVICE_RAW_KEYWORDS), so the crafts check
+# must run before the services/matrix auto-detects in _detect_mode.
+CRAFTS_RAW_KEYWORDS = (
+    "list_of_exported_products_for_the_selected_product_group",
+    "list_of_exporters_for_the_selected_product_group",
+    "list_of_importing_markets_for_a_product_group_exported_by_kenya",
+    "list_of_products_exported_by_kenya")
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -326,8 +336,9 @@ class _HTMLTableParser(html.parser.HTMLParser):
 
 def _write_html_as_xlsx(src, out):
     """Parse an HTML file (often a .xls download) into the first .xlsx sheet."""
+    text = _read_text_any(src)
     parser = _HTMLTableParser()
-    parser.feed(_read_text_any(src))
+    parser.feed(text)
     if not parser.tables:
         raise ValueError("No HTML table found in file")
     table = max(parser.tables, key=len)
@@ -338,6 +349,14 @@ def _write_html_as_xlsx(src, out):
         for c, v in enumerate(row, start=1):
             if v != "":
                 ws.cell(row=r, column=c, value=v)
+    # Keep the ITC "Product group: <Category>" label (the numbered craft
+    # files carry the category only in this page text, never in the
+    # filename), so the crafts loader can still identify the family after
+    # the HTML -> xlsx conversion discards the rest of the page.
+    m = re.search(r"Product group\s*:\s*([^<]+)", text)
+    if m:
+        ws.cell(row=1, column=20,
+                value="Product group: %s" % m.group(1).strip())
     wb.save(str(out))
 
 
@@ -620,6 +639,11 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"{kw_list}) or the generated Exports.xlsx and Imports.xlsx.")
     # When the user explicitly selects a report type, honour that choice
     # before trying to auto-detect from filenames.
+    # Craft product-group downloads are a product-profile dataset even though
+    # a couple of their names overlap the services/classic keywords, so
+    # recognise them first (works for "Product Profile" and defaults alike).
+    if any(any(k in n for k in CRAFTS_RAW_KEYWORDS) for n in names):
+        return "crafts", ""
     if report_type == "product":
         # Explicitly selected: require at least one recognisable matrix file.
         if any(any(k in n for k in PRODUCT_RAW_KEYWORDS) for n in names):
@@ -951,6 +975,63 @@ def _run_product_pipeline(job_dir, cfg_id, top_n, logs):
     return report_path, manifest
 
 
+def _run_crafts_pipeline(job_dir, cfg_id, top_n, logs):
+    uploads = job_dir / "uploads"
+    charts = job_dir / "charts"
+
+    if not cfg_id or cfg_id == "__auto__":
+        cfg_id = "product_profile_crafts"
+
+    cfg_path = CONFIG_DIR / f"{cfg_id}.json"
+    if not cfg_path.exists():
+        raise HTTPException(404, f"Config '{cfg_id}' not found")
+    cfg = gr.load_config(str(cfg_path))
+    if not cfg.get("family_title"):
+        raise HTTPException(400, "The selected config is not a product-profile "
+                                 "config (no family_title).")
+    logs.append(f"Profile: {cfg.get('family_title', cfg_id)}")
+
+    os.makedirs(charts, exist_ok=True)
+    data = gcr.CraftsData(str(uploads))
+    logs.append(f"Loading craft product-group files from {uploads}")
+    logs.append(f"Period {data.start_year}-{data.review_year} "
+                f"| categories {len(data.order)}")
+    for w in data.warnings:
+        logs.append(f"  [warn] {w}")
+
+    base = cfg.get("family_title") or cfg_id
+    base = re.sub(r"[^A-Za-z0-9]+", " ", base).strip().upper()
+    report_name = f"{base} PRODUCT PROFILE.docx"
+    report_path = job_dir / report_name
+    logs.append(f"Building crafts product profile report (charts -> {charts})")
+    try:
+        doc = gcr.build_crafts_report(cfg, str(uploads), str(report_path),
+                                      str(charts))
+        doc.save(str(report_path))
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    logs.append(f"Report saved as {report_name}")
+
+    tables_name = f"{base} PRODUCT PROFILE TABLES.xlsx"
+    tables_path = job_dir / tables_name
+    try:
+        gcr.write_crafts_excel(cfg, str(uploads), str(tables_path))
+        logs.append(f"Excel deliverable saved as {tables_name}")
+    except Exception as e:
+        logs.append(f"Warning: Excel deliverable skipped: {e}")
+
+    manifest = {
+        "mode": "crafts",
+        "report_type": "crafts",
+        "report_name": report_name,
+        "tables_name": tables_name,
+        "config": cfg_id,
+    }
+    (job_dir / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    return report_path, manifest
+
+
 def _run_quarterly_pipeline(job_dir, top_n, mode, logs):
     uploads = job_dir / "uploads"
     tables = job_dir / "tables"
@@ -1138,6 +1219,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
             report_type = "quarterly"
         elif mode == "product":
             report_type = "product"
+        elif mode == "crafts":
+            report_type = "crafts"
         elif mode in ("raw", "ready"):
             report_type = "goods"
 
@@ -1152,6 +1235,9 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                 job_dir, config, top, logs)
         elif report_type == "product":
             job_fn = lambda logs: _run_product_pipeline(     # noqa: E731
+                job_dir, config, top, logs)
+        elif report_type == "crafts":
+            job_fn = lambda logs: _run_crafts_pipeline(      # noqa: E731
                 job_dir, config, top, logs)
         else:
             job_fn = lambda logs: _run_pipeline(             # noqa: E731
