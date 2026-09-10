@@ -1336,7 +1336,8 @@ def build_crafts_report(cfg, data_dir, out_path, tmp_dir):
 # Excel deliverable
 # --------------------------------------------------------------------------
 def write_crafts_excel(cfg, data_dir, out_path):
-    """Companion workbook with the same tables."""
+    """Companion workbook with the same tables, named and ordered to match
+    the Word report's Table N captions exactly."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
@@ -1347,12 +1348,23 @@ def write_crafts_excel(cfg, data_dir, out_path):
     data = CraftsData(data_dir)
     years = data.years
     rev = data.review_year
+    family = cfg.get("family_title", "Commercial Crafts")
     wb = Workbook()
     wb.remove(wb.active)
+    tcap = 0
 
-    def value_sheet(title, first_col, rows, label_key="label",
+    def _sheet_name(caption):
+        """31-char Excel sheet name from a full table caption."""
+        return (caption[:30] + "\u2026") if len(caption) > 31 else caption
+
+    def _next():
+        nonlocal tcap
+        tcap += 1
+        return tcap
+
+    def value_sheet(caption, first_col, rows, label_key="label",
                     code_key=None):
-        ws = wb.create_sheet(title[:31])
+        ws = wb.create_sheet(_sheet_name(caption))
         has_code = bool(code_key) and any(r.get(code_key) for r in rows)
         first = 1 + (1 if has_code else 0)
         hdr = (["Code", first_col] if has_code else [first_col]) \
@@ -1384,32 +1396,59 @@ def write_crafts_excel(cfg, data_dir, out_path):
                 60, max(30, *(len(str(r.get("label"))) for r in rows)))
         return ws
 
+    # -- section_categories: per-category tables in report order -----------
+    for cat in data.order:
+        title = cat.title
+        if cat.kenya_products:
+            rows = sorted(cat.kenya_products,
+                          key=lambda r: r["years"].get(rev) or 0.0,
+                          reverse=True)
+            n = _next()
+            value_sheet("Table %d: Kenya's Exports of %s by Product"
+                        % (n, title), "Product", rows,
+                        label_key="label", code_key="code")
+        if cat.destinations:
+            rows = sorted(cat.destinations,
+                          key=lambda r: r["years"].get(rev) or 0.0,
+                          reverse=True)
+            dest_rows = top_rows(rows, 12, years, "All other markets")
+            n = _next()
+            value_sheet("Table %d: Destination Markets for Kenya's %s "
+                        "Exports" % (n, title), "Destination market",
+                        dest_rows)
+        if cat.exporters:
+            rows = sorted(cat.exporters,
+                          key=lambda r: r["years"].get(rev) or 0.0,
+                          reverse=True)
+            exp_rows = top_rows(rows, 12, years, "All other economies")
+            n = _next()
+            value_sheet("Table %d: World Exports of %s by Economy"
+                        % (n, title), "Exporting economy", exp_rows)
+
+    # -- section_whole: whole-family tables in report order ----------------
     by_cat = data.kenya_by_category()
     if by_cat:
-        value_sheet("Kenya Exports by Category", "Category", by_cat)
+        n = _next()
+        value_sheet("Table %d: Trend on %s - Kenya's Exports by Category"
+                    % (n, family), "Category", by_cat)
     dest = top_rows(data.destinations(), 25, years, "All other markets")
     if dest:
-        value_sheet("Kenya Exports by Destination", "Destination", dest)
+        n = _next()
+        value_sheet("Table %d: Destination Markets for Kenya's %s Exports"
+                    % (n, family), "Destination market", dest)
     exp = _ranked_rows(data.exporters(), 12, years, ensure_label="Kenya",
                        residual="All other economies")
     if exp:
-        value_sheet("World Exporters", "Exporting economy", exp)
+        n = _next()
+        value_sheet("Table %d: World Exports of %s by Economy"
+                    % (n, family), "Exporting economy", exp)
     wprod = top_rows(data.world_products(), 15, years, "All other products")
     if wprod:
-        value_sheet("Global Exports by Product", "Product", wprod,
+        n = _next()
+        value_sheet("Table %d: Trend on %s Globally - Export"
+                    % (n, family), "Product", wprod,
                     label_key="label", code_key="code")
-    for cat in data.order:
-        rows = sorted(cat.kenya_products,
-                      key=lambda r: r["years"].get(rev) or 0.0,
-                      reverse=True)
-        if rows:
-            value_sheet("Products " + cat.title, "Product", rows,
-                        label_key="label", code_key="code")
-        rows = sorted(cat.destinations,
-                      key=lambda r: r["years"].get(rev) or 0.0,
-                      reverse=True)
-        if rows:
-            value_sheet("Destinations " + cat.title, "Destination", rows)
+
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     wb.save(out_path)
     return wb
