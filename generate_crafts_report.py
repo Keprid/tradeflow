@@ -44,10 +44,19 @@ Usage:
 import argparse
 import os
 import re
+from xml.sax.saxutils import escape as _xml_escape
 
 import openpyxl
 
 import xlsx_compat
+
+from docx.enum.style import WD_STYLE_TYPE
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.opc.packuri import PackURI
+from docx.opc.part import Part
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import nsdecls, qn
+from docx.shared import Pt
 
 from generate_product_profile import (
     ProfileBuilder, make_donut,
@@ -69,6 +78,124 @@ ROLE_KEYWORDS = (
 )
 
 SUPPORTED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
+
+FOOTNOTES_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml"
+    ".footnotes+xml"
+)
+
+
+class _FootnotesPart(Part):
+    """writer for word/footnotes.xml; serialised with the package on save."""
+
+    def __init__(self, partname, package):
+        Part.__init__(self, partname, FOOTNOTES_CONTENT_TYPE, None, package)
+        self.notes = []
+
+    def add_note(self, text, url=None):
+        fid = len(self.notes) + 1
+        rId = None
+        if url:
+            rId = self.rels.get_or_add_ext_rel(RT.HYPERLINK, url)
+        self.notes.append({"text": text, "url": url, "rId": rId})
+        return fid
+
+    def before_marshal(self):
+        self._blob = _render_footnotes(self.notes).encode("utf-8")
+
+
+def _render_footnotes(notes):
+    out = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        "<w:footnotes %s>" % nsdecls("w", "r"),
+        '<w:footnote w:type="separator" w:id="-1">'
+        "<w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"240\" "
+        'w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p>'
+        "</w:footnote>",
+        '<w:footnote w:type="continuationSeparator" w:id="0">'
+        "<w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"240\" "
+        'w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r>'
+        "</w:p></w:footnote>",
+    ]
+    for i, note in enumerate(notes, start=1):
+        out.append(
+            '<w:footnote w:id="%d">'
+            '<w:p><w:pPr><w:pStyle w:val="FootnoteText"/>'
+            '<w:ind w:left="360" w:firstLine="360"/><w:jc w:val="both"/>'
+            "</w:pPr>"
+            '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/>'
+            '<w:vertAlign w:val="superscript"/></w:rPr><w:footnoteRef/></w:r>'
+            '<w:r><w:t xml:space="preserve"> %s</w:t></w:r>'
+            % (i, _xml_escape(note["text"]))
+        )
+        if note.get("url"):
+            out.append(
+                '<w:hyperlink r:id="%s" w:history="1">'
+                '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>'
+                '<w:t xml:space="preserve">%s</w:t></w:r></w:hyperlink>'
+                % (note["rId"], _xml_escape(note["url"]))
+            )
+        out.append("</w:p></w:footnote>")
+    out.append("</w:footnotes>")
+    return "".join(out)
+
+
+def _add_footnote_styles(doc):
+    if "Footnote Text" not in doc.styles:
+        st = doc.styles.add_style("Footnote Text", WD_STYLE_TYPE.PARAGRAPH)
+        st.element.set(qn("w:styleId"), "FootnoteText")
+        st.font.name = "Century Gothic"
+        st.font.size = Pt(10)
+        st.paragraph_format.space_after = Pt(4)
+        st.paragraph_format.line_spacing = 1.0
+    if "Footnote Reference" not in doc.styles:
+        st = doc.styles.add_style("Footnote Reference",
+                                  WD_STYLE_TYPE.CHARACTER)
+        st.element.set(qn("w:styleId"), "FootnoteReference")
+        rpr = st.element.get_or_add_rPr()
+        va = OxmlElement("w:vertAlign")
+        va.set(qn("w:val"), "superscript")
+        rpr.append(va)
+    if "Hyperlink" not in doc.styles:
+        st = doc.styles.add_style("Hyperlink", WD_STYLE_TYPE.CHARACTER)
+        st.element.set(qn("w:styleId"), "Hyperlink")
+        st.font.name = "Century Gothic"
+        rpr = st.element.get_or_add_rPr()
+        col = OxmlElement("w:color")
+        col.set(qn("w:val"), "0563C1")
+        rpr.append(col)
+        u = OxmlElement("w:u")
+        u.set(qn("w:val"), "single")
+        rpr.append(u)
+        va = OxmlElement("w:vertAlign")
+        va.set(qn("w:val"), "superscript")
+        rpr.append(va)
+
+
+def _footnotes_part(doc):
+    part = getattr(doc, "_crafts_footnotes_part", None)
+    if part is not None:
+        return part
+    part = _FootnotesPart(PackURI("/word/footnotes.xml"), doc.part.package)
+    doc.part.relate_to(part, RT.FOOTNOTES)
+    _add_footnote_styles(doc)
+    doc._crafts_footnotes_part = part
+    return part
+
+
+def add_footnotes(b, paragraph, sources):
+    """register footnote ``sources`` (list of ``(text, url)``) against the
+    document and append superscript reference runs to ``paragraph``."""
+    part = _footnotes_part(b.doc)
+    for text, url in sources:
+        fid = part.add_note(text, url)
+        run = parse_xml(
+            '<w:r %s><w:rPr><w:rStyle w:val="FootnoteReference"/>'
+            '<w:vertAlign w:val="superscript"/></w:rPr>'
+            '<w:footnoteReference w:id="%d"/></w:r>'
+            % (nsdecls("w"), fid)
+        )
+        paragraph._p.append(run)
 
 
 # --------------------------------------------------------------------------
@@ -811,6 +938,374 @@ def section_whole(b, cfg, data, source, tmp_dir):
                usd_phrase(kenya_crafts), usd_phrase(merch.get(rev))))
 
 
+def section_policy(b, cfg, data, source, tmp_dir):
+    """Policy annex: challenges, proposed interventions and export
+    opportunities under trade agreements.  Each challenge carries real
+    Word footnotes with referenced source links."""
+    family = cfg.get("family_title", "Commercial Crafts")
+    years = data.years
+    rev = data.review_year
+
+    by_cat = data.kenya_by_category()
+    total = (sum((r["years"].get(rev) or 0.0) for r in by_cat)
+             if by_cat else 0.0)
+
+    b.add_heading("CHALLENGES FACING KENYA'S CRAFTS SECTOR", level=1)
+    if total:
+        b.add_para(
+            "Kenya exported %s of commercial crafts in %d, a sector built on "
+            "the work of thousands of mostly informal artisans in rural "
+            "clusters and urban market centres. The challenges below - drawn "
+            "from academic studies, industry surveys and government and "
+            "development-agency reports - explain why this small-scale, "
+            "family-based sector still struggles to convert its cultural "
+            "assets into sustained export growth."
+            % (usd_phrase(total), rev))
+    else:
+        b.add_para(
+            "Kenya's crafts sector is built on the work of thousands of "
+            "mostly informal artisans in rural clusters and urban market "
+            "centres. The challenges below - drawn from academic studies, "
+            "industry surveys and government and development-agency reports - "
+            "are why this small-scale, family-based sector still struggles to "
+            "convert its cultural assets into sustained export growth.")
+
+    def _policy_item(lead, body, sources=None):
+        p = b.doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(8)
+        r1 = p.add_run(lead + " ")
+        b._style_run(r1, bold=True)
+        if body:
+            r2 = p.add_run(body)
+            b._style_run(r2)
+        if sources:
+            add_footnotes(b, p, sources)
+
+    _policy_item("1. Limited access to affordable finance.",
+        "Most craft enterprises are micro, informal and collateral-poor, and "
+        "the mainstream banking system serves them poorly. The Central Bank "
+        "of Kenya's 2024 survey of MSME access to bank credit and studies of "
+        "handicraft traders both identify financing gaps and shallow working "
+        "capital as binding constraints on expansion and exporting.",
+        [
+            ("Central Bank of Kenya (2024). Survey Report on MSME Access to "
+             "Bank Credit.",
+             "https://www.centralbank.go.ke/uploads/banking_sector_reports/"
+             "1809756600_2024%20Survey%20Report%20on%20MSME%20Access%20to"
+             "%20Bank%20Credit.pdf"),
+            ("Ndungu S., Mukami (2012). Response strategies adopted by "
+             "handicraft traders in Kenya to challenges of exporting. "
+             "University of Nairobi.",
+             "http://erepository.uonbi.ac.ke/xmlui/handle/123456789/12301"),
+        ])
+    _policy_item("2. Depleted and restricted raw materials.",
+        "The woodcarving industry - the largest craft category in this "
+        "profile - depends on slow-growing hardwood species whose stocks have "
+        "been heavily depleted; repeated timber-harvesting moratoriums have "
+        "restricted legal supply, while the most prized carving species, "
+        "Dalbergia melanoxylon, is CITES-listed.",
+        [
+            ("Choge (2000). Study of the economic aspects of the woodcarving "
+             "industry in Kenya. University of Natal.",
+             "http://hdl.handle.net/10413/5296"),
+            ("Stanford / MAHB (2020). Final report on the socioeconomic "
+             "impacts of the timber harvesting moratoriums in Kenya.",
+             "https://mahb.stanford.edu/wp-content/uploads/2021/08/"
+             "FinalReportonSocieconomicImpactsofTimberMoratorium-JUNE2020.pdf"),
+        ])
+    _policy_item("3. High export transaction costs and weak trade "
+                 "facilitation.",
+        "Craft exporters consistently cite high packaging and shipping "
+        "costs, documentary compliance and border delays. A Kenya Association "
+        "of Manufacturers logistics study found that inland transport can "
+        "exceed 70% of total logistics cost on the Nairobi-Lusaka corridor "
+        "and that documentation alone can cost KSh 15,000-30,000 per "
+        "consignment - costs that dwarf many small craft orders.",
+        [
+            ("Kenya Association of Manufacturers and TradeMark Africa (2026), "
+             "as reported by Khusoko: Why logistics costs are blocking Kenya "
+             "SMEs from AfCFTA.",
+             "https://khusoko.com/2026/03/31/"
+             "kenya-smes-afcfta-logistics-costs-barriers/"),
+            ("Kenya Revenue Authority (2023). Information Pack for MSMEs - "
+             "the Simplified Trade Regime.",
+             "https://kratv.kra.go.ke/wp-content/uploads/2023/10/"
+             "MSME-information-Pack_CBC-2792023.pdf"),
+            ("International Trade Administration (2024). Kenya - Trade "
+             "Barriers.",
+             "https://www.trade.gov/country-commercial-guides/"
+             "kenya-trade-barriers"),
+        ])
+    _policy_item("4. Weak producer organisation and value capture by "
+                 "intermediaries.",
+        "Artisans report that intermediaries set prices and capture a large "
+        "share of the final value, while producer cooperatives are "
+        "underdeveloped. Reports on the Kisii soapstone cluster and on craft "
+        "supply chains across Africa document the same pattern of dependence "
+        "on middlemen and limited direct access to buyers.",
+        [
+            ("Talk Africa (2024). Middle men rip off artisanal soapstone "
+             "miners in Kenya.",
+             "https://www.talkafrica.co.ke/"
+             "middle-men-rip-off-from-artisanal-soapstone-miners-in-kenya/"),
+            ("WIEGO (2023). Craft Supply Chains in Africa.",
+             "https://www.wiego.org/wp-content/uploads/2023/12/"
+             "wiego-craft-supply-chains-in-africa_0.pdf"),
+            ("Bugo C. and Onsiro M. (2026). Analysis of global expansion "
+             "strategies on growth of the soapstone industry in Kisii "
+             "County, Kenya. IOSR Journal of Business and Management.",
+             "https://doi.org/10.9790/487x-2805024355"),
+        ])
+    _policy_item("5. Compliance with importer standards, certification and "
+                 "packaging requirements.",
+        "Kenyan handicraft traders identify certification and quality "
+        "standards set by importing countries - together with packaging and "
+        "labelling rules - among their most significant export challenges; "
+        "domestic conformity requirements (such as KEBS import standards "
+        "mark (ISM) and pre-export verification of conformity, PVoC) add "
+        "further administrative burden.",
+        [
+            ("International Trade Administration (2024). Kenya - Trade "
+             "Barriers (packaging, labelling, KEBS ISM/PVoC).",
+             "https://www.trade.gov/country-commercial-guides/"
+             "kenya-trade-barriers"),
+            ("Harris J. (2014). Meeting the challenges of the handicraft "
+             "industry in Africa: evidence from Nairobi. Development in "
+             "Practice, 24(1), 105-117.",
+             "https://ideas.repec.org/a/taf/cdipxx/"
+             "v24y2014i1p105-117.html"),
+        ])
+    _policy_item("6. Weak intellectual-property protection and copying of "
+                 "designs.",
+        "Artisan designs are readily copied, yet awareness of, access to and "
+        "confidence in the IP system are low. Only a handful of craft "
+        "collectives (such as the Taita Baskets Association) have used "
+        "collective marks, Kenya has yet to enact a geographical-indications "
+        "law, and the Protection of Traditional Knowledge and Cultural "
+        "Expressions Act, 2016, remains under-implemented.",
+        [
+            ("WIPO (2012). Looking Good: An Industrial Design Guide for "
+             "SMEs - Kenya edition.",
+             "https://www.wipo.int/sme/en/documents/guides/customization/"
+             "looking_good_kenya.pdf"),
+            ("WIPO CDIP (2016). Study on IP, the informal economy and "
+             "small-scale innovation in Kenya (CDIP/13/INF/3).",
+             "https://dacatalogue.wipo.int/projectfiles/DA_34_01/"
+             "CDIP_13_INF_3/EN/CDIP_13_INF_3_Study_Kenya_REV.pdf"),
+            ("CIPIT (2023). Celebrating World IP Day 2023: the case of "
+             "Taita Taveta basket weavers.",
+             "https://cipit.org/celebrating-world-ip-day-2023-case-of-"
+             "taita-taveta-basket-weavers/"),
+        ])
+    _policy_item("7. Informality, precarious workspaces and limited digital "
+                 "and marketing capacity.",
+        "Many artisans operate informally, without fixed premises or "
+        "registration, and face workplace precarity and evictions; incomes "
+        "are seasonal and tourism-dependent. Digital selling is a promising "
+        "channel, but makers struggle with skills, photography, pricing and "
+        "platform rules, and report uneven access to export-market "
+        "information and trade fairs.",
+        [
+            ("Kiptoo M., Sambajee P. and Baum T. (2024). Resilience through "
+             "adversity: the case of informal artisan entrepreneurs in "
+             "Kenya. International Journal of Entrepreneurial Behaviour & "
+             "Research.",
+             "https://doi.org/10.1108/ijebr-07-2023-0762"),
+            ("BFA Global (2026). What it takes to sell online: three lessons "
+             "on digital market access for Kenyan handicraft makers.",
+             "https://bfaglobal.com/wee-opportunity-leads-umbrella/insights/"
+             "what-it-takes-to-sell-online-three-lessons-on-digital-market-"
+             "access-for-kenyan-handicraft-makers/"),
+            ("The Exchange Africa (2024). Handcraft artisans in Kenya see "
+             "hope in adopting technology.",
+             "https://theexchange.africa/handcraft-artisans-in-kenya/"),
+        ])
+    _policy_item("8. Competition from cheap machine-made substitutes.",
+        "Handmade craft products compete with industrial and machine-made "
+        "substitutes, both imported (including from China) and locally "
+        "produced at scale. Studies of both Nairobi handicraft firms and the "
+        "Kisii soapstone cluster identify hyper-competition and price "
+        "undercutting by machine-made goods.",
+        [
+            ("WIEGO (2023). Craft Supply Chains in Africa.",
+             "https://www.wiego.org/wp-content/uploads/2023/12/"
+             "wiego-craft-supply-chains-in-africa_0.pdf"),
+            ("Harris J. (2014). Meeting the challenges of the handicraft "
+             "industry in Africa: evidence from Nairobi.",
+             "https://ideas.repec.org/a/taf/cdipxx/"
+             "v24y2014i1p105-117.html"),
+        ])
+
+    # -- Proposed interventions --------------------------------------------
+    b.add_heading("PROPOSED INTERVENTIONS", level=1)
+    b.add_para("The interventions below respond directly to the challenges "
+               "above and to the export opportunities that follow. They are "
+               "consistent with Kenya's Exports Master Plan 2023-2027, the "
+               "CBK financing strategy for MSMEs and the priorities of "
+               "Kenya's AfCFTA strategy.")
+
+    def _policy_bullet(lead, body):
+        p = b.doc.add_paragraph(style="List Bullet")
+        p.paragraph_format.space_after = Pt(8)
+        r1 = p.add_run(lead + " ")
+        b._style_run(r1, bold=True)
+        if body:
+            r2 = p.add_run(body)
+            b._style_run(r2)
+
+    _policy_bullet("Broaden access to affordable finance.",
+        "Extend credit lines, SACCO/cooperative and group financing, and "
+        "purchase-order finance to craft MSEs, closing the gaps documented "
+        "by the Central Bank of Kenya's 2024 survey of MSME access to bank "
+        "credit (challenge 1).")
+    _policy_bullet("Secure sustainable raw materials.",
+        "License and monitor supply chains, support agro-forestry of carving "
+        "species, ensure documented and CITES-compliant sourcing of species "
+        "such as Dalbergia melanoxylon, and develop substitute and "
+        "regenerated materials for carvers (challenge 2).")
+    _policy_bullet("Cut export transaction costs.",
+        "Complete the National Electronic Single Window, implement the EAC "
+        "Simplified Trade Regime for consignments up to USD 2,000, and "
+        "promote cargo groupage, consolidated logistics and shared "
+        "distribution hubs for SMEs (challenge 3).")
+    _policy_bullet("Strengthen producer organisation.",
+        "Support cooperatives and collective or certification marks (as with "
+        "Taita Basket), build direct B2B linkages to buyers, and open "
+        "fair-trade and social-enterprise sales channels (challenge 4).")
+    _policy_bullet("Build compliance capacity.",
+        "Train artisans and exporters on importer standards, packaging, "
+        "labelling and PVoC/certification procedures, with KEPROBA and KEBS "
+        "as delivery partners (challenge 5).")
+    _policy_bullet("Protect design IP.",
+        "Promote industrial-design registration at KIPI, collective marks "
+        "and geographical indications, and implement the Protection of "
+        "Traditional Knowledge and Cultural Expressions Act, 2016 with "
+        "benefit-sharing (challenge 6).")
+    _policy_bullet("Formalise and skill up.",
+        "Provide business registration and development services, digital "
+        "and export-marketing skills, and gender-responsive programming, "
+        "since most craft enterprises are woman-led (challenge 7).")
+    _policy_bullet("Mainstream crafts in export promotion.",
+        "Integrate crafts into KEPROBA's Exports Master Plan and Kenya's "
+        "AfCFTA national strategy, and sponsor artisans at international "
+        "trade fairs and digital expos (challenge 8).")
+
+    # -- Export opportunities ----------------------------------------------
+    b.add_heading("EXPORT OPPORTUNITIES UNDER KENYA'S TRADE AGREEMENTS",
+                  level=1)
+    b.add_para(
+        "Kenya is party to - or a beneficiary of - several trade arrangements "
+        "that lower the tariffs and administrative costs faced by its craft "
+        "exporters. All six product groups profiled in this report "
+        "(handprinted textiles and embroidered goods, woodwares and carvings, "
+        "ceramics/glass/stone crafts, plaiting materials and basketwork, "
+        "miscellaneous crafts, and art metalwares) can move under these "
+        "preferences, so compliance with rules of origin and documentary "
+        "requirements converts market access into realised exports.")
+
+    def _policy_opp(lead, body, sources):
+        p = b.doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(8)
+        r1 = p.add_run(lead + " ")
+        b._style_run(r1, bold=True)
+        r2 = p.add_run(body)
+        b._style_run(r2)
+        add_footnotes(b, p, sources)
+
+    _policy_opp("African Continental Free Trade Area (AfCFTA).",
+        "Tariff preferences across 55 AU member states (a market of about "
+        "1.4 billion people): Kenya's exports, including crafted goods, "
+        "benefit from progressive elimination of tariffs on up to 90% of "
+        "tariff lines, with implementation guided by Kenya's AfCFTA "
+        "Strategic Plan 2022-2027, which prioritises MSME, women and youth "
+        "exporters.",
+        [
+            ("KIPPRA. Unlocking opportunities for Kenya's industrialization "
+             "through the AfCFTA.",
+             "https://kippra.or.ke/unlocking-opportunities-for-kenyas-"
+             "industrialization-through-the-african-continental-free-trade-"
+             "area/"),
+            ("International Trade Administration. Kenya - Trade Agreements.",
+             "https://www.trade.gov/country-commercial-guides/"
+             "kenya-trade-agreements"),
+        ])
+    _policy_opp("East African Community (EAC) Customs Union.",
+        "An internal customs union since 2005 with zero intra-bloc tariffs "
+        "on originating goods. The Simplified Trade Regime exempts "
+        "qualifying consignments valued up to USD 2,000 from import duty on "
+        "presentation of a simple certificate of origin - directly relevant "
+        "to small craft traders at Kenya's borders with Uganda, Tanzania, "
+        "Rwanda, Burundi, the DRC and South Sudan.",
+        [
+            ("Kenya Revenue Authority (2023). Information Pack for MSMEs - "
+             "the Simplified Trade Regime.",
+             "https://kratv.kra.go.ke/wp-content/uploads/2023/10/"
+             "MSME-information-Pack_CBC-2792023.pdf"),
+            ("International Trade Administration. Kenya - Trade Agreements.",
+             "https://www.trade.gov/country-commercial-guides/"
+             "kenya-trade-agreements"),
+        ])
+    _policy_opp("Common Market for Eastern and Southern Africa (COMESA).",
+        "A free-trade area of roughly 540 million people of which Kenya is a "
+        "long-standing member, providing tariff preferences into the broader "
+        "eastern and southern African market.",
+        [
+            ("International Trade Administration. Kenya - Trade Agreements.",
+             "https://www.trade.gov/country-commercial-guides/"
+             "kenya-trade-agreements"),
+        ])
+    _policy_opp("EU-Kenya Economic Partnership Agreement (in force since "
+                "1 July 2024).",
+        "Grants Kenya immediate, permanent duty-free and quota-free access to "
+        "the European Union for all products except arms, while Kenya "
+        "liberalises its own duties over up to 25 years. Craft goods enter "
+        "the EU tariff-free with correct rules-of-origin certification.",
+        [
+            ("EUR-Lex. Economic Partnership Agreement between the EU (and "
+             "its member states) and Kenya - summary.",
+             "https://eur-lex.europa.eu/EN/legal-content/summary/"
+             "economic-partnership-agreement-between-the-eu-and-kenya.html"),
+        ])
+    _policy_opp("UK-Kenya Economic Partnership Agreement (provisionally "
+                "applied since 1 January 2021).",
+        "Replicates duty-free, quota-free market access to the United "
+        "Kingdom on a secure and predictable basis; Kenya remains the only "
+        "EAC partner state to have ratified it.",
+        [
+            ("GOV.UK. UK-Kenya Economic Partnership Agreement - collection.",
+             "https://www.gov.uk/government/collections/"
+             "uk-kenya-economic-partnership-agreement"),
+            ("UK Parliament (2021). Scrutiny of the UK-Kenya Economic "
+             "Partnership Agreement.",
+             "https://publications.parliament.uk/pa/ld5801/ldselect/"
+             "ldintagr/221/22104.htm"),
+        ])
+    _policy_opp("US African Growth and Opportunity Act (AGOA).",
+        "Reauthorised and extended to 31 December 2028, AGOA provides "
+        "duty-free access to the US market for more than 6,000 product "
+        "lines, with Kenya among the leading beneficiaries. The US-EAC and "
+        "US-COMESA trade and investment framework agreements (TIFAs) frame "
+        "further trade and investment dialogue. Exporters should note that "
+        "US 'reciprocal' tariffs introduced in 2025 apply on top of AGOA "
+        "preferences, so rules-of-origin compliance and correct product "
+        "classification matter.",
+        [
+            ("Congressional Research Service (2026). African Growth and "
+             "Opportunity Act (AGOA) - CRS report IF10149.",
+             "https://www.congress.gov/crs-product/IF10149"),
+            ("The EastAfrican (2026). AGOA extended to 2028.",
+             "https://www.theeastafrican.co.ke/tea/business/agoa-extension-"
+             "2028-4580300"),
+            ("International Trade Administration. Kenya - Trade Agreements.",
+             "https://www.trade.gov/country-commercial-guides/"
+             "kenya-trade-agreements"),
+        ])
+    b.add_para("Prioritising rules-of-origin compliance, certification and "
+               "logistics - the interventions set out above - is what will "
+               "turn these market-access commitments into growth for the "
+               "craft categories presented in this profile.")
+
+
 def build_crafts_report(cfg, data_dir, out_path, tmp_dir):
     """Build the crafts Word report to ``out_path``."""
     os.makedirs(tmp_dir, exist_ok=True)
@@ -824,6 +1319,7 @@ def build_crafts_report(cfg, data_dir, out_path, tmp_dir):
         b.add_para(par)
     section_categories(b, cfg, data, source, tmp_dir)
     section_whole(b, cfg, data, source, tmp_dir)
+    section_policy(b, cfg, data, source, tmp_dir)
     return b.doc
 
 
@@ -848,7 +1344,10 @@ def write_crafts_excel(cfg, data_dir, out_path):
     def value_sheet(title, first_col, rows, label_key="label",
                     code_key=None):
         ws = wb.create_sheet(title[:31])
-        hdr = [first_col] + list(years) + ["Share in %d" % rev]
+        has_code = bool(code_key) and any(r.get(code_key) for r in rows)
+        first = 1 + (1 if has_code else 0)
+        hdr = (["Code", first_col] if has_code else [first_col]) \
+            + list(years) + ["Share in %d" % rev]
         for c, h in enumerate(hdr, 1):
             cell = ws.cell(1, c, h)
             cell.font = Font(bold=True, color="FFFFFF")
@@ -856,19 +1355,24 @@ def write_crafts_excel(cfg, data_dir, out_path):
             cell.alignment = cm
         rev_total = sum(display(r["years"].get(rev)) or 0.0 for r in rows)
         for ri, r in enumerate(rows, start=2):
+            if has_code:
+                ws.cell(ri, 1, str(r.get(code_key) or "")).alignment = lm
             lab = str(r.get(label_key) or r.get("label") or "")
-            if code_key and r.get(code_key):
-                lab = "%s  %s" % (r.get(code_key), short_label(lab, 44))
-            ws.cell(ri, 1, lab).alignment = lm
-            for i, y in enumerate(years, start=2):
+            ws.cell(ri, first, lab).alignment = lm
+            for i, y in enumerate(years, start=first + 1):
                 v = display(r["years"].get(y))
                 ws.cell(ri, i, None if v is None else round(v, 1))
                 ws.cell(ri, i).alignment = cm
             v = display(r["years"].get(rev))
             share = (v / rev_total if v is not None and rev_total else None)
-            ws.cell(ri, len(years) + 2, share).number_format = "0.0%"
-        ws.column_dimensions["A"].width = min(
-            60, max(30, *(len(str(r.get("label"))) for r in rows)))
+            ws.cell(ri, first + len(years), share).number_format = "0.0%"
+        if has_code:
+            ws.column_dimensions["A"].width = 12
+            ws.column_dimensions["B"].width = min(
+                60, max(30, *(len(str(r.get("label"))) for r in rows)))
+        else:
+            ws.column_dimensions["A"].width = min(
+                60, max(30, *(len(str(r.get("label"))) for r in rows)))
         return ws
 
     by_cat = data.kenya_by_category()

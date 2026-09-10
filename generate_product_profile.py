@@ -874,8 +874,10 @@ class ProfileBuilder(ReportBuilder):
         sums the displayed rows.
         """
         n = len(years)
-        label_cols = 2 if rank else 1
+        code_cols = 1 if any(row.get("code") for row in rows) else 0
+        label_cols = (1 if rank else 0) + code_cols + 1
         cols = label_cols + n + 1
+        c_label = (1 if rank else 0) + code_cols
         nrows = 2 + len(rows) + (1 if total_label else 0)
         table = self.doc.add_table(rows=nrows, cols=cols, style="Table Grid")
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -883,7 +885,9 @@ class ProfileBuilder(ReportBuilder):
         hdr = table.rows[0]
         if rank:
             hdr.cells[0].text = "#"
-        hdr.cells[rank].text = first_col_header
+        if code_cols:
+            hdr.cells[1 if rank else 0].text = "Code"
+        hdr.cells[c_label].text = first_col_header
         if n > 1:
             hdr.cells[label_cols].merge(hdr.cells[label_cols + n - 1])
         hdr.cells[label_cols].text = "Value in %s" % unit_label
@@ -893,7 +897,7 @@ class ProfileBuilder(ReportBuilder):
         for c in range(cols):
             r2.cells[c].text = ""
         if rank:
-            r2.cells[1].text = first_col_header
+            r2.cells[c_label].text = first_col_header
         for i, y in enumerate(years):
             r2.cells[label_cols + i].text = str(y)
 
@@ -901,33 +905,37 @@ class ProfileBuilder(ReportBuilder):
         rev = years[-1]
         rev_total = sum((r["years"].get(rev) or 0.0) for r in rows)
         for ri, row in enumerate(rows, start=2):
+            c = 0
             if rank:
                 rk = row.get("rank")
                 table.rows[ri].cells[0].text = "" if rk is None else str(rk)
-            label = row["label"]
-            if "code" in row:
-                label = "%s %s" % (row["code"], short_label(label, 44))
-            table.rows[ri].cells[rank].text = label
+                c = 1
+            if code_cols:
+                table.rows[ri].cells[c].text = str(row.get("code") or "")
+                c += 1
+            table.rows[ri].cells[c].text = row["label"]
             for i, y in enumerate(years):
-                table.rows[ri].cells[label_cols + i].text = fmt(row["years"].get(y))
+                table.rows[ri].cells[c + 1 + i].text = \
+                    fmt(row["years"].get(y))
             cur = row["years"].get(rev)
             if cur is None:
                 share = None
             else:
                 share = (cur / rev_total * 100.0) if rev_total else None
-            table.rows[ri].cells[label_cols + n].text = \
+            table.rows[ri].cells[c + 1 + n].text = \
                 "" if share is None else "%.1f%%" % share
 
         if total_label:
             t = table.rows[2 + len(rows)]
-            t.cells[rank].text = total_label
+            t.cells[c_label].text = total_label
             for i, y in enumerate(years):
                 tot = sum((r["years"].get(y) or 0.0) for r in rows)
                 t.cells[label_cols + i].text = fmt(tot)
             t.cells[label_cols + n].text = "100.0%"
 
         if widths is None:
-            widths = ([420] if rank else []) + [3000] + [700] * n + [800]
+            widths = ([420] if rank else []) \
+                + ([1100] if code_cols else []) + [3000] + [700] * n + [800]
         self._set_table_widths(table, widths)
         self._style_table(table, rank=rank, label_cols=label_cols, n=n,
                           total_label=total_label)
@@ -1737,30 +1745,37 @@ def write_excel_deliverable(cfg, data, out_path):
 
     def value_sheet(name, first_col, rows, doughnut=None):
         ws = wb.create_sheet(name)
-        _xc(ws, 1, 1, first_col, bold=True, fill=hdr_fill, align=cm)
+        has_code = any(r.get("code") for r in rows)
+        first = 1 + (1 if has_code else 0)
+        if has_code:
+            _xc(ws, 1, 1, "Code", bold=True, fill=hdr_fill, align=cm)
+        _xc(ws, 1, first, first_col, bold=True, fill=hdr_fill, align=cm)
         for i, y in enumerate(years):
-            _xc(ws, 1, 2 + i, y, bold=True, fill=hdr_fill, align=cm)
-        _xc(ws, 1, 2 + len(years), "Share in %d" % rev, bold=True,
-            fill=hdr_fill, align=cm)
+            _xc(ws, 1, first + 1 + i, y, bold=True, fill=hdr_fill, align=cm)
+        _xc(ws, 1, first + 1 + len(years), "Share in %d" % rev,
+            bold=True, fill=hdr_fill, align=cm)
         rev_total = sum(display(r["years"].get(rev)) or 0.0 for r in rows)
         for ri, row in enumerate(rows, start=2):
-            label = row["label"]
-            if "code" in row:
-                label = "%s  %s" % (row["code"], short_label(label, 44))
-            _xc(ws, ri, 1, label, align=lm)
+            if has_code:
+                _xc(ws, ri, 1, str(row.get("code") or ""), align=lm)
+            _xc(ws, ri, first, row["label"], align=lm)
             for i, y in enumerate(years):
                 v = display(row["years"].get(y))
-                c = _xc(ws, ri, 2 + i,
+                c = _xc(ws, ri, first + 1 + i,
                         None if v is None else round(v, 1),
                         number_format=val_fmt, align=cm)
             v = display(row["years"].get(rev))
-            _xc(ws, ri, 2 + len(years),
+            _xc(ws, ri, first + 1 + len(years),
                 (v / rev_total if v is not None and rev_total else None),
                 bold=True, number_format="0.0%", align=cm)
         width = max([30] + [len(str(r["label"])) for r in rows])
-        ws.column_dimensions["A"].width = min(width, 60)
+        if has_code:
+            ws.column_dimensions["A"].width = 12
+            ws.column_dimensions["B"].width = min(width, 60)
+        else:
+            ws.column_dimensions["A"].width = min(width, 60)
         for i in range(len(years)):
-            ws.column_dimensions[chr(ord("B") + i)].width = 11
+            ws.column_dimensions[chr(ord("A") + first + i)].width = 11
         if doughnut and len(doughnut[1]) >= 2:
             anchor = ws.cell(2 + len(rows), 1).row + 2
             _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1])
@@ -1847,33 +1862,35 @@ def write_excel_deliverable(cfg, data, out_path):
     shares = data.kenya_world_shares()
     if shares["rows"]:
         ws = wb.create_sheet(sheet_name("Kenya vs World"))
-        _xc(ws, 1, 1, "Six-digit HS code", bold=True, fill=hdr_fill, align=cm)
-        _xc(ws, 1, 2, "Kenya exports (%d)" % rev, bold=True, fill=hdr_fill,
+        _xc(ws, 1, 1, "Code", bold=True, fill=hdr_fill, align=cm)
+        _xc(ws, 1, 2, "Product", bold=True, fill=hdr_fill, align=cm)
+        _xc(ws, 1, 3, "Kenya exports (%d)" % rev, bold=True, fill=hdr_fill,
             align=cm)
-        _xc(ws, 1, 3, "World exports (%d)" % rev, bold=True, fill=hdr_fill,
+        _xc(ws, 1, 4, "World exports (%d)" % rev, bold=True, fill=hdr_fill,
             align=cm)
-        _xc(ws, 1, 4, "Kenya share of world", bold=True, fill=hdr_fill,
+        _xc(ws, 1, 5, "Kenya share of world", bold=True, fill=hdr_fill,
             align=cm)
         for ri, r in enumerate(shares["rows"], start=2):
             k = display(r["kenya"].get(rev)) or 0.0
             w = display(r["world"].get(rev)) or 0.0
-            label = "%s  %s" % (r["code"], short_label(r["label"], 44))
-            _xc(ws, ri, 1, label, align=lm)
-            _xc(ws, ri, 2, round(k, 1), number_format=val_fmt, align=cm)
-            _xc(ws, ri, 3, round(w, 1), number_format=val_fmt, align=cm)
-            _xc(ws, ri, 4, (k / w if w else None), bold=True,
+            _xc(ws, ri, 1, r["code"], align=lm)
+            _xc(ws, ri, 2, r["label"], align=lm)
+            _xc(ws, ri, 3, round(k, 1), number_format=val_fmt, align=cm)
+            _xc(ws, ri, 4, round(w, 1), number_format=val_fmt, align=cm)
+            _xc(ws, ri, 5, (k / w if w else None), bold=True,
                 number_format="0.0%", align=cm)
         ri += 1
         k_tot = display(shares.get("_kenya_total")) or 0.0
         w_tot = display(shares.get("_world_total")) or 0.0
-        _xc(ws, ri, 1, "Total", bold=True)
-        _xc(ws, ri, 2, round(k_tot, 1), bold=True, number_format=val_fmt,
+        _xc(ws, ri, 2, "Total", bold=True)
+        _xc(ws, ri, 3, round(k_tot, 1), bold=True, number_format=val_fmt,
             align=cm)
-        _xc(ws, ri, 3, round(w_tot, 1), bold=True, number_format=val_fmt,
+        _xc(ws, ri, 4, round(w_tot, 1), bold=True, number_format=val_fmt,
             align=cm)
-        _xc(ws, ri, 4, (k_tot / w_tot if w_tot else None), bold=True,
+        _xc(ws, ri, 5, (k_tot / w_tot if w_tot else None), bold=True,
             number_format="0.0%", align=cm)
-        ws.column_dimensions["A"].width = 60
+        ws.column_dimensions["A"].width = 12
+        ws.column_dimensions["B"].width = 60
 
     # Kenya vs leading African exporters
     peers = data.african_peers(5)
