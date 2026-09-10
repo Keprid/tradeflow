@@ -676,13 +676,17 @@ def fmt(v, decimals=1):
 
 
 def usd_phrase(v):
-    """'USD 353.8 Million' style phrasing for narratives."""
+    """'USD 353.8 Million' style phrasing for narratives.  Amounts below
+    USD 100,000 are shown in thousands so a small-but-real value never
+    reads as 'USD 0.0 Million' next to its percentage share."""
     if v is None:
         return ""
     d = display(v)
     word = "Million"
     if d >= 1000.0:
         d, word = d / 1000.0, "Billion"
+    elif d < 0.1:
+        d, word = d * 1000.0, "Thousand"
     return "USD %s %s" % (num(d, 1), word)
 
 

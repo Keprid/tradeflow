@@ -607,14 +607,16 @@ def _growth_sentence(rows, years, family):
 
 
 def _narrative_product(b, rows, family, years, rev, total):
-    """Bullets under a Kenya-by-product table."""
+    """Bullets under a Kenya-by-product table.
+
+    Only the product-mix facts are reported here.  The category-level totals
+    and growth are reported under the destinations table, so the same
+    statement is never emitted twice from different row-sets.
+    """
     if not rows:
         return
     total = total if total is not None else \
         _year_totals(rows).get(rev)
-    if total:
-        b.add_bullet("Kenya's total exports of %s were %s in %d."
-                     % (family, usd_phrase(total), rev))
     lead = rows[0]
     if lead and (lead["years"].get(rev) or 0.0) > 0:
         share = (lead["years"].get(rev) or 0.0) / total * 100 if total else 0
@@ -631,18 +633,20 @@ def _narrative_product(b, rows, family, years, rev, total):
                              usd_phrase(r["years"].get(rev)),
                              (r["years"].get(rev) or 0.0) / total * 100)
                           for r in follows]))
-    txt = _growth_sentence(rows, years, "Kenya's exports of %s" % family)
-    if txt:
-        b.add_bullet(txt)
 
 
-def _narrative_dest(b, rows, family, years, rev, total):
-    """Bullets under a Kenya-destination table."""
+def _narrative_dest(b, rows, family, years, rev, total, lead_only=False):
+    """Bullets under a Kenya-destination table.
+
+    ``lead_only`` suppresses the category-level totals and growth bullets so
+    the section can report them once (e.g. under the category table of the
+    whole-family section) instead of twice with slightly different figures.
+    """
     if not rows:
         return
     total = total if total is not None else \
         _year_totals(rows).get(rev)
-    if total:
+    if total and not lead_only:
         b.add_bullet("Kenya's exports of %s were %s in %d."
                      % (family, usd_phrase(total), rev))
     lead = rows[0]
@@ -660,7 +664,7 @@ def _narrative_dest(b, rows, family, years, rev, total):
         b.add_bullet("Other leading destinations were %s."
                      % ordinal_list(names))
     txt = _growth_sentence(rows, years, "Kenya's exports of %s" % family)
-    if txt:
+    if txt and not lead_only:
         b.add_bullet(txt)
 
 
@@ -881,7 +885,8 @@ def section_whole(b, cfg, data, source, tmp_dir):
             "Destination market", dest_rows, years, "Share in %d" % rev,
             "Kenya's Exports of %s by Destination" % family, source,
             total_label="Total", rank=True)
-        _narrative_dest(b, dest, family, years, rev, total_dest)
+        _narrative_dest(b, dest, family, years, rev, total_dest,
+                        lead_only=True)
         pairs = _shares(dest_rows, years)
         if len(pairs) >= 2:
             img = make_donut(pairs, tmp_dir, "f_whole_dest.png",
