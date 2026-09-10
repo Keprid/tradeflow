@@ -1365,7 +1365,7 @@ def write_crafts_excel(cfg, data_dir, out_path):
                 ws.cell(ri, i).alignment = cm
             v = display(r["years"].get(rev))
             share = (v / rev_total if v is not None and rev_total else None)
-            ws.cell(ri, first + len(years), share).number_format = "0.0%"
+            ws.cell(ri, first + 1 + len(years), share).number_format = "0.0%"
         if has_code:
             ws.column_dimensions["A"].width = 12
             ws.column_dimensions["B"].width = min(
