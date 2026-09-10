@@ -54,6 +54,26 @@ def _field(doc, code, placeholder="Update this field (Ctrl+A, F9)."):
     return p
 
 
+def _hyperlink(paragraph, text, url):
+    """Insert a clickable hyperlink into ``paragraph`` under ``text``."""
+    part = paragraph.part
+    r_id = part.relate_to(
+        url, "http://schemas.openxmlformats.org/officeDocument/2006/"
+             "relationships/hyperlink", is_external=True)
+    hl = OxmlElement("w:hyperlink")
+    hl.set(qn("r:id"), r_id)
+    new_run = OxmlElement("w:r")
+    rPr = OxmlElement("w:rPr")
+    style = OxmlElement("w:rStyle"); style.set(qn("w:val"), "Hyperlink")
+    rPr.append(style)
+    new_run.append(rPr)
+    t = OxmlElement("w:t"); t.text = text
+    new_run.append(t)
+    hl.append(new_run)
+    paragraph._p.append(hl)
+    return hl
+
+
 def _static_table(b, rows, widths=None, header=True):
     """Plain bordered table for narrative-only content (players, institutions,
     incentives, programmes, interventions). 'rows' = list of row lists."""

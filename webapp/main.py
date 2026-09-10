@@ -618,18 +618,8 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Uploaded files: {uploaded}\n"
             f"Expected the raw KRA extracts (filenames containing any of: "
             f"{kw_list}) or the generated Exports.xlsx and Imports.xlsx.")
-    # The raw services files are recognised by their own distinctive keywords,
-    # so the upload set can be detected even when the client did not explicitly
-    # select the "Services Trade Flow" report type.
-    if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
-        return "services_raw", ""
-    if report_type == "services":
-        uploaded = ", ".join(sorted(names))
-        kw_list = ", ".join(SERVICE_RAW_KEYWORDS)
-        return None, (
-            f"Could not recognise the services upload set.\n"
-            f"Uploaded files: {uploaded}\n"
-            f"Expected filenames containing any of: {kw_list}")
+    # When the user explicitly selects a report type, honour that choice
+    # before trying to auto-detect from filenames.
     if report_type == "product":
         # Explicitly selected: require at least one recognisable matrix file.
         if any(any(k in n for k in PRODUCT_RAW_KEYWORDS) for n in names):
@@ -640,6 +630,18 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Could not recognise the product-profile upload set.\n"
             f"Uploaded files: {uploaded}\n"
             f"Expected ITC matrix filenames containing any of: {kw_list}")
+    if report_type == "services":
+        uploaded = ", ".join(sorted(names))
+        kw_list = ", ".join(SERVICE_RAW_KEYWORDS)
+        return None, (
+            f"Could not recognise the services upload set.\n"
+            f"Uploaded files: {uploaded}\n"
+            f"Expected filenames containing any of: {kw_list}")
+    # The raw services files are recognised by their own distinctive keywords,
+    # so the upload set can be detected even when the client did not explicitly
+    # select the "Services Trade Flow" report type.
+    if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
+        return "services_raw", ""
     # Auto-detect: distinctive all-countries/all-products matrix names mean a
     # product-profile dataset (coffee/crafts) rather than a goods report.
     if any(k in n for k in ("products-exported-globally",
