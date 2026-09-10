@@ -620,13 +620,15 @@ def _narrative_product(b, rows, family, years, rev, total):
         share = (lead["years"].get(rev) or 0.0) / total * 100 if total else 0
         b.add_bullet("The leading export product was %s (%s; %.1f%% of "
                      "Kenya's exports of the category)."
-                     % (short_label(lead["label"], 70), lead["code"], share))
+                     % (short_label(lead["label"], 70),
+                        usd_phrase(lead["years"].get(rev)), share))
     follows = [r for r in rows[1:3] if (r["years"].get(rev) or 0.0) > 0]
     if total and follows:
         b.add_bullet("It was followed by %s."
                      % ordinal_list(
                          ["%s (%s; %.1f%%)"
-                          % (short_label(r["label"], 55), r["code"],
+                          % (short_label(r["label"], 55),
+                             usd_phrase(r["years"].get(rev)),
                              (r["years"].get(rev) or 0.0) / total * 100)
                           for r in follows]))
     txt = _growth_sentence(rows, years, "Kenya's exports of %s" % family)
@@ -709,7 +711,8 @@ def _narrative_world_products(b, rows, years, rev, total):
     if lead and (lead["years"].get(rev) or 0.0) > 0:
         b.add_bullet("The leading product exported globally was %s (%s; "
                      "%.1f%% of the world total)."
-                     % (short_label(lead["label"], 70), lead["code"],
+                     % (short_label(lead["label"], 70),
+                        usd_phrase(lead["years"].get(rev)),
                         (lead["years"].get(rev) or 0.0) / total * 100
                         if total else 0))
     follows = [r for r in rows[1:3] if (r["years"].get(rev) or 0.0) > 0]
@@ -717,7 +720,8 @@ def _narrative_world_products(b, rows, years, rev, total):
         b.add_bullet("It was followed by %s."
                      % ordinal_list(
                          ["%s (%s; %.1f%%)"
-                          % (short_label(r["label"], 55), r["code"],
+                          % (short_label(r["label"], 55),
+                             usd_phrase(r["years"].get(rev)),
                              (r["years"].get(rev) or 0.0) / total * 100
                              if total else 0)
                           for r in follows]))
