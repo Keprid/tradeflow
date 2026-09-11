@@ -62,7 +62,9 @@ from generate_product_profile import (
     ProfileBuilder, make_donut,
     cagr, yoy_change, display, usd_phrase, growth_phrase, yoy_phrase,
     period_phrase, ordinal_list, _shares, _year_totals, top_rows,
-    _ranked_rows, short_label, _ordinal,
+    _ranked_rows, short_label, _ordinal, _series_unit, fmt_for_unit,
+    section_growth_decomposition, section_market_attractiveness,
+    section_competitor_watch, section_strategy,
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1328,8 +1330,31 @@ def build_crafts_report(cfg, data_dir, out_path, tmp_dir):
         b.add_para(par)
     section_categories(b, cfg, data, source, tmp_dir)
     section_whole(b, cfg, data, source, tmp_dir)
+    _add_analysis_sections(b, cfg, data, source)
     section_policy(b, cfg, data, source, tmp_dir)
     return b.doc
+
+
+def _add_analysis_sections(b, cfg, data, source):
+    """Run the shared product-profile analysis sections against the crafts
+    data (whole-family product rows / destinations / exporters)."""
+    class _CraftsShim:
+        years = data.years
+        anchor_label = cfg.get("family_title", "Commercial Crafts")
+        members = data.kenya_products()
+        files = {}
+
+        def destinations(self):
+            return data.destinations()
+
+        def exporters(self):
+            return data.exporters()
+
+    shim = _CraftsShim()
+    section_growth_decomposition(b, cfg, shim, source)
+    section_market_attractiveness(b, cfg, shim, source, None)
+    section_competitor_watch(b, cfg, shim, source)
+    section_strategy(b, cfg, shim, source, None)
 
 
 # --------------------------------------------------------------------------
@@ -1340,22 +1365,29 @@ def write_crafts_excel(cfg, data_dir, out_path):
     the Word report's Table N captions exactly."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils.cell import get_column_letter
 
     NAVY = "1F3864"
-    hdr_fill = PatternFill("solid", fgColor=NAVY)
+    hdr_fill = PatternFill(fill_type=None)
     cm = Alignment(horizontal="center")
     lm = Alignment(horizontal="left")
     data = CraftsData(data_dir)
     years = data.years
     rev = data.review_year
+    if not years:
+        return None
     family = cfg.get("family_title", "Commercial Crafts")
     wb = Workbook()
     wb.remove(wb.active)
     tcap = 0
 
     def _sheet_name(caption):
-        """31-char Excel sheet name from a full table caption."""
-        return (caption[:30] + "\u2026") if len(caption) > 31 else caption
+        """31-char Excel sheet name from a full table caption.
+
+        Excel forbids ``[ ] : * ? / \\`` in sheet titles; the caption's
+        em-dash is kept, forbidden characters are replaced with ``_``."""
+        n = re.sub(r"[\[\]:*?/\\]", "_", caption)
+        return (n[:30] + "\u2026") if len(n) > 31 else n
 
     def _next():
         nonlocal tcap
@@ -1363,30 +1395,57 @@ def write_crafts_excel(cfg, data_dir, out_path):
         return tcap
 
     def value_sheet(caption, first_col, rows, label_key="label",
-                    code_key=None):
+                    code_key=None, unit=None):
         ws = wb.create_sheet(_sheet_name(caption))
         has_code = bool(code_key) and any(r.get(code_key) for r in rows)
         first = 1 + (1 if has_code else 0)
-        hdr = (["Code", first_col] if has_code else [first_col]) \
+        if unit is None:
+            unit = _series_unit([v for r in rows for y in years
+                                 if (v := r["years"].get(y)) is not None])
+        if unit == "USD Thousand":
+            hdr_col = "%s (USD Thousand)" % first_col
+        else:
+            hdr_col = first_col
+        hdr = (["Code", hdr_col] if has_code else [hdr_col]) \
             + list(years) + ["Share in %d" % rev]
         for c, h in enumerate(hdr, 1):
             cell = ws.cell(1, c, h)
-            cell.font = Font(bold=True, color="FFFFFF")
+            cell.font = Font(bold=True)
             cell.fill = hdr_fill
             cell.alignment = cm
-        rev_total = sum(display(r["years"].get(rev)) or 0.0 for r in rows)
-        for ri, r in enumerate(rows, start=2):
+        share_col = first + 1 + len(years)
+        first_data, last_data = 2, 1 + len(rows)
+        for ri, r in enumerate(rows, start=first_data):
             if has_code:
                 ws.cell(ri, 1, str(r.get(code_key) or "")).alignment = lm
             lab = str(r.get(label_key) or r.get("label") or "")
             ws.cell(ri, first, lab).alignment = lm
             for i, y in enumerate(years, start=first + 1):
-                v = display(r["years"].get(y))
-                ws.cell(ri, i, None if v is None else round(v, 1))
+                raw = r["years"].get(y)
+                v_out = None if raw is None else fmt_for_unit(raw, unit, 1)
+                ws.cell(ri, i, v_out)
                 ws.cell(ri, i).alignment = cm
-            v = display(r["years"].get(rev))
-            share = (v / rev_total if v is not None and rev_total else None)
-            ws.cell(ri, first + 1 + len(years), share).number_format = "0.0%"
+            # Share is a live formula against the Total row: editing any
+            # year cell above recalculates the share and totals.
+            rev_letter = get_column_letter(first + len(years))
+            ws.cell(ri, share_col,
+                    "=%s%d/$%s%d"
+                    % (rev_letter, ri, rev_letter, last_data + 1),
+                    ).number_format = "0.0%"
+        trow = last_data + 1
+        ws.cell(trow, first, "Total").font = Font(bold=True)
+        for i, y in enumerate(years, start=first + 1):
+            c_letter = get_column_letter(i)
+            ws.cell(trow, i,
+                    "=SUM(%s%d:%s%d)"
+                    % (c_letter, first_data, c_letter, last_data))
+            ws.cell(trow, i).font = Font(bold=True)
+            ws.cell(trow, i).alignment = cm
+            ws.cell(trow, i).number_format = "#,##0.0"
+        ws.cell(trow, share_col, "=SUM(%s%d:%s%d)"
+                % (get_column_letter(share_col), first_data,
+                   get_column_letter(share_col), last_data)
+                ).number_format = "0.0%"
         if has_code:
             ws.column_dimensions["A"].width = 12
             ws.column_dimensions["B"].width = min(

@@ -48,6 +48,7 @@ import re
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils.cell import get_column_letter
 
 import matplotlib
 
@@ -245,8 +246,11 @@ class ProfileData:
                     self.kenya_total_exports = dict(r["years"])
                     break
 
-        self.all_years = sorted({y for k in self.files.values()
-                                 for y in k["years"]})
+        # Projection years carried only by the export-potential file must not
+        # shift the traded-review window used by the rest of the profile.
+        self.all_years = sorted({y for k, f in self.files.items()
+                                 if k != "export_potential"
+                                 for y in f["years"]})
 
         # Anchor product (the product of the by-importer download)
         partner_rows = self._rows("kenya_exports_by_partner")
@@ -675,6 +679,30 @@ def fmt(v, decimals=1):
     return "" if d is None else num(d, decimals)
 
 
+def _series_unit(values):
+    """Display unit for a series of raw (USD-thousand) values.
+
+    Returns ``"USD Million"`` or ``"USD Thousand"``.  Thousands is chosen
+    whenever any nonzero value would otherwise round to 0.0 in millions
+    (i.e. sit below about USD 50,000), so small sub-category values never
+    "disappear" in a table."""
+    vs = [v for v in values if v]
+    if not vs:
+        return "USD Million"
+    if max(abs(v) for v in vs) < 100.0 or min(abs(v) for v in vs) < 50.0:
+        return "USD Thousand"
+    return "USD Million"
+
+
+def fmt_for_unit(v, unit, decimals=1):
+    """Format a raw (USD-thousand) value in the selected ``unit``."""
+    if v is None:
+        return ""
+    if unit == "USD Thousand":
+        return num(v, decimals)
+    return num(display(v), decimals)
+
+
 def usd_phrase(v):
     """'USD 353.8 Million' style phrasing for narratives.  Amounts below
     USD 100,000 are shown in thousands so a small-but-real value never
@@ -846,8 +874,190 @@ def _year_totals(rows):
 
 
 # --------------------------------------------------------------------------
+# Growth-strategy analytics (decompositions, rankings, share shifts)
+# --------------------------------------------------------------------------
+def margin_decomposition(rows, start, rev):
+    """Split the net change in a series into its constituent margins.
+
+    ``rows`` is a list of ``{"label" or "code", "years": {y: v}}`` (the full,
+    un-truncated download).  Existing headings that kept exporting are the
+    *intensive* margin (deepening); headings that only appear in the review
+    year are the *extensive* margin (entering the basket); headings that
+    disappear are exits.  Returns a dict of USD-thousand contributions plus
+    their share of the net change (``None`` when the net change is zero).
+    """
+    tracked = {}
+    for r in rows:
+        key = r.get("label") or r.get("code")
+        if not key:
+            continue
+        tracked[key] = (r["years"].get(start) or 0.0,
+                        r["years"].get(rev) or 0.0)
+    deepening, entering, exiting = [], [], []
+    for key, (sv, rv) in tracked.items():
+        if sv and rv:
+            deepening.append((key, sv, rv))
+        elif not sv and rv:
+            entering.append((key, rv))
+        elif sv and not rv:
+            exiting.append((key, sv))
+    intens_value = sum(rv - sv for _, sv, rv in deepening)
+    enter_value = sum(rv for _, rv in entering)
+    exits_value = -sum(sv for _, sv in exiting)
+    total_start = sum(sv for _, sv, _ in deepening) + sum(sv for _, sv in exiting)
+    total_rev = sum(rv for _, _, rv in deepening) + sum(rv for _, rv in entering)
+    net = total_rev - total_start
+
+    def share_of(v):
+        return (v / net) if net else None
+
+    return {
+        "intensive": intens_value, "intensive_share": share_of(intens_value),
+        "entering": enter_value, "entering_share": share_of(enter_value),
+        "exiting": exits_value, "exiting_share": share_of(exits_value),
+        "net": net, "total_start": total_start, "total_rev": total_rev,
+        "n_existing": len(deepening), "n_entering": len(entering),
+        "n_exiting": len(exiting),
+        "top_existing": sorted(deepening, key=lambda t: t[2], reverse=True)[:8],
+        "top_entering": sorted(entering, key=lambda t: t[1], reverse=True)[:8],
+        "top_exiting": sorted(exiting, key=lambda t: t[1], reverse=True)[:8],
+    }
+
+
+def _potential_markets(pot):
+    """Per-market potential-vs-actual from an ITC Export Potential Map file.
+
+    Returns ``(markets, potential_year)`` where ``markets[label]`` is
+    ``{"actual", "actual_year", "potential", "potential_year"}`` (USD
+    thousands).  The earliest year column carries the actual base; the last
+    carries the potential projection.
+    """
+    records = pot.get("records") or []
+    pyears = pot.get("years") or []
+    if not records or not pyears:
+        return {}, None
+    markets = {}
+    for r in records:
+        if str(r["partner"]) == "000":
+            continue
+        d = markets.setdefault(r["partner_label"], {})
+        for y in pyears:
+            v = r["years"].get(y)
+            if v is None:
+                continue
+            d.setdefault(y, v)
+    last = pyears[-1]
+    out = {}
+    for label, d in markets.items():
+        if not d:
+            continue
+        actual_year = min(d)
+        out[label] = {"actual": d.get(actual_year),
+                      "actual_year": actual_year,
+                      "potential": d.get(last),
+                      "potential_year": last}
+    return out, last
+
+
+def market_attractiveness(rows, years, pot_by_market=None, weights=None,
+                          access=()):
+    """Rank destination markets as targets for export expansion.
+
+    Score = weighted blend of growth momentum (CAGR of Kenya's exports to the
+    market), headroom (potential gap from the Export Potential Map, when
+    available), size (share of Kenya's exports) and market access (explicit
+    ``access`` list, or the Africa tier; 0 otherwise).  Markets without a
+    potential figure get a neutral headroom score rather than being
+    penalised.  Returns records sorted by descending score (highest first).
+    """
+    rev = years[-1] if years else None
+    active = [r for r in rows if (r["years"].get(rev) or 0.0) > 0]
+    if not active:
+        return []
+    total = sum(r["years"].get(rev) or 0.0 for r in active)
+    w = {"growth": 0.35, "gap": 0.35, "size": 0.15, "access": 0.15}
+    if weights:
+        w.update(dict(weights))
+    access_set = set(access)
+    recs = []
+    for r in active:
+        g = cagr([r["years"].get(y) for y in years], years)
+        rec = {
+            "label": r["label"],
+            "value_review": r["years"].get(rev) or 0.0,
+            "share": (r["years"].get(rev) or 0.0) / total if total else 0.0,
+            "growth": g,
+            "gap": None,
+            "tier": 1 if r["label"] in access_set else
+                    (2 if is_africa(r["label"]) else 0),
+            "has_potential": False,
+        }
+        if pot_by_market and r["label"] in pot_by_market:
+            p = pot_by_market[r["label"]]
+            rec["has_potential"] = True
+            if (p.get("potential") or 0.0) > 0:
+                rec["gap"] = max(0.0, p["potential"] - (p.get("actual") or 0.0))
+        recs.append(rec)
+
+    def bounds(key):
+        known = [x[key] for x in recs if x[key] is not None]
+        if not known:
+            return None
+        lo, hi = min(known), max(known)
+        return None if lo == hi else (lo, hi)
+
+    gb, sb, gab = bounds("growth"), bounds("share"), bounds("gap")
+
+    def nscore(v, bnd, default=0.5):
+        if v is None or not bnd:
+            return default
+        return (v - bnd[0]) / (bnd[1] - bnd[0])
+
+    for x in recs:
+        access_score = 1.0 if x["tier"] == 1 else (0.65 if x["tier"] == 2
+                                                   else 0.2)
+        x["score"] = (w["growth"] * nscore(x["growth"], gb)
+                      + w["gap"] * nscore(x["gap"], gab)
+                      + w["size"] * nscore(x["share"], sb)
+                      + w["access"] * access_score)
+    recs.sort(key=lambda x: x["score"], reverse=True)
+    return recs
+
+
+def share_change(rows, years):
+    """Per-economy change in world-export share between ``years[0]`` and
+    ``years[-1]`` (share points).  Returns ``{"rows", "world_start",
+    "world_rev"}`` sorted by biggest share gain first, or ``None`` when the
+    world totals for either endpoint are missing."""
+    start, rev = years[0], years[-1]
+    world = {}
+    for r in rows:
+        for y, v in r["years"].items():
+            world[y] = (world.get(y) or 0.0) + (v or 0.0)
+    w0, w1 = world.get(start), world.get(rev)
+    if not w0 or not w1:
+        return None
+    recs = []
+    for r in rows:
+        sv = r["years"].get(start) or 0.0
+        rv = r["years"].get(rev) or 0.0
+        if not sv and not rv:
+            continue
+        recs.append({"label": r["label"],
+                     "start_share": sv / w0, "rev_share": rv / w1,
+                     "delta_pp": (rv / w1 - sv / w0) * 100.0})
+    recs.sort(key=lambda x: x["delta_pp"], reverse=True)
+    return {"rows": recs, "world_start": w0, "world_rev": w1}
+
+
+# --------------------------------------------------------------------------
 # Word builder
 # --------------------------------------------------------------------------
+def _current_month_year():
+    from datetime import date
+    return date.today().strftime("%B %Y")
+
+
 class ProfileBuilder(ReportBuilder):
     def __init__(self, cfg, narratives=None):
         cfg = dict(cfg)
@@ -869,13 +1079,19 @@ class ProfileBuilder(ReportBuilder):
 
     def add_value_table(self, first_col_header, rows, years, share_header,
                         title, source, total_label=None, rank=False,
-                        unit_label="USD Million", widths=None):
+                        unit_label="USD Million", widths=None,
+                        adaptive_unit=True):
         """Structure a value matrix table.
 
         ``rows`` = list of ``{"label", "years": {y: v}}`` already truncated
         and consolidated. The share column shows each row's share of the
         total in the review year (bold); a ``total_label`` row (optional)
         sums the displayed rows.
+
+        When *adaptive_unit* is ``True`` (default) the whole table is shown in
+        USD Thousand (instead of Millions) if any nonzero value would
+        otherwise round to 0.0 in millions, so small sub-category values
+        never disappear.
         """
         n = len(years)
         code_cols = 1 if any(row.get("code") for row in rows) else 0
@@ -883,6 +1099,10 @@ class ProfileBuilder(ReportBuilder):
         cols = label_cols + n + 1
         c_label = (1 if rank else 0) + code_cols
         nrows = 2 + len(rows) + (1 if total_label else 0)
+        unit = unit_label
+        if adaptive_unit:
+            unit = _series_unit([v for r in rows for y in years
+                                 if (v := r["years"].get(y)) is not None])
         table = self.doc.add_table(rows=nrows, cols=cols, style="Table Grid")
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
@@ -894,7 +1114,7 @@ class ProfileBuilder(ReportBuilder):
         hdr.cells[c_label].text = first_col_header
         if n > 1:
             hdr.cells[label_cols].merge(hdr.cells[label_cols + n - 1])
-        hdr.cells[label_cols].text = "Value in %s" % unit_label
+        hdr.cells[label_cols].text = "Value in %s" % unit
         hdr.cells[label_cols + n].text = share_header
 
         r2 = table.rows[1]
@@ -920,7 +1140,7 @@ class ProfileBuilder(ReportBuilder):
             table.rows[ri].cells[c].text = row["label"]
             for i, y in enumerate(years):
                 table.rows[ri].cells[c + 1 + i].text = \
-                    fmt(row["years"].get(y))
+                    fmt_for_unit(row["years"].get(y), unit)
             cur = row["years"].get(rev)
             if cur is None:
                 share = None
@@ -934,7 +1154,7 @@ class ProfileBuilder(ReportBuilder):
             t.cells[c_label].text = total_label
             for i, y in enumerate(years):
                 tot = sum((r["years"].get(y) or 0.0) for r in rows)
-                t.cells[label_cols + i].text = fmt(tot)
+                t.cells[label_cols + i].text = fmt_for_unit(tot, unit)
             t.cells[label_cols + n].text = "100.0%"
 
         if widths is None:
@@ -1002,8 +1222,10 @@ class ProfileBuilder(ReportBuilder):
         self.doc.add_paragraph()
         for _ in range(6):
             self.doc.add_paragraph()
-        d = self.add_para(cfg.get("date_line", ""),
-                          align=WD_ALIGN_PARAGRAPH.CENTER)
+        d = self.add_para(
+            cfg.get("date_line") if cfg.get("pinned_date")
+            else _current_month_year(),
+            align=WD_ALIGN_PARAGRAPH.CENTER)
         for r in d.runs:
             r.font.size = Pt(13)
         self.doc.add_paragraph()
@@ -1082,7 +1304,7 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
                            "All other products")
     b.add_value_table("Product", members_tbl, years, "Share in %d" % rev,
                       "Kenya's Exports of %s by Product" % family, source,
-                      total_label="Total")
+                      total_label="Total", adaptive_unit=True)
 
     lead, follows = ([], [])
     pairs = _shares(members, years)
@@ -1364,7 +1586,7 @@ def section_global(b, cfg, data, source, tmp_dir):
                       source)
         b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
                           "Global Exports of %s by Product" % family, source,
-                          total_label="Total")
+                          total_label="Total", adaptive_unit=True)
         trend_bullets(b, g_exp, years, family, "exports")
 
     g_imp = top_rows(data.global_import_products(),
@@ -1374,7 +1596,7 @@ def section_global(b, cfg, data, source, tmp_dir):
                       source)
         b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
                           "Global Imports of %s by Product" % family, source,
-                          total_label="Total")
+                          total_label="Total", adaptive_unit=True)
         trend_bullets(b, g_imp, years, family, "imports")
 
 
@@ -1592,14 +1814,20 @@ def _kenya_world_table(b, rows, year, kenya_total, world_total, first_col):
 
     Columns: label | Kenya exports | World exports | share.  Reuses
     ``add_value_table``'s styling by treating this as a 2 data-column
-    matrix (n=2) plus a share column.
+    matrix (n=2) plus a share column.  Each column picks its own display
+    unit (USD Million / USD Thousand) so that small sub-category values
+    never round to 0.0 in millions.
     """
+    k_unit = _series_unit([r["years"].get("Kenya") for r in rows]
+                          + [kenya_total or 0.0])
+    w_unit = _series_unit([r["years"].get("World") for r in rows]
+                          + [world_total or 0.0])
     table = b.doc.add_table(rows=2 + len(rows) + 1, cols=4, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     hdr = table.rows[0]
     hdr.cells[0].text = "%s, %d" % (first_col, year)
-    hdr.cells[1].text = "Kenya exports (USD Million)"
-    hdr.cells[2].text = "World exports (USD Million)"
+    hdr.cells[1].text = "Kenya exports (%s)" % k_unit
+    hdr.cells[2].text = "World exports (%s)" % w_unit
     hdr.cells[3].text = "Kenya share of world"
     r2 = table.rows[1]
     r2.cells[1].text = str(year)
@@ -1607,17 +1835,21 @@ def _kenya_world_table(b, rows, year, kenya_total, world_total, first_col):
     r2.cells[3].text = str(year)
     for ri, r in enumerate(rows, start=2):
         table.rows[ri].cells[0].text = r["label"]
-        table.rows[ri].cells[1].text = fmt(r["years"].get("Kenya"))
-        table.rows[ri].cells[2].text = fmt(r["years"].get("World"))
+        table.rows[ri].cells[1].text = fmt_for_unit(
+            r["years"].get("Kenya"), k_unit)
+        table.rows[ri].cells[2].text = fmt_for_unit(
+            r["years"].get("World"), w_unit)
         table.rows[ri].cells[3].text = (
             "%.1f%%" % r["share"] if r["share"] is not None else "")
     t = table.rows[2 + len(rows)]
     t.cells[0].text = "Total, %s" % first_col
-    t.cells[1].text = fmt(kenya_total if kenya_total else None)
-    t.cells[2].text = fmt(world_total if world_total else None)
+    t.cells[1].text = fmt_for_unit(kenya_total if kenya_total else None,
+                                   k_unit)
+    t.cells[2].text = fmt_for_unit(world_total if world_total else None,
+                                   w_unit)
     t.cells[3].text = (
         "%.1f%%" % (kenya_total / world_total * 100.0) if world_total else "")
-    b._set_table_widths(table, [3900, 1500, 1500, 1500])
+    b._set_table_widths(table, [3500, 1600, 1600, 1500])
     b._style_table(table, rank=False, label_cols=1, n=2, total_label=True)
     b._fit_table_on_page(table)
 
@@ -1653,46 +1885,348 @@ def section_kenya_imports(b, cfg, data, source):
                       source)
         b.add_value_table("Product", products, years, "Share in %d" % rev,
                           "Kenya's Imports of %s by Product" % family, source,
-                          total_label="Total")
+                          total_label="Total", adaptive_unit=True)
         trend_bullets(b, products, years, family, "imports", scope="Kenya's")
 
 
 def section_potential(b, cfg, data, pot, source):
-    """Optional export-potential section (ITC Export Potential Map file)."""
-    records = pot.get("records") or []
-    years = pot.get("years") or []
-    if not records or not years:
+    """Optional export-potential section (ITC Export Potential Map file).
+
+    Shows the largest unrealised opportunities: each market's potential
+    exports vs the actual base embedded in the download, ranked by the gap."""
+    markets, pot_year = _potential_markets(pot)
+    if not markets:
         return
-    markets = {}
-    for r in records:
-        if r["partner"] == "000":
+    family = cfg.get("family_title", "the product")
+    records = []
+    for label, m in markets.items():
+        potential = m["potential"] or 0.0
+        actual = m["actual"] or 0.0
+        if potential <= 0:
             continue
-        markets.setdefault(r["partner_label"], r["years"])
-    last = years[-1]
-    market_labels = sorted(markets,
-                           key=lambda m: markets[m].get(last) or 0.0,
-                           reverse=True)[:10]
-    if not market_labels:
+        gap = max(0.0, potential - actual) if m["actual"] is not None else None
+        records.append({"label": label, "potential": potential,
+                        "actual": actual, "gap": gap})
+    if not records:
         return
-    b.add_heading("EXPORT POTENTIAL FOR %s"
-                  % cfg.get("family_title", "the product").upper(), level=1)
-    b.add_para("The markets below show the largest gap between Kenya's "
-               "current exports and the potential demand estimated by the "
-               "ITC Export Potential Map.")
-    table = b.doc.add_table(rows=1 + len(market_labels), cols=2,
-                            style="Table Grid")
+    records.sort(key=lambda r: r["gap"] if r["gap"] is not None else 0.0,
+                 reverse=True)
+    top = records[:10]
+    unit = _series_unit([r["potential"] for r in records]
+                        + [r.get("gap") or 0.0 for r in records])
+    gap_known = [r for r in top if r["gap"] is not None]
+    b.add_heading("EXPORT POTENTIAL FOR %s" % family.upper(), level=1)
+    b.add_para("The markets below show the gap between Kenya's current "
+               "exports and the potential demand estimated by the ITC Export "
+               "Potential Map (projection year %s)."
+               % (pot_year if pot_year else "unknown"))
+    cols = 3 if gap_known else 2
+    table = b.doc.add_table(rows=1 + len(top), cols=cols, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     hdr = table.rows[0]
     hdr.cells[0].text = "Market"
-    hdr.cells[1].text = "Export potential (%s)" % cfg.get("unit_label", "USD Million")
-    for i, m in enumerate(market_labels, start=1):
-        table.rows[i].cells[0].text = m
-        table.rows[i].cells[1].text = fmt(markets[m].get(last) or 0.0)
-    b._set_table_widths(table, [4200, 3000])
-    b._style_table(table, rank=False, label_cols=1, n=1)
+    hdr.cells[1].text = "Export potential (%s)" % unit
+    if gap_known:
+        hdr.cells[2].text = "Unrealised gap (%s)" % unit
+    for i, r in enumerate(top, start=1):
+        table.rows[i].cells[0].text = r["label"]
+        table.rows[i].cells[1].text = fmt_for_unit(r["potential"], unit)
+        if gap_known:
+            table.rows[i].cells[2].text = fmt_for_unit(r["gap"], unit)
+    b._set_table_widths(table, [3000, 2800, 2800] if gap_known else [4200, 3000])
+    b._style_table(table, rank=False, label_cols=1, n=2 if gap_known else 1)
     b._fit_table_on_page(table)
-    b.add_bullet("Together, these ten markets offer the greatest headroom for "
-                 "additional exports of %s." % cfg.get("family_title", ""))
+    b.add_bullet("Together, these %d markets offer the greatest headroom for "
+                 "additional exports of %s." % (len(top), family.lower()))
+    if gap_known:
+        lead = gap_known[0]
+        b.add_bullet("The largest unrealised opportunity is estimated to be "
+                     "%s: potential exports of %s versus current exports of "
+                     "%s."
+                     % (lead["label"], fmt_for_unit(lead["potential"], unit),
+                        fmt_for_unit(lead["actual"], unit)))
+
+
+def section_growth_decomposition(b, cfg, data, source):
+    """Growth decomposition: how much of Kenya's export change came from
+    existing product headings (intensive margin), newly-exported headings
+    (extensive margin) and headings dropped from the basket."""
+    years = data.years
+    if len(years) < 2:
+        return
+    start, rev = years[0], years[-1]
+    anchor = short_anchor(data.anchor_label)
+    family = cfg.get("family_title", "the product")
+    prod_m = margin_decomposition(data.members, start, rev) if data.members \
+        else None
+    dest_m = margin_decomposition(data.destinations(), start, rev) \
+        if data.destinations() else None
+    if prod_m is None and dest_m is None:
+        return
+    if not (prod_m["total_rev"] if prod_m else 0
+            or dest_m["total_rev"] if dest_m else 0):
+        return
+    b.add_heading("WHERE KENYA'S %s EXPORT GROWTH CAME FROM"
+                  % anchor.upper(), level=1)
+    if prod_m and prod_m["total_rev"]:
+        b.add_bullet(_margin_headline(prod_m, family, start, rev,
+                                      "product headings"))
+    if dest_m and dest_m["total_rev"]:
+        b.add_bullet(_margin_headline(dest_m, family, start, rev,
+                                      "destination markets"))
+    if prod_m and prod_m["total_rev"]:
+        _margin_table(b, "Growth of Kenya's exports of %s by product "
+                         "heading, %d-%d" % (family, start, rev),
+                      prod_m, source, "product heading")
+    if dest_m and dest_m["total_rev"]:
+        _margin_table(b, "Growth of Kenya's exports of %s by destination "
+                         "market, %d-%d" % (family, start, rev),
+                      dest_m, source, "destination market")
+    for m, noun in ((prod_m, "product heading"), (dest_m, "destination market")):
+        if not m or m["net"] <= 0:
+            continue
+        if m["top_entering"]:
+            names = " ".join(short_label(t[0], 45) for t in m["top_entering"][:3])
+            b.add_bullet("%d new %s(s) entered the export basket after %d "
+                         "(led by %s)."
+                         % (m["n_entering"], noun, start, names))
+        if m["top_exiting"]:
+            names = " ".join(short_label(t[0], 45) for t in m["top_exiting"][:3])
+            b.add_bullet("%d %s(s) ceased being exported; the largest were %s."
+                         % (m["n_exiting"], noun, names))
+
+
+def _margin_headline(m, family, start, rev, noun):
+    net = m["net"]
+    parts = ["Between %d and %d, Kenya's exports of %s %s from %s to %s, "
+             "a net change of %s."
+             % (start, rev, family.lower(),
+                "grew" if net >= 0 else "shrank",
+                usd_phrase(m["total_start"]), usd_phrase(m["total_rev"]),
+                usd_phrase(abs(net)))]
+    if net:
+        parts.append("%.0f%% of that change came from existing %s deepening "
+                     "their sales, %.0f%% from %s new to the basket, and "
+                     "%.0f%% was offset by %s that stopped being exported."
+                     % (m["intensive_share"] * 100, noun,
+                        m["entering_share"] * 100, noun,
+                        abs(m["exiting_share"]) * 100, noun))
+    return " ".join(parts)
+
+
+def _margin_table(b, title, m, source, noun):
+    b._next_table(title, source)
+    values = [m["intensive"], m["entering"], m["exiting"]]
+    unit = _series_unit([abs(v) for v in values] + [abs(m["net"])])
+    rows = [("Existing %s deepening" % noun, m["intensive"],
+             m["intensive_share"]),
+            ("%s(s) new to the export basket" % noun.capitalize(),
+             m["entering"], m["entering_share"]),
+            ("%s(s) no longer exported" % noun.capitalize(),
+             m["exiting"], m["exiting_share"]),
+            ("Net change", m["net"], None)]
+    table = b.doc.add_table(rows=1 + len(rows), cols=3, style="Table Grid")
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0]
+    for c, text in enumerate(("Component", "Contribution (%s)" % unit,
+                              "Share of net change")):
+        hdr.cells[c].text = text
+    for i, (label, v, share) in enumerate(rows, start=1):
+        table.rows[i].cells[0].text = label
+        table.rows[i].cells[1].text = fmt_for_unit(v, unit)
+        table.rows[i].cells[2].text = "" if share is None \
+            else "%.1f%%" % (share * 100)
+    widths = [3300, 2600, 2200]
+    b._set_table_widths(table, widths)
+    b._style_table(table, rank=False, label_cols=1, n=2)
+    b._fit_table_on_page(table)
+
+
+def section_market_attractiveness(b, cfg, data, source, pot):
+    """Rank Kenya's destination markets as targets for export expansion:
+    weighted blend of momentum, demand headroom, size and market access."""
+    years = data.years
+    rev = years[-1] if years else None
+    if not rev:
+        return
+    access = cfg.get("access_markets") or []
+    weights = cfg.get("attractiveness_weights")
+    pot_markets, _ = _potential_markets(pot) if pot else ({}, None)
+    recs = market_attractiveness(data.destinations(), years, pot_markets,
+                                 weights, access)
+    if len(recs) < 3:
+        return
+    anchor = short_anchor(data.anchor_label)
+    family = cfg.get("family_title", "the product")
+    b.add_heading("PRIORITY MARKETS FOR EXPANDING KENYA'S %s EXPORTS"
+                  % anchor.upper(), level=1)
+    b.add_para("Markets are ranked by an attractiveness score that blends "
+               "growth momentum (CAGR of Kenya's sales), demand headroom "
+               "(unrealised export potential), market size and preferential "
+               "access.")
+    top = recs[:10]
+    unit = _series_unit([r["value_review"] for r in top])
+    gap_present = any(r["has_potential"] and r["gap"] is not None for r in top)
+    gap_unit = _series_unit([r["gap"] for r in top if r["gap"]])
+    headers = ["Market", "CAGR (%d-%d)" % (years[0], rev),
+               "Exports %d (%s)" % (rev, unit), "Share of exports"]
+    if gap_present:
+        headers.append("Potential gap (%s)" % gap_unit)
+    headers.append("Attractiveness score")
+    cols = len(headers)
+    table = b.doc.add_table(rows=1 + len(top), cols=cols, style="Table Grid")
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0]
+    for c, text in enumerate(headers):
+        hdr.cells[c].text = text
+    for i, r in enumerate(top, start=1):
+        table.rows[i].cells[0].text = r["label"]
+        g = r["growth"]
+        table.rows[i].cells[1].text = "" if g is None else "%.1f%%" % (g * 100)
+        table.rows[i].cells[2].text = fmt_for_unit(r["value_review"], unit)
+        table.rows[i].cells[3].text = "%.1f%%" % (r["share"] * 100)
+        c = 4
+        if gap_present:
+            table.rows[i].cells[c].text = fmt_for_unit(r["gap"], gap_unit) \
+                if r["gap"] is not None else ""
+            c += 1
+        table.rows[i].cells[c].text = "%.2f" % r["score"]
+    b._set_table_widths(table, [2200, 900, 1500, 1200]
+                        + ([1300] if gap_present else []) + [1300])
+    b._style_table(table, rank=False, label_cols=1,
+                   n=cols - 1)
+    b._fit_table_on_page(table)
+    leaders = " ".join(short_label(r["label"], 40) for r in top[:3])
+    b.add_bullet("Priority markets for the next phase of export growth: %s. "
+                 "%s tops the attractiveness ranking on current momentum "
+                 "and headroom." % (leaders, top[0]["label"]))
+    fast = [r for r in top if r["growth"] and r["growth"] > 0]
+    if len(fast) >= 2:
+        b.add_bullet("Fast-growth destinations worth deepening: %s."
+                     % ", ".join(short_label(r["label"], 30)
+                                 for r in fast[:3]))
+    big_gaps = [r for r in top if r["gap"] is not None]
+    if len(big_gaps) >= 2:
+        b.add_bullet("Markets with the largest unrealised headroom: %s."
+                     % ", ".join(short_label(r["label"], 30)
+                                 for r in big_gaps[:3]))
+    b.add_bullet("Focus sectors should be aligned with these ranked markets "
+                 "and the preferential routes open to Kenya's exports of %s."
+                 % family.lower())
+
+
+def section_competitor_watch(b, cfg, data, source):
+    """Competitor share-shift watch: economies that gained or lost world
+    export share in the family over the review period."""
+    years = data.years
+    if len(years) < 2:
+        return
+    sc = share_change(data.exporters(), years)
+    if not sc or len(sc["rows"]) < 3:
+        return
+    anchor = short_anchor(data.anchor_label)
+    start, rev = years[0], years[-1]
+    gainers = [r for r in sc["rows"] if r["delta_pp"] > 0.05][:6]
+    losers = [r for r in sc["rows"] if r["delta_pp"] < -0.05][-6:]
+    if not gainers and not losers:
+        return
+    b.add_heading("WHO IS GAINING MARKET SHARE IN %s?"
+                  % anchor.upper(), level=1)
+    b.add_para("Share of world exports of %s by economy, %d vs %d "
+               "(percentage points)." % (anchor.lower(), start, rev))
+    for group, title in ((gainers, "Economies gaining world export share"),
+                         (losers, "Economies losing world export share")):
+        if not group:
+            continue
+        b._next_table("%s, %d-%d" % (title, start, rev), source)
+        table = b.doc.add_table(rows=1 + len(group), cols=4,
+                                style="Table Grid")
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for c, text in enumerate(("Economy", "Share in %d" % start,
+                                  "Share in %d" % rev, "Change (pp)")):
+            table.rows[0].cells[c].text = text
+        for i, r in enumerate(group, start=1):
+            table.rows[i].cells[0].text = r["label"]
+            table.rows[i].cells[1].text = "%.1f%%" % (r["start_share"] * 100)
+            table.rows[i].cells[2].text = "%.1f%%" % (r["rev_share"] * 100)
+            table.rows[i].cells[3].text = "%+.1f" % r["delta_pp"]
+        b._set_table_widths(table, [2600, 1300, 1300, 1300])
+        b._style_table(table, rank=False, label_cols=1, n=3)
+        b._fit_table_on_page(table)
+    krow = next((r for r in sc["rows"] if r["label"] == "Kenya"), None)
+    if krow and abs(krow["delta_pp"]) >= 0.05:
+        b.add_bullet("Kenya's share of world exports %s by %.1f percentage "
+                     "points between %d and %d (%.1f%% to %.1f%%)."
+                     % ("rose" if krow["delta_pp"] > 0 else "fell",
+                        abs(krow["delta_pp"]), start, rev,
+                        krow["start_share"] * 100, krow["rev_share"] * 100))
+    if gainers:
+        b.add_bullet("The main share-gainers were %s."
+                     % " ".join(short_label(r["label"], 40)
+                                for r in gainers[:3]))
+
+
+def section_strategy(b, cfg, data, source, pot):
+    """Strategic read-out: one-line recommendation per leading product
+    (growth momentum, family share, priority markets, concentration risk)."""
+    years = data.years
+    rev = years[-1] if years else None
+    if not rev or len(years) < 2:
+        return
+    anchor = short_anchor(data.anchor_label)
+    family = cfg.get("family_title", "the product")
+    members = [m for m in data.members if (m["years"].get(rev) or 0.0) > 0]
+    if len(members) < 1:
+        return
+    members.sort(key=lambda m: m["years"].get(rev) or 0.0, reverse=True)
+    top = members[:5]
+    total = sum(m["years"].get(rev) or 0.0 for m in members)
+    access = cfg.get("access_markets") or []
+    weights = cfg.get("attractiveness_weights")
+    pot_markets, _ = _potential_markets(pot) if pot else ({}, None)
+    att = market_attractiveness(data.destinations(), years, pot_markets,
+                                weights, access)
+    priority = [short_label(r["label"], 30) for r in att[:3]] if att else []
+    dests = data.destinations()
+    top_dest = dests[0] if dests else None
+    dest_total = sum(r["years"].get(rev) or 0.0 for r in dests)
+
+    b.add_heading("STRATEGIC READ-OUT FOR %s EXPORT GROWTH"
+                  % anchor.upper(), level=1)
+    b.add_para("One-line takeaway per leading product heading, drawn from the "
+               "tables throughout this profile.")
+    for i, m in enumerate(top, start=1):
+        code = str(m.get("code") or "")
+        label = m["label"]
+        share = (m["years"].get(rev) or 0.0) / total * 100 if total else 0.0
+        g = cagr([m["years"].get(y) for y in years], years)
+        growth = ("grew at %.1f%% CAGR between %d and %d"
+                  % (g * 100, years[0], rev) if g is not None
+                  else "showed no clear trend over %d-%d" % (years[0], rev))
+        growth_verb = "grew" if (g is None or g <= 0) else "accelerated"
+        action = []
+        if priority:
+            action.append("prioritise %s" % " and ".join(priority))
+        if i == 1:
+            action.append("anchor heading - defend and deepen")
+        bullet = ("%d. %s (%s) - %.1f%% of Kenya's exports of %s in %d; %s."
+                   % (i, short_label(label, 55), code, share, family.lower(),
+                      rev, growth))
+        if action:
+            bullet += " Recommended action: %s." % "; ".join(action)
+        b.add_bullet(bullet)
+    if top_dest and dest_total:
+        dshare = (top_dest["years"].get(rev) or 0.0) / dest_total * 100
+        if dshare >= 15.0:
+            b.add_bullet("Risk to manage: %.1f%% of Kenya's %s exports go to "
+                         "a single destination (%s); deepen a second market."
+                         % (dshare, family.lower(), top_dest["label"]))
+    if att:
+        b.add_bullet("Net takeaway: concentrate promotion on %s where "
+                     "momentum, headroom and preferential access reinforce "
+                     "one another."
+                     % " and ".join(short_label(r["label"], 30)
+                                    for r in att[:3]))
 
 
 # --------------------------------------------------------------------------
@@ -1706,13 +2240,18 @@ def build_profile_document(cfg, data, tmp_dir):
     section_trade_family(b, cfg, data, source, tmp_dir)
     section_kenya_global_position(b, cfg, data, source)
     section_kenya_exports(b, cfg, data, source, tmp_dir)
+    section_growth_decomposition(b, cfg, data, source)
+    section_market_attractiveness(b, cfg, data, source,
+                                  data.files.get("export_potential"))
     section_competitiveness(b, cfg, data, source)
     section_global(b, cfg, data, source, tmp_dir)
+    section_competitor_watch(b, cfg, data, source)
     if cfg.get("include_imports", True):
         section_kenya_imports(b, cfg, data, source)
     pot = data.files.get("export_potential")
     if pot:
         section_potential(b, cfg, data, pot, source)
+    section_strategy(b, cfg, data, source, pot)
     return b.doc
 
 
@@ -1738,7 +2277,8 @@ def write_excel_deliverable(cfg, data, out_path):
     wb = Workbook()
     years = data.years
     rev = years[-1]
-    hdr_fill = PatternFill("solid", fgColor=NAVY)
+    hdr_fill = PatternFill(fill_type=None)
+    edit_fill = PatternFill("solid", fgColor="FFF2CC")
     cm = Alignment(horizontal="center")
     lm = Alignment(horizontal="left")
     val_fmt = "#,##0.0"
@@ -1747,31 +2287,54 @@ def write_excel_deliverable(cfg, data, out_path):
         name = (prefix + " - " + label) if label else prefix
         return name[:31]
 
-    def value_sheet(name, first_col, rows, doughnut=None):
+    def value_sheet(name, first_col, rows, doughnut=None, unit=None):
         ws = wb.create_sheet(name)
+        if unit is None:
+            unit = _series_unit([v for r in rows for y in years
+                                 if (v := r["years"].get(y)) is not None])
         has_code = any(r.get("code") for r in rows)
         first = 1 + (1 if has_code else 0)
         if has_code:
             _xc(ws, 1, 1, "Code", bold=True, fill=hdr_fill, align=cm)
-        _xc(ws, 1, first, first_col, bold=True, fill=hdr_fill, align=cm)
+        hdr_col = ("%s (USD Thousand)" % first_col if unit == "USD Thousand"
+                   else first_col)
+        _xc(ws, 1, first, hdr_col, bold=True, fill=hdr_fill, align=cm)
         for i, y in enumerate(years):
             _xc(ws, 1, first + 1 + i, y, bold=True, fill=hdr_fill, align=cm)
-        _xc(ws, 1, first + 1 + len(years), "Share in %d" % rev,
+        share_col = first + 1 + len(years)
+        share_letter = get_column_letter(share_col)
+        _xc(ws, 1, share_col, "Share in %d" % rev,
             bold=True, fill=hdr_fill, align=cm)
-        rev_total = sum(display(r["years"].get(rev)) or 0.0 for r in rows)
-        for ri, row in enumerate(rows, start=2):
+        first_data, last_data = 2, 1 + len(rows)
+        for ri, row in enumerate(rows, start=first_data):
             if has_code:
                 _xc(ws, ri, 1, str(row.get("code") or ""), align=lm)
             _xc(ws, ri, first, row["label"], align=lm)
             for i, y in enumerate(years):
-                v = display(row["years"].get(y))
-                c = _xc(ws, ri, first + 1 + i,
-                        None if v is None else round(v, 1),
-                        number_format=val_fmt, align=cm)
-            v = display(row["years"].get(rev))
-            _xc(ws, ri, first + 1 + len(years),
-                (v / rev_total if v is not None and rev_total else None),
+                raw = row["years"].get(y)
+                if unit == "USD Thousand":
+                    v_out = None if raw is None else round(raw, 1)
+                else:
+                    v_out = None if raw is None else round(display(raw), 1)
+                _xc(ws, ri, first + 1 + i, v_out,
+                    number_format=val_fmt, align=cm)
+            # Share: live formula against the Total row below, so editing a
+            # year cell recalculates the whole workbook.
+            rev_letter = get_column_letter(first + len(years))
+            _xc(ws, ri, share_col, "=%s%d/$%s%d"
+                % (rev_letter, ri, rev_letter, last_data + 1),
                 bold=True, number_format="0.0%", align=cm)
+        # Total row: SUM formulas per year, "100.0%" as the share total.
+        trow = last_data + 1
+        _xc(ws, trow, first, "Total", bold=True, align=lm)
+        for i, y in enumerate(years):
+            c_letter = get_column_letter(first + 1 + i)
+            _xc(ws, trow, first + 1 + i,
+                "=SUM(%s%d:%s%d)" % (c_letter, first_data, c_letter,
+                                     last_data),
+                bold=True, number_format=val_fmt, align=cm)
+        _xc(ws, trow, share_col, 1.0, bold=True, number_format="0.0%",
+            align=cm)
         width = max([30] + [len(str(r["label"])) for r in rows])
         if has_code:
             ws.column_dimensions["A"].width = 12
@@ -1782,10 +2345,12 @@ def write_excel_deliverable(cfg, data, out_path):
             ws.column_dimensions[chr(ord("A") + first + i)].width = 11
         if doughnut and len(doughnut[1]) >= 2:
             anchor = ws.cell(2 + len(rows), 1).row + 2
-            _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1])
+            _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1],
+                               share_letter, first_data)
         return ws
 
-    def _add_doughnut_here(ws, top_row, title, labels_values):
+    def _add_doughnut_here(ws, top_row, title, labels_values,
+                           share_letter="", ref_row=2):
         from openpyxl.chart import DoughnutChart
         from openpyxl.chart.label import DataLabelList
         from openpyxl.chart.legend import Legend
@@ -1795,13 +2360,16 @@ def write_excel_deliverable(cfg, data, out_path):
         ws.cell(top_row, 2).value = "Share"
         for cc in (1, 2):
             c = ws.cell(top_row, cc)
-            c.font = Font(bold=True, color="FFFFFF")
+            c.font = Font(bold=True)
             c.fill = hdr_fill
             c.alignment = cm
         for i, (lab, v) in enumerate(labels_values, start=top_row + 1):
             ws.cell(i, 1).value = lab
             cv = ws.cell(i, 2)
-            cv.value = v
+            # Live reference into the main table's share column (same sheet),
+            # so editing the table moves the chart.
+            cv.value = ("=%s%d" % (share_letter, ref_row + i)
+                        if share_letter and ref_row + i != top_row else v)
             cv.number_format = "0.0%"
             cv.border = BORDER
             cv.alignment = cm
@@ -1866,32 +2434,43 @@ def write_excel_deliverable(cfg, data, out_path):
     shares = data.kenya_world_shares()
     if shares["rows"]:
         ws = wb.create_sheet(sheet_name("Kenya vs World"))
+        k_unit = _series_unit([r["kenya"].get(rev) for r in shares["rows"]]
+                              + [shares.get("_kenya_total") or 0.0])
+        w_unit = _series_unit([r["world"].get(rev) for r in shares["rows"]]
+                              + [shares.get("_world_total") or 0.0])
         _xc(ws, 1, 1, "Code", bold=True, fill=hdr_fill, align=cm)
         _xc(ws, 1, 2, "Product", bold=True, fill=hdr_fill, align=cm)
-        _xc(ws, 1, 3, "Kenya exports (%d)" % rev, bold=True, fill=hdr_fill,
-            align=cm)
-        _xc(ws, 1, 4, "World exports (%d)" % rev, bold=True, fill=hdr_fill,
-            align=cm)
+        _xc(ws, 1, 3, "Kenya exports (%s)" % k_unit, bold=True,
+            fill=hdr_fill, align=cm)
+        _xc(ws, 1, 4, "World exports (%s)" % w_unit, bold=True,
+            fill=hdr_fill, align=cm)
         _xc(ws, 1, 5, "Kenya share of world", bold=True, fill=hdr_fill,
             align=cm)
         for ri, r in enumerate(shares["rows"], start=2):
-            k = display(r["kenya"].get(rev)) or 0.0
-            w = display(r["world"].get(rev)) or 0.0
+            k_raw = r["kenya"].get(rev) or 0.0
+            w_raw = r["world"].get(rev) or 0.0
             _xc(ws, ri, 1, r["code"], align=lm)
             _xc(ws, ri, 2, r["label"], align=lm)
-            _xc(ws, ri, 3, round(k, 1), number_format=val_fmt, align=cm)
-            _xc(ws, ri, 4, round(w, 1), number_format=val_fmt, align=cm)
-            _xc(ws, ri, 5, (k / w if w else None), bold=True,
+            if k_unit == "USD Thousand":
+                _xc(ws, ri, 3, round(k_raw, 1), number_format=val_fmt,
+                    align=cm)
+            else:
+                _xc(ws, ri, 3, round(display(k_raw), 1),
+                    number_format=val_fmt, align=cm)
+            if w_unit == "USD Thousand":
+                _xc(ws, ri, 4, round(w_raw, 1), number_format=val_fmt,
+                    align=cm)
+            else:
+                _xc(ws, ri, 4, round(display(w_raw), 1),
+                    number_format=val_fmt, align=cm)
+            _xc(ws, ri, 5, "=C%d/D%d" % (ri, ri), bold=True,
                 number_format="0.0%", align=cm)
-        ri += 1
-        k_tot = display(shares.get("_kenya_total")) or 0.0
-        w_tot = display(shares.get("_world_total")) or 0.0
-        _xc(ws, ri, 2, "Total", bold=True)
-        _xc(ws, ri, 3, round(k_tot, 1), bold=True, number_format=val_fmt,
-            align=cm)
-        _xc(ws, ri, 4, round(w_tot, 1), bold=True, number_format=val_fmt,
-            align=cm)
-        _xc(ws, ri, 5, (k_tot / w_tot if w_tot else None), bold=True,
+        ti = ri + 1
+        _xc(ws, ti, 2, "Total", bold=True)
+        for c, letter in ((3, "C"), (4, "D")):
+            _xc(ws, ti, c, "=SUM(%s2:%s%d)" % (letter, letter, ri),
+                bold=True, number_format=val_fmt, align=cm)
+        _xc(ws, ti, 5, "=C%d/D%d" % (ti, ti), bold=True,
             number_format="0.0%", align=cm)
         ws.column_dimensions["A"].width = 12
         ws.column_dimensions["B"].width = 60
@@ -1927,8 +2506,8 @@ def write_excel_deliverable(cfg, data, out_path):
                         number_format=val_fmt, align=cm)
                     _xc(ws, ri, 3, round(display(m[2]), 1),
                         number_format=val_fmt, align=cm)
-                    _xc(ws, ri, 4, m[3], bold=True, number_format="0.0%",
-                        align=cm)
+                    _xc(ws, ri, 4, "=B%d/C%d" % (ri, ri), bold=True,
+                        number_format="0.0%", align=cm)
             if spec and spec["years"]:
                 sp = next((s for s in spec["years"] if s["year"] == y), None)
                 if sp:
@@ -1945,6 +2524,185 @@ def write_excel_deliverable(cfg, data, out_path):
                          years, "All other products")
         if prods:
             value_sheet("Kenya Imports by Product", "Product", prods)
+
+    # ---- new analysis sheets ----------------------------------------------
+    start_year = years[0]
+
+    # Export Potential gap sheet (ITC Export Potential Map file, if present)
+    pot = data.files.get("export_potential")
+    if pot:
+        markets, pot_year = _potential_markets(pot)
+        pot_recs = [{"label": l, "actual": m["actual"],
+                     "potential": m["potential"],
+                     "gap": None if m["actual"] is None else
+                            max(0.0, (m["potential"] or 0.0)
+                                - (m["actual"] or 0.0))}
+                    for l, m in markets.items()
+                    if (m["potential"] or 0.0) > 0]
+        pot_recs.sort(key=lambda r: r["gap"] if r["gap"] is not None else -1.0,
+                      reverse=True)
+        if pot_recs:
+            ws = wb.create_sheet("Export Potential")
+            unit = _series_unit([r["potential"] for r in pot_recs]
+                                + [r.get("gap") or 0.0 for r in pot_recs])
+            headers = ["Market", "Current exports (%s)" % unit,
+                       "Potential exports (%s)" % unit,
+                       "Unrealised gap (%s)" % unit]
+            for c, h in enumerate(headers, 1):
+                _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
+            for i, r in enumerate(pot_recs, start=2):
+                _xc(ws, i, 1, r["label"], align=lm)
+                for j, key in ((2, "actual"), (3, "potential")):
+                    raw = r[key]
+                    v = None if raw is None else (
+                        round(raw, 1) if unit == "USD Thousand"
+                        else round(display(raw), 1))
+                    _xc(ws, i, j, v, number_format=val_fmt, align=cm)
+                _xc(ws, i, 4, "=C%d-B%d" % (i, i)
+                    if r["actual"] is not None else None,
+                    number_format=val_fmt, bold=True, align=cm)
+            ws.column_dimensions["A"].width = 40
+
+    # Growth Decomposition sheet
+    if len(years) >= 2 and data.members:
+        margins = []
+        for label, pred in (("Existing product headings (intensive)",
+                             lambda s, r: bool(s and r)),
+                            ("Newly exported product headings (extensive)",
+                             lambda s, r: bool(not s and r)),
+                            ("Headings no longer exported (exits)",
+                             lambda s, r: bool(s and not r))):
+            s0 = s1 = 0.0
+            for m in data.members:
+                sv = m["years"].get(start_year) or 0.0
+                rv = m["years"].get(rev) or 0.0
+                if pred(bool(sv), bool(rv)):
+                    s0 += sv
+                    s1 += rv
+            margins.append({"label": label, "start": s0, "rev": s1})
+        if any(r["rev"] or r["start"] for r in margins):
+            ws = wb.create_sheet("Growth Decomposition")
+            headers = ["Margin", "Exports %d" % start_year,
+                       "Exports %d" % rev, "Change",
+                       "Share of net change"]
+            for c, h in enumerate(headers, 1):
+                _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
+            for i, r in enumerate(margins, start=2):
+                _xc(ws, i, 1, r["label"], align=lm)
+                for j, key in ((2, "start"), (3, "rev")):
+                    _xc(ws, i, j, round(display(r[key]), 1),
+                        number_format=val_fmt, align=cm)
+                _xc(ws, i, 4, "=C%d-B%d" % (i, i),
+                    number_format=val_fmt, align=cm)
+                _xc(ws, i, 5, "=D%d/$D$%d" % (i, len(margins) + 2),
+                    number_format="0.0%", align=cm)
+            trow = len(margins) + 2
+            _xc(ws, trow, 1, "Net change", bold=True, align=lm)
+            _xc(ws, trow, 2, "=SUM(B2:B%d)" % (trow - 1),
+                bold=True, number_format=val_fmt, align=cm)
+            _xc(ws, trow, 3, "=SUM(C2:C%d)" % (trow - 1), bold=True,
+                number_format=val_fmt, align=cm)
+            _xc(ws, trow, 4, "=C%d-B%d" % (trow, trow), bold=True,
+                number_format=val_fmt, align=cm)
+            _xc(ws, trow, 5, "=D%d/D%d" % (trow, trow), bold=True,
+                number_format="0.0%", align=cm)
+            ws.column_dimensions["A"].width = 50
+
+    # Market Attractiveness sheet
+    access = cfg.get("access_markets") or []
+    weights = cfg.get("attractiveness_weights")
+    pot_markets, _ = _potential_markets(pot) if pot else ({}, None)
+    att = market_attractiveness(data.destinations(), years,
+                                pot_markets, weights, access)
+    if len(att) >= 3:
+        ws = wb.create_sheet("Market Attractiveness")
+        gap_any = any(x["has_potential"] and x["gap"] is not None
+                      for x in att)
+        headers = ["Rank", "Market", "Kenya exports %d" % rev, "Share",
+                   "CAGR %d-%d" % (start_year, rev), "Access tier"] \
+            + (["Potential gap"] if gap_any else []) \
+            + ["Attractiveness score"]
+        for c, h in enumerate(headers, 1):
+            _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
+        unit = _series_unit([x["value_review"] for x in att])
+        tier_names = {1: "Priority", 2: "Africa", 0: "Other"}
+        first_data, last_data = 2, 1 + len(att)
+        for i, x in enumerate(att, start=first_data):
+            _xc(ws, i, 1, i - 1, align=cm)
+            _xc(ws, i, 2, x["label"], align=lm)
+            raw = x["value_review"]
+            _xc(ws, i, 3, round(raw, 1) if unit == "USD Thousand"
+                else round(display(raw), 1), number_format=val_fmt,
+                align=cm)
+            _xc(ws, i, 4, "=C%d/$C$%d" % (i, last_data + 1),
+                number_format="0.0%", align=cm)
+            _xc(ws, i, 5, x["growth"], number_format="0.0%", align=cm)
+            _xc(ws, i, 6, tier_names.get(x["tier"], "Other"), align=cm)
+            c = 7
+            if gap_any:
+                gap = x["gap"] if x["has_potential"] else None
+                if gap is not None:
+                    gap = round(gap, 1) if unit == "USD Thousand" \
+                        else round(display(gap), 1)
+                _xc(ws, i, c, gap, number_format=val_fmt, align=cm)
+                c += 1
+            _xc(ws, i, c, x["score"], number_format="0.00", bold=True,
+                align=cm)
+        trow = last_data + 1
+        _xc(ws, trow, 2, "Total", bold=True, align=lm)
+        _xc(ws, trow, 3, "=SUM(C%d:C%d)" % (first_data, last_data),
+            bold=True, number_format=val_fmt, align=cm)
+        ws.column_dimensions["B"].width = 40
+
+    # Competitor Share Shift sheet
+    sc = share_change(data.exporters(), years)
+    if sc and sc["rows"]:
+        ws = wb.create_sheet("Competitor Share Shift")
+        headers = ["Economy", "World share %d" % start_year,
+                   "World share %d" % rev, "Change (share points)"]
+        for c, h in enumerate(headers, 1):
+            _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
+        for i, x in enumerate(sc["rows"], start=2):
+            _xc(ws, i, 1, x["label"], align=lm)
+            _xc(ws, i, 2, x["start_share"], number_format="0.0%",
+                align=cm)
+            _xc(ws, i, 3, x["rev_share"], number_format="0.0%",
+                align=cm)
+            _xc(ws, i, 4, x["delta_pp"], number_format="0.00",
+                bold=True, align=cm)
+        ws.column_dimensions["A"].width = 40
+
+    # Scenario sheet: editable target-share column with live formulas
+    members_top = (sorted(data.members,
+                          key=lambda r: r["years"].get(rev) or 0.0,
+                          reverse=True)[:10]
+                   if data.members else [])
+    if members_top:
+        ws = wb.create_sheet("Scenario")
+        headers = ["Product", "Exports %d" % rev, "Current share",
+                   "Target share (editable)", "Target exports %d" % rev,
+                   "Implied export growth"]
+        for c, h in enumerate(headers, 1):
+            _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
+        total = sum(m["years"].get(rev) or 0.0 for m in data.members)
+        for i, m in enumerate(members_top, start=2):
+            _xc(ws, i, 1, m["label"], align=lm)
+            cur = (m["years"].get(rev) or 0.0) / total if total else 0.0
+            _xc(ws, i, 2, round(display(m["years"].get(rev) or 0.0), 1),
+                number_format=val_fmt, align=cm)
+            _xc(ws, i, 3, cur, number_format="0.0%", align=cm)
+            _xc(ws, i, 4, cur, number_format="0.0%", align=cm,
+                fill=edit_fill)
+            _xc(ws, i, 5, "=B%d*(D%d/C%d)" % (i, i, i),
+                number_format=val_fmt, align=cm)
+            _xc(ws, i, 6, "=E%d/B%d-1" % (i, i), number_format="0.0%",
+                bold=True, align=cm)
+        note = len(members_top) + 3
+        _xc(ws, note, 1, "Edit the yellow Target share cells to model "
+                         "raising each product's share; Target exports and "
+                         "Implied growth recalculate automatically.",
+            align=lm)
+        ws.column_dimensions["A"].width = 70
 
     # default "Sheet" removed by the first create_sheet call? keep membership
     if "Sheet" in wb.sheetnames:

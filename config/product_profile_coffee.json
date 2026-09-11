@@ -8,6 +8,22 @@
   "top_n": 10,
   "include_imports": false,
   "include_codes": ["0901"],
+  "access_markets": [
+    "European Union (EU 27)",
+    "United States of America",
+    "United Kingdom",
+    "Japan",
+    "United Arab Emirates",
+    "Saudi Arabia",
+    "China",
+    "India"
+  ],
+  "attractiveness_weights": {
+    "growth": 0.35,
+    "gap": 0.35,
+    "size": 0.15,
+    "access": 0.15
+  },
   "source": "International Trade Centre (ITC), Trade Map, 2025",
   "org": "Kenya Export Promotion and Branding Agency",
   "directorate": "Research and Innovation Directorate (RI)",

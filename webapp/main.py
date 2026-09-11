@@ -961,6 +961,7 @@ def _run_product_pipeline(job_dir, cfg_id, top_n, logs):
         gpp.write_excel_deliverable(cfg, data, str(tables_path))
         logs.append(f"Excel deliverable saved as {tables_name}")
     except Exception as e:
+        tables_name = ""
         logs.append(f"Warning: Excel deliverable skipped: {e}")
 
     manifest = {
@@ -1015,9 +1016,12 @@ def _run_crafts_pipeline(job_dir, cfg_id, top_n, logs):
     tables_name = f"{base} PRODUCT PROFILE TABLES.xlsx"
     tables_path = job_dir / tables_name
     try:
-        gcr.write_crafts_excel(cfg, str(uploads), str(tables_path))
+        wb = gcr.write_crafts_excel(cfg, str(uploads), str(tables_path))
+        if wb is None:
+            raise RuntimeError("no usable data loaded for the workbook")
         logs.append(f"Excel deliverable saved as {tables_name}")
     except Exception as e:
+        tables_name = ""
         logs.append(f"Warning: Excel deliverable skipped: {e}")
 
     manifest = {
