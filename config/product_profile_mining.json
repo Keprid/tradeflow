@@ -1,0 +1,25 @@
+{
+  "title": "Product Profile: Mining",
+  "subtitle": "2025 Edition",
+  "family_title": "Mining",
+  "unit": "USD",
+  "value_scale": 1e6,
+  "unit_label": "USD Million",
+  "top_n": 12,
+  "include_imports": false,
+  "include_codes": [
+    "25", "26"
+  ],
+  "source": "International Trade Centre (ITC), Trade Map, 2025",
+  "org": "Kenya Export Promotion and Branding Agency",
+  "directorate": "Research and Innovation Directorate (RI)",
+  "month_year": "February 2025",
+  "date_line": "February 2025",
+  "intro": [
+    "Kenya's extractives and mineral sector covers metallic ores and concentrates and industrial minerals, spanning base metals such as titanium, manganese, copper and zinc alongside industrial minerals and mineral products. The sector holds significant untapped potential, with recent exploration and mine development activity positioning minerals as an emerging pillar of Kenya's non-traditional exports.",
+    "This profile examines Kenya's trade in mineral ores and industrial minerals (HS Chapters 25 and 26: salt, sulphur, earths, stone, plastering materials, lime and cement; and ores, slag and ash), based on trade values reported to the International Trade Centre (ITC). The analysis covers the period 2021 to 2025.",
+    "The family draws together ores and concentrates of titanium, manganese, copper, zinc, cobalt and other metals, together with industrial minerals such as graphite, barytes and borates. Presenting them as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's extractive exports."
+  ],
+  "data_dir": "Mining",
+  "output": "output/Product Profile - Mining 2025.docx"
+}
