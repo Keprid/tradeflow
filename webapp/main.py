@@ -709,14 +709,17 @@ def _autodetect_product_profile(uploads, configs):
     """Pick the product-profile config whose ``include_codes`` match the
     family actually present in the uploaded ITC matrices.
 
-    Collects every product code appearing in the by-product matrix files
-    (kenya/world x export/import) and scores each config by the fraction of
-    those codes it covers (the same HS 2022 hierarchical matching used by the
-    generator).  A config that claims far more HS chapters than the upload
-    actually contains is penalised, so a catch-all config cannot shadow a
-    specific one that also covers the files.  Returns ``(config_path, cfg)``
-    for the best match, or None when nothing covers a meaningful share of the
-    uploaded codes.
+    Collects the value of every product code appearing in the by-product
+    matrix files (kenya/world x export/import) and scores each config by the
+    *share of trade value* it covers (the same HS 2022 hierarchical matching
+    used by the generator).  Value, rather than code count, keeps a download
+    that mixes in a few unrelated headings (e.g. rubber rows inside a dairy
+    group) from hiding the real family.  Selection-total rows (whose value
+    equals the sum of the other codes) are excluded, and a config that claims
+    far more HS chapters than the upload actually contains is penalised, so a
+    catch-all config cannot shadow a specific one.  Returns
+    ``(config_path, cfg)`` for the best match, or None when nothing covers a
+    meaningful share of the uploaded value.
     """
     codes = set()
     for prefix in ("kenyas-exports-to-world-by-product",
@@ -727,12 +730,24 @@ def _autodetect_product_profile(uploads, configs):
         if path is None:
             continue
         _, records = gpp.load_matrix(path)
+        by_code = {}
         for r in records:
             c = gpp.ProfileData._norm_code(r["product"])
-            if c:
-                codes.add(c)
+            if not c:
+                continue
+            v = max((y for y in r["years"].values() if y is not None),
+                    default=0.0)
+            by_code[c] = max(by_code.get(c, 0.0), v)
+        # Drop selection-total rows: a code whose value equals the sum of all
+        # the other codes in the same file (the basket aggregate).
+        grand = sum(by_code.values())
+        for c, v in list(by_code.items()):
+            if grand and abs(v - (grand - v)) / grand < 0.01:
+                by_code.pop(c)
+        codes.update(by_code.items())
     if not codes:
         return None
+    total_value = sum(v for _, v in codes)
 
     def _chapters(entries):
         """Distinct 2-digit HS chapters spanned by include-code entries."""
@@ -745,17 +760,17 @@ def _autodetect_product_profile(uploads, configs):
                     out.add(c[:2])
         return out
 
-    upload_chapters = {c[:2] for c in codes if len(c) >= 2}
+    upload_chapters = {c[:2] for c, _ in codes}
 
-    best = None  # (score, frac, matched, config_path, cfg)
+    best = None  # (score, value_frac, matched_value, config_path, cfg)
     for path, cfg in configs:
         inc = cfg.get("include_codes")
         if not inc:
             continue
         tester = gpp.ProfileData.__new__(gpp.ProfileData)
         tester.include_codes = list(inc)
-        matched = sum(1 for c in codes if tester._code_ok(c))
-        frac = matched / len(codes)
+        matched_value = sum(v for c, v in codes if tester._code_ok(c))
+        frac = matched_value / total_value if total_value else 0.0
         min_frac = float(cfg.get("detect_min_frac", 0.5))
         if frac < min_frac:
             continue
@@ -767,8 +782,8 @@ def _autodetect_product_profile(uploads, configs):
             jaccard = 1.0
         score = frac * jaccard
         if best is None or score > best[0] or (
-                score == best[0] and matched > best[2]):
-            best = (score, frac, matched, path, cfg)
+                score == best[0] and matched_value > best[2]):
+            best = (score, frac, matched_value, path, cfg)
     if best is None:
         return None
     return best[3], best[4]
