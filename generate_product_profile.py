@@ -1159,7 +1159,7 @@ class ProfileBuilder(ReportBuilder):
 
         if widths is None:
             widths = ([420] if rank else []) \
-                + ([1100] if code_cols else []) + [3000] + [700] * n + [800]
+                + ([1100] if code_cols else []) + [3000] + [700] * n + [1300]
         self._set_table_widths(table, widths)
         self._style_table(table, rank=rank, label_cols=label_cols, n=n,
                           total_label=total_label)
@@ -1193,14 +1193,10 @@ class ProfileBuilder(ReportBuilder):
                 tcPr = cell._tc.get_or_add_tcPr()
                 for el in tcPr.findall(qn("w:shd")):
                     tcPr.remove(el)
-                shd = OxmlElement("w:shd")
-                shd.set(qn("w:val"), "clear")
-                shd.set(qn("w:color"), "auto")
-                shd.set(qn("w:fill"), NAVY)
-                tcPr.append(shd)
                 for p in cell.paragraphs:
                     for r in p.runs:
-                        r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                        r.font.bold = True
+                        r.font.color.rgb = RGBColor(0x26, 0x26, 0x26)
 
     # -- front matter -------------------------------------------------------
     def title_page(self, cfg):
@@ -1251,16 +1247,24 @@ class ProfileBuilder(ReportBuilder):
 # Sections
 # --------------------------------------------------------------------------
 def make_donut(pairs, tmp_dir, name, title):
-    """Render a doughnut of (label, share) pairs to a PNG and return its path."""
-    pairs = [(l, s) for l, s in pairs if s > 0.0]
+    """Render a doughnut of (label, share) pairs to a PNG and return its path.
+
+    Keeps only the top 5 slices; every remaining slice is folded into an
+    "Others" slice so the chart stays readable.
+    """
+    pairs = [p for p in pairs if p[1] > 0.0]
     if not pairs:
         return None
+    pairs.sort(key=lambda p: p[1], reverse=True)
+    if len(pairs) > 5:
+        top, rest = pairs[:5], pairs[5:]
+        pairs = top + [("Others", sum(s for _, s in rest))]
     labels = [l for l, _ in pairs]
     values = [s * 100.0 for _, s in pairs]
     colors = [c if c.startswith("#") else "#" + c for c in THEME]
     fig, ax = charts.new_fig(width=6.6, height=4.4)
     labels, values, wedges = charts.draw_share_pie(
-        ax, labels, values, colors, style="donut", min_pct=1.0, max_slices=8)
+        ax, labels, values, colors, style="donut", min_pct=0.0, max_slices=6)
     charts.share_legend(fig, wedges, labels, values, ncol=2)
     path = os.path.join(tmp_dir, name)
     charts.finish(fig, path)
@@ -1298,8 +1302,7 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
     members = data.members
     if not members:
         return
-    b._next_table("Trend on %s: Kenya's Exports by Product, %d" % (family, rev),
-                  source)
+    b._next_table("Trend on %s: Kenya's Exports by Product" % family, source)
     members_tbl = top_rows(members, cfg.get("top_n", 10), years,
                            "All other products")
     b.add_value_table("Product", members_tbl, years, "Share in %d" % rev,
@@ -1354,8 +1357,7 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
                                 residual="All other markets")
     if not destinations:
         return
-    b._next_table("Destination Markets for Kenya's %s, %d" % (anchor, rev),
-                  source)
+    b._next_table("Destination Markets for Kenya's %s" % anchor, source)
     b.add_value_table("Destination market", destinations, years,
                       "Share in %d" % rev,
                       "Kenya's Exports of %s by Destination" % anchor, source,
@@ -1516,8 +1518,8 @@ def section_competitiveness(b, cfg, data, source):
     peers = data.african_peers(5)
     if peers:
         older = [p for p in peers if p.get("src_year") and p["src_year"] != rev]
-        b._next_table("Kenya vs Leading African Exporters of %s, %d"
-                      % (anchor, rev), source)
+        b._next_table("Kenya vs Leading African Exporters of %s"
+                      % anchor, source)
         b.add_value_table("Exporting economy", peers, years,
                           "Share in %d" % rev,
                           "African Exporters of %s" % anchor, source,
@@ -1541,8 +1543,7 @@ def section_global(b, cfg, data, source, tmp_dir):
     exporters = _ranked_rows(all_exporters, cfg.get("top_n", 10), years,
                              ensure_label="Kenya", residual="All other economies")
     if exporters:
-        b._next_table("World Exports of %s by Economy, %d" % (anchor, rev),
-                      source)
+        b._next_table("World Exports of %s by Economy" % anchor, source)
         b.add_value_table("Exporting economy", exporters, years,
                           "Share in %d" % rev,
                           "Countries Exporting %s" % anchor, source,
@@ -1562,8 +1563,7 @@ def section_global(b, cfg, data, source, tmp_dir):
     importers = _ranked_rows(all_importers, cfg.get("top_n", 10), years,
                              ensure_label="Kenya", residual="All other economies")
     if importers:
-        b._next_table("World Imports of %s by Economy, %d" % (anchor, rev),
-                      source)
+        b._next_table("World Imports of %s by Economy" % anchor, source)
         b.add_value_table("Importing economy", importers, years,
                           "Share in %d" % rev,
                           "Countries Importing %s" % anchor, source,
@@ -1582,8 +1582,7 @@ def section_global(b, cfg, data, source, tmp_dir):
     g_exp = top_rows(data.global_export_products(),
                      cfg.get("top_n", 10), years, "All other products")
     if g_exp:
-        b._next_table("Trend on %s Globally - Export, %d" % (family, rev),
-                      source)
+        b._next_table("Trend on %s Globally - Export" % family, source)
         b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
                           "Global Exports of %s by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -1592,8 +1591,7 @@ def section_global(b, cfg, data, source, tmp_dir):
     g_imp = top_rows(data.global_import_products(),
                      cfg.get("top_n", 10), years, "All other products")
     if g_imp:
-        b._next_table("Trend on %s Globally - Import, %d" % (family, rev),
-                      source)
+        b._next_table("Trend on %s Globally - Import" % family, source)
         b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
                           "Global Imports of %s by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -1871,8 +1869,7 @@ def section_kenya_imports(b, cfg, data, source):
                "review period.")
 
     if sources:
-        b._next_table("Kenya's Imports of %s by Source, %d" % (anchor, rev),
-                      source)
+        b._next_table("Kenya's Imports of %s by Source" % anchor, source)
         b.add_value_table("Source market", sources, years, "Share in %d" % rev,
                           "Kenya's Imports of %s by Source" % anchor, source,
                           total_label="Total")
@@ -1881,8 +1878,7 @@ def section_kenya_imports(b, cfg, data, source):
     if products:
         products = top_rows(products, cfg.get("top_n", 10), years,
                             "All other products")
-        b._next_table("Kenya's Imports of %s by Product, %d" % (family, rev),
-                      source)
+        b._next_table("Kenya's Imports of %s by Product" % family, source)
         b.add_value_table("Product", products, years, "Share in %d" % rev,
                           "Kenya's Imports of %s by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -2068,11 +2064,11 @@ def section_market_attractiveness(b, cfg, data, source, pot):
     unit = _series_unit([r["value_review"] for r in top])
     gap_present = any(r["has_potential"] and r["gap"] is not None for r in top)
     gap_unit = _series_unit([r["gap"] for r in top if r["gap"]])
-    headers = ["Market", "CAGR (%d-%d)" % (years[0], rev),
-               "Exports %d (%s)" % (rev, unit), "Share of exports"]
+    headers = ["Market", "CAGR", "Exports %d (%s)" % (rev, unit),
+               "Export share"]
     if gap_present:
         headers.append("Potential gap (%s)" % gap_unit)
-    headers.append("Attractiveness score")
+    headers.append("Score")
     cols = len(headers)
     table = b.doc.add_table(rows=1 + len(top), cols=cols, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -2091,7 +2087,7 @@ def section_market_attractiveness(b, cfg, data, source, pot):
                 if r["gap"] is not None else ""
             c += 1
         table.rows[i].cells[c].text = "%.2f" % r["score"]
-    b._set_table_widths(table, [2200, 900, 1500, 1200]
+    b._set_table_widths(table, [1600, 800, 2440, 1200]
                         + ([1300] if gap_present else []) + [1300])
     b._style_table(table, rank=False, label_cols=1,
                    n=cols - 1)

@@ -1720,18 +1720,43 @@ class ReportBuilder:
         return s.page_height.inches - s.top_margin.inches - s.bottom_margin.inches
 
     def _cell_snapshot(self, table):
-        """List (text, width_inches) per row, de-duplicating merged cells."""
+        """List (text, width_inches) per row, de-duplicating merged cells.
+
+        Horizontally merged cells (``w:gridSpan > 1``) report their width as
+        the sum of the grid columns they cover, so line-count estimates and
+        the resulting header-row heights stay correct.
+        """
+        grid = table._tbl.find(qn("w:tblGrid"))
+        col_tw = []
+        if grid is not None:
+            for gc in grid.findall(qn("w:gridCol")):
+                w = gc.get(qn("w:w"))
+                col_tw.append(int(w) if w else 0)
         rows = []
         for row in table.rows:
             cells = []
             seen = set()
+            gi = 0
             for cell in row.cells:
                 if id(cell._tc) in seen:
+                    gi += 1
                     continue
                 seen.add(id(cell._tc))
+                span = 1
+                tcPr = cell._tc.tcPr
+                if tcPr is not None:
+                    gs = tcPr.find(qn("w:gridSpan"))
+                    if gs is not None:
+                        span = int(gs.get(qn("w:val")) or 1)
+                if col_tw and gi < len(col_tw):
+                    w = sum(col_tw[gi:gi + span]) / 1440.0
+                elif cell.width:
+                    w = cell.width.inches
+                else:
+                    w = 1.0
                 txt = "\n".join(p.text for p in cell.paragraphs)
-                w = cell.width.inches if cell.width else 1.0
                 cells.append((txt, w))
+                gi += span
             rows.append(cells)
         return rows
 
@@ -1801,9 +1826,16 @@ class ReportBuilder:
                 r.font.size = Pt(size_pt)
 
     def _apply_fit(self, table, rows, size_pt):
-        """Write the chosen row heights, font sizes and cell margins."""
-        for row, cells in zip(table.rows, rows):
-            h_in = self._row_height_in(cells, size_pt)
+        """Write the chosen row heights, font sizes and cell margins.
+
+        Header rows (the first two rows of every table) use a smaller
+        dedicated font so the "Value in ..." / "Share in ..." captions never
+        wrap; the header rows then stay slim.
+        """
+        hdr_size = min(8.0, size_pt)
+        for ri, (row, cells) in enumerate(zip(table.rows, rows)):
+            rsize = hdr_size if ri < 2 else size_pt
+            h_in = self._row_height_in(cells, rsize)
             tr = row._tr
             trPr = tr.get_or_add_trPr()
             for tag in ("w:trHeight", "w:cantSplit"):
@@ -1815,13 +1847,14 @@ class ReportBuilder:
             trH.set(qn("w:hRule"), "atLeast")
             trPr.append(trH)
 
-        for row in table.rows:
+        for ri, row in enumerate(table.rows):
+            rsize = hdr_size if ri < 2 else size_pt
             for cell in row.cells:
                 for p in cell.paragraphs:
                     p.paragraph_format.space_before = Pt(1)
                     p.paragraph_format.space_after = Pt(1)
                     for r in p.runs:
-                        r.font.size = Pt(size_pt)
+                        r.font.size = Pt(rsize)
 
         tblPr = table._tbl.tblPr
         for el in tblPr.findall(qn("w:tblCellMar")):
