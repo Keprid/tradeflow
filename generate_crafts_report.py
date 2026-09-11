@@ -1399,10 +1399,7 @@ def write_crafts_excel(cfg, data_dir, out_path):
         if unit is None:
             unit = _series_unit([v for r in rows for y in years
                                  if (v := r["years"].get(y)) is not None])
-        if unit == "USD Thousand":
-            hdr_col = "%s (USD Thousand)" % first_col
-        else:
-            hdr_col = first_col
+        hdr_col = "%s (%s)" % (first_col, unit)
         hdr = (["Code", hdr_col] if has_code else [hdr_col]) \
             + list(years) + ["Share in %d" % rev]
         for c, h in enumerate(hdr, 1):

@@ -1,0 +1,26 @@
+{
+  "title": "Product Profile: Dairy",
+  "subtitle": "2021 Edition",
+  "family_title": "Dairy",
+  "unit": "USD",
+  "value_scale": 1e6,
+  "unit_label": "USD Million",
+  "top_n": 12,
+  "include_imports": false,
+  "include_codes": [
+    "04"
+  ],
+  "detect_min_frac": 0.30,
+  "source": "International Trade Centre (ITC), Trade Map",
+  "org": "Kenya Export Promotion and Branding Agency",
+  "directorate": "Research and Innovation Directorate (RI)",
+  "month_year": "February 2025",
+  "date_line": "February 2025",
+  "intro": [
+    "Kenya's dairy value chain spans milk and cream, milk powders, butter and cheese, supplied by smallholder herders and commercial dairy processors across the country. With a growing formal dairy industry and recognised market access in regional and international destination markets, dairy is a significant contributor to Kenya's agricultural exports.",
+    "This profile examines Kenya's trade in dairy produce (HS Chapter 04: milk and cream; yogurt, buttermilk and other fermented or acidified milk and cream; whey and natural milk constituents; butter and other fats and oils derived from milk; and cheese and curd), based on trade values reported to the International Trade Centre (ITC) for 2021.",
+    "The family draws together fresh and concentrated milk and cream, milk powders, butter and cheese. Presenting them as a single portfolio provides a clear picture of the size, product mix and market orientation of Kenya's dairy exports."
+  ],
+  "data_dir": "Dairy",
+  "output": "output/Product Profile - Dairy 2025.docx"
+}

@@ -1328,8 +1328,10 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
     totals = _year_totals(members)
     g = growth_phrase(cagr([totals.get(y) for y in years], years),
                       period_phrase(years[0], rev))
-    yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
-                    years[-2], years[-1])
+    yo = None
+    if len(years) >= 2:
+        yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
+                        years[-2], years[-1])
     if g:
         sentence = "Kenya's total exports of %s %s." % (family.lower(), g)
         if yo:
@@ -1367,8 +1369,10 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
     total_last = totals.get(rev)
     g = growth_phrase(cagr([totals.get(y) for y in years], years),
                       period_phrase(years[0], rev))
-    yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
-                    years[-2], years[-1])
+    yo = None
+    if len(years) >= 2:
+        yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
+                        years[-2], years[-1])
 
     parts = []
     if total_last:
@@ -1716,8 +1720,10 @@ def trend_bullets(b, rows, years, family, noun, scope="World",
     totals = _year_totals(rows)
     g = growth_phrase(cagr([totals.get(y) for y in years], years),
                       period_phrase(years[0], last))
-    yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
-                    years[-2], years[-1])
+    yo = None
+    if len(years) >= 2:
+        yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
+                        years[-2], years[-1])
     if g:
         sentence = "%s of %s %s." % (subj, family.lower(), g)
         if yo:
@@ -2292,8 +2298,7 @@ def write_excel_deliverable(cfg, data, out_path):
         first = 1 + (1 if has_code else 0)
         if has_code:
             _xc(ws, 1, 1, "Code", bold=True, fill=hdr_fill, align=cm)
-        hdr_col = ("%s (USD Thousand)" % first_col if unit == "USD Thousand"
-                   else first_col)
+        hdr_col = "%s (%s)" % (first_col, unit)
         _xc(ws, 1, first, hdr_col, bold=True, fill=hdr_fill, align=cm)
         for i, y in enumerate(years):
             _xc(ws, 1, first + 1 + i, y, bold=True, fill=hdr_fill, align=cm)
@@ -2479,13 +2484,15 @@ def write_excel_deliverable(cfg, data, out_path):
     # Kenya's share of world exports over time + specialization
     share_series = data.market_share_series()
     spec = data.specialization_metrics()
+    ss_unit = _series_unit(
+        [m[1] for m in (share_series or [])] + [m[2] for m in (share_series or [])])
     if share_series or (spec and spec["years"]):
         ws = wb.create_sheet(sheet_name("Kenya Standing"))
         _xc(ws, 1, 1, "Year", bold=True, fill=hdr_fill, align=cm)
         if share_series:
-            _xc(ws, 1, 2, "Kenya exports (USD Million)", bold=True,
+            _xc(ws, 1, 2, "Kenya exports (%s)" % ss_unit, bold=True,
                 fill=hdr_fill, align=cm)
-            _xc(ws, 1, 3, "World exports (USD Million)", bold=True,
+            _xc(ws, 1, 3, "World exports (%s)" % ss_unit, bold=True,
                 fill=hdr_fill, align=cm)
             _xc(ws, 1, 4, "Kenya share of world", bold=True,
                 fill=hdr_fill, align=cm)
@@ -2578,8 +2585,8 @@ def write_excel_deliverable(cfg, data, out_path):
             margins.append({"label": label, "start": s0, "rev": s1})
         if any(r["rev"] or r["start"] for r in margins):
             ws = wb.create_sheet("Growth Decomposition")
-            headers = ["Margin", "Exports %d" % start_year,
-                       "Exports %d" % rev, "Change",
+            headers = ["Margin", "Exports %d (USD Million)" % start_year,
+                       "Exports %d (USD Million)" % rev, "Change",
                        "Share of net change"]
             for c, h in enumerate(headers, 1):
                 _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
@@ -2612,15 +2619,16 @@ def write_excel_deliverable(cfg, data, out_path):
                                 pot_markets, weights, access)
     if len(att) >= 3:
         ws = wb.create_sheet("Market Attractiveness")
+        unit = _series_unit([x["value_review"] for x in att])
         gap_any = any(x["has_potential"] and x["gap"] is not None
                       for x in att)
-        headers = ["Rank", "Market", "Kenya exports %d" % rev, "Share",
+        headers = ["Rank", "Market", "Kenya exports %d (%s)" % (rev, unit),
+                   "Share",
                    "CAGR %d-%d" % (start_year, rev), "Access tier"] \
             + (["Potential gap"] if gap_any else []) \
             + ["Attractiveness score"]
         for c, h in enumerate(headers, 1):
             _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
-        unit = _series_unit([x["value_review"] for x in att])
         tier_names = {1: "Priority", 2: "Africa", 0: "Other"}
         first_data, last_data = 2, 1 + len(att)
         for i, x in enumerate(att, start=first_data):
@@ -2675,8 +2683,10 @@ def write_excel_deliverable(cfg, data, out_path):
                    if data.members else [])
     if members_top:
         ws = wb.create_sheet("Scenario")
-        headers = ["Product", "Exports %d" % rev, "Current share",
-                   "Target share (editable)", "Target exports %d" % rev,
+        headers = ["Product", "Exports %d (USD Million)" % rev,
+                   "Current share",
+                   "Target share (editable)",
+                   "Target exports %d (USD Million)" % rev,
                    "Implied export growth"]
         for c, h in enumerate(headers, 1):
             _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)

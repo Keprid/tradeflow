@@ -756,7 +756,8 @@ def _autodetect_product_profile(uploads, configs):
         tester.include_codes = list(inc)
         matched = sum(1 for c in codes if tester._code_ok(c))
         frac = matched / len(codes)
-        if frac < 0.5:
+        min_frac = float(cfg.get("detect_min_frac", 0.5))
+        if frac < min_frac:
             continue
         cfg_chapters = _chapters(inc)
         if upload_chapters and cfg_chapters:
