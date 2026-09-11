@@ -1,0 +1,25 @@
+{
+  "title": "Product Profile: Horticulture",
+  "subtitle": "2025 Edition",
+  "family_title": "Horticulture",
+  "unit": "USD",
+  "value_scale": 1e6,
+  "unit_label": "USD Million",
+  "top_n": 12,
+  "include_imports": false,
+  "include_codes": [
+    "06", "07", "08"
+  ],
+  "source": "International Trade Centre (ITC), Trade Map, 2025",
+  "org": "Kenya Export Promotion and Branding Agency",
+  "directorate": "Research and Innovation Directorate (RI)",
+  "month_year": "February 2025",
+  "date_line": "February 2025",
+  "intro": [
+    "Kenya's horticulture sector is Kenya's leading non-traditional export earner, spanning fresh cut flowers, ornamental plants, fresh and processed vegetables and fruit. It supports hundreds of thousands of smallholder farmers and large-scale producers, and is anchored on exports to the European Union and the United Kingdom, which absorb the bulk of Kenya's premium horticultural produce.",
+    "This profile examines Kenya's trade in horticulture (HS Chapters 06 to 08: live trees and plants, cut flowers and ornamental foliage; edible vegetables and certain roots and tubers; and edible fruit and nuts), based on trade values reported to the International Trade Centre (ITC). The analysis covers the period 2021 to 2025.",
+    "Cut flowers, especially roses, avocado, French beans, mangoes, pineapples and macadamia nuts form the backbone of the export basket. Presenting this family as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's horticultural exports."
+  ],
+  "data_dir": "Horticulture",
+  "output": "output/Product Profile - Horticulture 2025.docx"
+}
