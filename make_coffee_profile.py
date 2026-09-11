@@ -546,7 +546,7 @@ def main():
         "product heading is summarised in Table 1." % (rev, display(kenya_2025), rev, rev))
 
     # --- Table 1: Kenya exports by product (HS6 under 0901) ----------------
-    _cap(b, "Trend on Coffee: Kenya's Exports by Product, %d" % rev)
+    _cap(b, "Trend on Coffee: Kenya's Exports by Product")
     b.add_value_table(
         "Product", sorted(data.members, key=lambda r: r["code"]), years,
         "Share in %d" % rev, "Kenya's Coffee Exports by Product",
@@ -563,7 +563,7 @@ def main():
     # ===================================================================== 9.0
     b.doc.add_heading("9.0\tLATEST KENYA'S EXPORT VALUE & MARKETS", level=1)
     b.add_para("Destination markets for Kenya's Coffee")
-    _cap(b, "Kenya's Coffee Export Markets by Destination, %d" % rev)
+    _cap(b, "Kenya's Coffee Export Markets by Destination")
     b.add_value_table(
         "Destination market",
         _ranked_rows(dest, 10, years, residual="All other markets"),
@@ -591,7 +591,7 @@ def main():
         "The table below summarises the competitive position of Kenya's "
         "coffee exports in the world market and among its leading African "
         "peers.")
-    _cap(b, "World Exports of Coffee by Economy, %d" % rev)
+    _cap(b, "World Exports of Coffee by Economy")
     b.add_value_table(
         "Exporting economy",
         _ranked_rows(data.exporters(), 10, years, residual="All other economies"),
@@ -610,8 +610,8 @@ def main():
         "premiums for high-grown washed arabica.")
     peers = data.african_peers(5)
     if peers:
-        _cap(b, "Kenya vs Leading African Exporters of %s, %d" % (
-            _anchor(b, data), rev))
+        _cap(b, "Kenya vs Leading African Exporters of %s" % (
+            _anchor(b, data)))
         b.add_value_table("Exporting economy", peers, years,
                           "Share in %d" % rev, "African Coffee Exporters",
                           CFG.get("source"), total_label="Total")

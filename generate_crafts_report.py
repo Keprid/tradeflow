@@ -764,7 +764,7 @@ def section_categories(b, cfg, data, source, tmp_dir):
                           reverse=True)
             theme_rows = top_rows(rows, 10, years, "All other products")
             b._next_table(
-                "Kenya's Exports of %s by Product, %d" % (title, rev), source)
+                "Kenya's Exports of %s by Product" % title, source)
             b.add_value_table(
                 "Product", theme_rows, years, "Share in %d" % rev,
                 "Kenya's Exports of %s by Product" % title, source,
@@ -788,8 +788,7 @@ def section_categories(b, cfg, data, source, tmp_dir):
                           reverse=True)
             dest_rows = top_rows(rows, 12, years, "All other markets")
             b._next_table(
-                "Destination Markets for Kenya's %s Exports, %d"
-                % (title, rev), source)
+                "Destination Markets for Kenya's %s Exports" % title, source)
             b.add_value_table(
                 "Destination market", dest_rows, years, "Share in %d" % rev,
                 "Kenya's %s Exports by Destination" % title, source,
@@ -812,7 +811,7 @@ def section_categories(b, cfg, data, source, tmp_dir):
                           reverse=True)
             exp_rows = top_rows(rows, 12, years, "All other economies")
             b._next_table(
-                "World Exports of %s by Economy, %d" % (title, rev), source)
+                "World Exports of %s by Economy" % title, source)
             b.add_value_table(
                 "Exporting economy", exp_rows, years, "Share in %d" % rev,
                 "Countries Exporting %s" % title, source,
@@ -834,8 +833,7 @@ def section_whole(b, cfg, data, source, tmp_dir):
     by_cat = data.kenya_by_category()
     if by_cat:
         b._next_table(
-            "Trend on %s: Kenya's Exports by Category, %d" % (family, rev),
-            source)
+            "Trend on %s: Kenya's Exports by Category" % family, source)
         b.add_value_table(
             "Category", by_cat, years, "Share in %d" % rev,
             "Kenya's Exports of %s by Category" % family, source,
@@ -881,8 +879,7 @@ def section_whole(b, cfg, data, source, tmp_dir):
         dest_rows = top_rows(dest, 25, years, "All other markets")
         total_dest = sum((r["years"].get(rev) or 0.0) for r in dest)
         b._next_table(
-            "Destination Markets for Kenya's %s Exports, %d"
-            % (family, rev), source)
+            "Destination Markets for Kenya's %s Exports" % family, source)
         b.add_value_table(
             "Destination market", dest_rows, years, "Share in %d" % rev,
             "Kenya's Exports of %s by Destination" % family, source,
@@ -907,7 +904,7 @@ def section_whole(b, cfg, data, source, tmp_dir):
                                 residual="All other economies")
         total_world = sum((r["years"].get(rev) or 0.0) for r in exporters)
         b._next_table(
-            "World Exports of %s by Economy, %d" % (family, rev), source)
+            "World Exports of %s by Economy" % family, source)
         b.add_value_table(
             "Exporting economy", exp_rows, years, "Share in %d" % rev,
             "Countries Exporting %s" % family, source,
@@ -929,7 +926,7 @@ def section_whole(b, cfg, data, source, tmp_dir):
         wprod_rows = top_rows(wprod, 15, years, "All other products")
         total_wprod = sum((r["years"].get(rev) or 0.0) for r in wprod)
         b._next_table(
-            "Trend on %s Globally - Export, %d" % (family, rev), source)
+            "Trend on %s Globally - Export" % family, source)
         b.add_value_table(
             "Product", wprod_rows, years, "Share in %d" % rev,
             "Global Exports of %s by Product" % family, source,
@@ -1422,9 +1419,16 @@ def write_crafts_excel(cfg, data_dir, out_path):
             ws.cell(ri, first, lab).alignment = lm
             for i, y in enumerate(years, start=first + 1):
                 raw = r["years"].get(y)
-                v_out = None if raw is None else fmt_for_unit(raw, unit, 1)
-                ws.cell(ri, i, v_out)
-                ws.cell(ri, i).alignment = cm
+                if raw is None:
+                    v_out = None
+                elif unit == "USD Thousand":
+                    v_out = round(raw, 1)
+                else:
+                    v_out = round(display(raw), 1)
+                c = ws.cell(ri, i, v_out)
+                if v_out is not None:
+                    c.number_format = "#,##0.0"
+                c.alignment = cm
             # Share is a live formula against the Total row: editing any
             # year cell above recalculates the share and totals.
             rev_letter = get_column_letter(first + len(years))
