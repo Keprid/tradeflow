@@ -712,8 +712,11 @@ def _autodetect_product_profile(uploads, configs):
     Collects every product code appearing in the by-product matrix files
     (kenya/world x export/import) and scores each config by the fraction of
     those codes it covers (the same HS 2022 hierarchical matching used by the
-    generator).  Returns ``(config_path, cfg)`` for the best match, or None
-    when nothing covers a meaningful share of the uploaded codes.
+    generator).  A config that claims far more HS chapters than the upload
+    actually contains is penalised, so a catch-all config cannot shadow a
+    specific one that also covers the files.  Returns ``(config_path, cfg)``
+    for the best match, or None when nothing covers a meaningful share of the
+    uploaded codes.
     """
     codes = set()
     for prefix in ("kenyas-exports-to-world-by-product",
@@ -731,7 +734,20 @@ def _autodetect_product_profile(uploads, configs):
     if not codes:
         return None
 
-    best = None  # (frac, matched, config_path, cfg)
+    def _chapters(entries):
+        """Distinct 2-digit HS chapters spanned by include-code entries."""
+        out = set()
+        for e in entries:
+            e = str(e or "").strip()
+            for part in (e.split("-") if "-" in e else [e]):
+                c = gpp.ProfileData._norm_code(part)
+                if len(c) >= 2:
+                    out.add(c[:2])
+        return out
+
+    upload_chapters = {c[:2] for c in codes if len(c) >= 2}
+
+    best = None  # (score, frac, matched, config_path, cfg)
     for path, cfg in configs:
         inc = cfg.get("include_codes")
         if not inc:
@@ -740,12 +756,21 @@ def _autodetect_product_profile(uploads, configs):
         tester.include_codes = list(inc)
         matched = sum(1 for c in codes if tester._code_ok(c))
         frac = matched / len(codes)
-        if best is None or frac > best[0] or (
-                frac == best[0] and matched > best[1]):
-            best = (frac, matched, path, cfg)
-    if best is None or best[0] < 0.5:
+        if frac < 0.5:
+            continue
+        cfg_chapters = _chapters(inc)
+        if upload_chapters and cfg_chapters:
+            union = upload_chapters | cfg_chapters
+            jaccard = len(upload_chapters & cfg_chapters) / len(union)
+        else:
+            jaccard = 1.0
+        score = frac * jaccard
+        if best is None or score > best[0] or (
+                score == best[0] and matched > best[2]):
+            best = (score, frac, matched, path, cfg)
+    if best is None:
         return None
-    return best[2], best[3]
+    return best[3], best[4]
 
 
 def _detect_reporter(excel_dir):

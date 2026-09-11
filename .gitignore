@@ -25,6 +25,16 @@ services/unctad_services_*.csv
 servicesnew/
 *.unctad.json
 
+# Product-profile / market data folders: analyst-provided ITC downloads that
+# are not shipped with the hosted webapp (it takes user uploads at runtime).
+Coffee/
+Horticulture/
+crafts/
+RID/
+EXPORT PERFORMANCE FOR Q2/
+services/Trade_Map_*
+RID Department Tasks*.pdf
+
 *.docx
 !*.md
 !*.txt

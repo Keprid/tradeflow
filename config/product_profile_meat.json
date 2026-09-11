@@ -1,0 +1,25 @@
+{
+  "title": "Product Profile: Meat",
+  "subtitle": "2025 Edition",
+  "family_title": "Meat",
+  "unit": "USD",
+  "value_scale": 1e6,
+  "unit_label": "USD Million",
+  "top_n": 12,
+  "include_imports": false,
+  "include_codes": [
+    "02", "16"
+  ],
+  "source": "International Trade Centre (ITC), Trade Map, 2025",
+  "org": "Kenya Export Promotion and Branding Agency",
+  "directorate": "Research and Innovation Directorate (RI)",
+  "month_year": "February 2025",
+  "date_line": "February 2025",
+  "intro": [
+    "Kenya's meat value chain covers beef, sheep and goat meat, game-related products and a growing poultry component, supplied by livestock keepers across the arid and semi-arid lands and by commercial feedlot and poultry operations. Demand for Kenyan meat and meat products in international markets has been growing, driven by a recognised quality meat, expanding export capacity in the slaughter and processing sub-sector and preferential access frameworks.",
+    "This profile examines Kenya's trade in meat and meat products (HS Chapters 02 and 16: meat and edible meat offal, and preparations of meat, meat offal or blood, including sausages and similar products), based on trade values reported to the International Trade Centre (ITC). The analysis covers the period 2021 to 2025.",
+    "The family draws together fresh, chilled and frozen meat of bovine animals, sheep, goats, swine, poultry and other species, edible offal, and prepared or preserved meat products such as sausages. Presenting them as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's meat exports."
+  ],
+  "data_dir": "Meat",
+  "output": "output/Product Profile - Meat 2025.docx"
+}
