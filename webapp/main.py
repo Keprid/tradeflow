@@ -722,6 +722,20 @@ def _autodetect_product_profile(uploads, configs):
     meaningful share of the uploaded value.
     """
     codes = set()
+    # The selection anchor (e.g. "Horticulture Group") is the product code
+    # that appears in the by-importer matrix; its row is the family aggregate,
+    # not a real product, so it must not count toward the value covered by a
+    # config.  Detect it the same way ProfileData does.
+    anchor_codes = set()
+    anchor_path = gpp._find_file(str(uploads), "kenyas-exports-to-world-by-importer")
+    if anchor_path is not None:
+        _, anchor_rows = gpp.load_matrix(anchor_path)
+        counts = {}
+        for r in anchor_rows:
+            c = gpp.ProfileData._norm_code(r["product"])
+            counts[c] = counts.get(c, 0) + 1
+        if counts:
+            anchor_codes.add(max(counts, key=counts.get))
     for prefix in ("kenyas-exports-to-world-by-product",
                    "products-exported-globally",
                    "kenyas-imports-from-world-by-product",
@@ -743,6 +757,9 @@ def _autodetect_product_profile(uploads, configs):
         grand = sum(by_code.values())
         for c, v in list(by_code.items()):
             if grand and abs(v - (grand - v)) / grand < 0.01:
+                by_code.pop(c)
+        for c in list(by_code):
+            if c in anchor_codes:
                 by_code.pop(c)
         codes.update(by_code.items())
     if not codes:
