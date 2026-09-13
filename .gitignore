@@ -41,6 +41,24 @@ RID Department Tasks*.pdf
 
 .env
 
+# Bundled demo datasets served by the webapp (/api/samples).  Keep them in
+# git so the hosted deployment can offer one-click sample runs alongside
+# user uploads (overrides the extension/`crafts/`/`Coffee/` rules above).
+!Samplefiles/
+!Samplefiles/Services_Flow/
+!Samplefiles/Services_Flow/**
+!Samplefiles/USA_Goods_Flow/
+!Samplefiles/USA_Goods_Flow/**
+!Samplefiles/Quartely_Performance/
+!Samplefiles/Quartely_Performance/**
+!Samplefiles/Product_Profiles/
+!Samplefiles/Product_Profiles/crafts/
+!Samplefiles/Product_Profiles/crafts/**
+!Samplefiles/Product_Profiles/Coffee/
+!Samplefiles/Product_Profiles/Coffee/**
+Samplefiles/**/~$*
+Samplefiles/**/._*
+
 # policy dashboard: ingested datasets + downloaded source files (not source code)
 policydata/data/
 policydata/incoming/

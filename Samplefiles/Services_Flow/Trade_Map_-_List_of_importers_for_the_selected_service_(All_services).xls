@@ -1,0 +1,841 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title></title><META http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body><table align="center"><tr><td colspan="6"><center><b>List of importers for the selected service </b></center></td></tr><tr><td colspan="6"><center>   Service: S - All services</center></td></tr></table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLegendTable" class="table_legend" border="0">
+	<tr>
+		<td>Source: ITC, UNCTAD, WTO trade in services database based on <a target="_blank" href="https://ec.europa.eu/eurostat">Eurostat</a>, <a target="_blank" href="https://www.imf.org">International Monetary Fund</a>, <a target="_blank" href="http://www.oecd.org">Organisation for Economic Co-operation and Development (OECD)</a> and relevant national statistical authorities statistics.</td>
+	</tr><tr>
+		<td></td>
+	</tr><tr>
+		<td>Data reported according to the BPM6 methodology are shown in blue.</td>
+	</tr><tr>
+		<td>The values shown in light green are estimated by UNCTAD and WTO.</td>
+	</tr>
+</table><table><tr><td> </td></tr></table><table id="ctl00_PageContent_GridLabelUnitTable" border="0">
+	<tr>
+		<td><span id="ctl00_PageContent_Label_Unit" class="Comment">Unit : US Dollar thousand</span></td>
+	</tr>
+</table><table><tr><td> </td></tr></table><div>
+	<table cellspacing="0" cellpadding="4" rules="all" border="1" id="ctl00_PageContent_MyGridView1" style="color:#002B54;border-color:#002B54;width:100%;border-collapse:collapse;">
+		<tr style="color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;">
+			<th scope="col">Importers</th><th scope="col">Imported value in 2020</th><th scope="col">Imported value in 2021</th><th scope="col">Imported value in 2022</th><th scope="col">Imported value in 2023</th><th scope="col">Imported value in 2024</th>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            United States of America
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">472161000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">572300000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">712033000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">761789000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">840877000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            China
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">381087719</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">426997952</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">465052708</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">551995107</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">610564772</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Germany
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">325951930</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">406784606</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">471098157</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">512711633</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">551938272</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ireland
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">404304299</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">369185291</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">381152008</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">418771014</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">467095879</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            United Kingdom
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">218715503</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">244359189</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">310004275</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">363099904</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">401504532</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Singapore
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">210206377</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">247566224</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">296708413</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">326272469</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">351122434</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            France
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">227275324</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">269101806</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">292492684</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">331512636</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">340459529</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Netherlands
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">217953747</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">249459565</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">276200758</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">289996354</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">304706055</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            India
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">116037458</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">137974001</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">176844444</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">246507722</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">269317651</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Japan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">198186300</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">209502100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">212607700</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">232797500</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">246165963</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Switzerland
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">139606867</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">159457731</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">162411831</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">192161921</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">214581409</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Italy
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">94490914</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">115782470</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">140130130</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">155390520</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">162823576</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Korea, Republic of
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">104265800</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">125235200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">138889900</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">152490000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">162654300</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Canada
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">104692000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">122097300</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">145197100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">152522100</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">160066201</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Belgium
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">120414883</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">137648500</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">146612803</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">159495773</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">159007103</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Luxembourg
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">98757702</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">123730012</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">115487844</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">120945302</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">130694194</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sweden
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">74338494</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">92326221</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">106708696</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">113172215</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">124980737</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Denmark
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">74265440</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">87192791</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">107009242</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">113109328</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">121234147</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Australia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">46925570</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">50150599</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">79888692</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">101453413</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">108621149</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            United Arab Emirates
+                                </td><td>61865214</td><td>76106195</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">96917495</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">109600000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">107178620</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Spain
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">61417027</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">77716683</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">89048952</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">95850139</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">105572143</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Brazil
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">52171020</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">58438819</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">81181422</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">88650905</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">103035975</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saudi Arabia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">56263945</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">73780729</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">82449139</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">97914139</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">101664647</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Hong Kong, China
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">54949499</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">61753707</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">63226236</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">78979299</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">90421689</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Austria
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">55990453</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">67429208</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">76456596</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">84372472</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">87974802</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Russian Federation
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">64748118</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">75934062</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">70874000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">76572000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">81326000</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Poland
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">40490146</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">50049006</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">57773453</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">66025215</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">75205469</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Thailand
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">45466142</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">57904706</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">62859003</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">64982441</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">73643648</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            European Union Nes
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">37491000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">39549000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">44530000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">64006000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">71162000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mexico
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">41724200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">52964800</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">63288300</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">70386914</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">67854549</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Norway
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">39440127</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">42136285</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">56494349</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">60195645</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">64213399</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Indonesia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">24771467</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">28685936</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">43164682</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">51282914</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">57511875</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Malaysia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">33380568</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">37079568</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">45244982</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">52196494</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">56370778</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Türkiye
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">23959000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">30025000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">40762000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">49323000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">53257000</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Finland
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">33111123</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">36823437</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">41482745</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">45221898</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">46745848</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Israel
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25097100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">33098800</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">42892467</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">41583094</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">39046378</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Czech Republic
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">21675655</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25032694</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">30466594</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">35527798</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">38036023</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Philippines
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">17955831</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19531184</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25226475</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">30148890</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">37398270</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Qatar
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">34697802</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">34340110</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">41000275</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">42745879</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">37085165</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Viet Nam
+                                </td><td>20330309</td><td>23227000</td><td>27478000</td><td>29126000</td><td>36193000</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Greece
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">17626941</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">26270200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">29875727</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">29434835</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">31219100</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Romania
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">16354992</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">21847106</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">24736778</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">28537741</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">30650579</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kuwait
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19179365</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">21087949</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">27544878</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">30402337</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">28077486</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Portugal
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">16030722</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">20565489</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">24559200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25875840</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">27700281</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Egypt
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18199463</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">23126083</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25398320</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22005662</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">27494400</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Hungary
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18085579</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">21337759</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">23352272</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25474162</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">27385561</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Iraq
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13816000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">15985800</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22246700</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25226700</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">25697800</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ukraine
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5712542</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7976456</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">27703000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">25346000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22782000</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Argentina
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12028020</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13288827</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">21236582</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22526462</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22598388</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cyprus
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12503849</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">16577288</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19294484</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19969842</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22041596</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Iran, Islamic Republic of
+                                </td><td>7677000</td><td>11877000</td><td>16593000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">20505986</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">21641326</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Chile
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13027000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18290700</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">23353100</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">20288098</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">20455840</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            South Africa
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11308197</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13590234</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18190068</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18586464</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19761493</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            New Zealand
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11541100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13902200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">17388800</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18630200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19453500</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Colombia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10149628</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">14190004</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18013231</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">16901672</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">18386211</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nigeria
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">19832515</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">16056904</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">18820276</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">17677018</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">17925790</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Malta
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1900614</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13009907</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">24158726</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">15654662</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">17199682</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Peru
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7920594</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10927193</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13927738</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13817882</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">15068566</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lithuania
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6778934</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9638387</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12088472</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13403082</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">14690501</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Morocco
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7128466</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8580868</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10762194</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12348507</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">14253256</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Slovakia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9234541</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10685113</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12500740</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12342465</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13064873</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kazakhstan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8445657</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8034559</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9518076</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12314653</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">13049384</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Serbia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5801196</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7572787</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9215802</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10796803</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12662032</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Oman
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8463005</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9191964</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11934573</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12242605</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">12523204</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bahrain
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9535106</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10531383</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11117287</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12062766</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12373936</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ghana
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12116810</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11456159</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10913393</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11150314</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11494708</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bangladesh
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7926620</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10866010</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">12189895</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11013743</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11312832</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Pakistan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7985384</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10587922</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10508787</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9731663</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11168574</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Uzbekistan
+                                </td><td>1221404</td><td>1767346</td><td>7334153</td><td>8170849</td><td>10464186</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Estonia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6386361</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9047490</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9106765</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9856520</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10344527</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Azerbaijan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5555391</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6013083</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7765216</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8619888</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10171724</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Slovenia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5793219</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7419212</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8161548</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8992695</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">9589891</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Algeria
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7439806</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6892093</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7920456</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8279348</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">9091618</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Angola
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5602547</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7050364</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">11296878</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8602980</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8492283</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Croatia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4137034</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5315235</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5934982</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7097447</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8351648</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bulgaria
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4737678</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5986106</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7412023</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7847454</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8202205</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Costa Rica
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3433500</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4269200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5782233</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6367820</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7293406</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Côte d'Ivoire
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3142308</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3923795</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4725161</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">5945825</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">7110056</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Belarus
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4847000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5695963</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5178568</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5893741</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6481623</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guatemala
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2826135</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4054028</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5385410</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5640642</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6444602</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Jordan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3095070</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4154366</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5677042</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6004366</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6377477</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lebanon
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4802389</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4937025</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6586995</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6627926</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6344470</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Dominican Republic
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3196900</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4407800</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5925100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5636500</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6336500</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Uruguay
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3450380</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3699727</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5097335</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6410168</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6205520</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ecuador
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3168875</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4496160</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6155107</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6143571</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6083957</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Macao, China
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3251374</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3987749</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3820849</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5436778</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6022765</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Latvia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3295236</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4266144</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5157832</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5754512</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5914127</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Panama
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3179932</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4117041</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5502404</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5907097</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5746170</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Iceland
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2188228</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2907254</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4163320</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4568941</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5003082</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kenya
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3321562</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4059699</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5262803</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4803416</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4922928</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sri Lanka
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3821498</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2952358</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2781802</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3692934</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4831470</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mongolia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2105155</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2489829</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3490156</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4170091</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4622890</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Uganda
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3110550</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3079710</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3131680</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3700370</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4360001</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tunisia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2117966</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2593163</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3211467</td><td></td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3955447</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Senegal
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2641519</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3789029</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3889879</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4075230</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3865306</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Armenia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1013767</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1373761</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2687937</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3369553</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3847153</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Albania
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1335326</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1996836</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2520183</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3450856</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3822341</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Georgia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1455905</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1822270</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3028876</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3618914</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3789329</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Honduras
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1816701</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2850484</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3780796</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3585549</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3657968</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Jamaica
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1714153</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3142711</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3216947</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3464230</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3457422</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Somalia
+                                </td><td>1325000</td><td>1758000</td><td>2079000</td><td>2774000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3418465</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kyrgyzstan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">604098</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">739770</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1483306</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2359023</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3376137</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            El Salvador
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1502337</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2297401</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2770688</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2659657</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3258974</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cambodia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2024672</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2089670</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2753636</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2870070</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3081773</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            South Sudan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2327220</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2152920</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2360145</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2191708</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2857000</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nepal
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1097428</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1564547</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1792254</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2050743</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2813996</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Trinidad and Tobago
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1765723</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2265792</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3188206</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2156873</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2684547</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Paraguay
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1252470</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1735545</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2423201</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2505099</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2541573</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tanzania, United Republic of
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1319030</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1607030</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2465411</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2329805</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2530319</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cameroon
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2108398</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2459068</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2523270</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2554404</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2519277</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bahamas
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1386811</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1678947</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1963424</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2198029</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2472835</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Namibia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">469774</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">588829</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1098699</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2236690</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2428924</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bolivia, Plurinational State of
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1728570</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1970773</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2733777</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2456287</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2348831</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mauritius
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1307417</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1412193</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2047044</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2131500</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2321021</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mozambique
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2789493</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2572109</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2594661</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2000289</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2112555</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Papua New Guinea
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1692302</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2062001</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2688785</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2169859</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2020473</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Macedonia, North
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1163464</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1476364</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1649709</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2069858</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2011984</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Maldives
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">740331</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1091978</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1588600</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1687967</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1885375</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Zambia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1079350</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1304928</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1884976</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1706176</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1829605</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Zimbabwe
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">769634</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">965428</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1436771</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1636602</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1802423</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Moldova, Republic of
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">880000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1162000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1371000</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1575372</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1775160</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mali
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2049099</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2433190</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2349212</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2336048</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1769754</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Brunei Darussalam
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1206229</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">895487</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1128138</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1641758</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1746205</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Burkina Faso
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1261807</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1415783</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1444400</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1450113</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1560157</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Madagascar
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">869651</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1092033</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1524007</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1479897</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1535292</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Benin
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">789857</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">930930</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">939929</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1540431</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1413368</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Palestine, State of
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1567242</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1781608</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2100017</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1993184</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1390510</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Niger
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1075913</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1207821</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1271980</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1219470</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1332893</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Aruba
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">781263</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">886502</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1058194</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1179536</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1327339</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Nicaragua
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">613000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">867100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1112500</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1138600</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1306000</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bosnia and Herzegovina
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">557163</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">741223</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">907728</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1123762</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1298857</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lao People's Democratic Republic
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">445477</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">252063</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">738377</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">947251</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1266983</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Botswana
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1264101</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1174850</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1054377</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1014994</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1264367</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Chad
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1098654</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1162310</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">883890</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1223741</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1255334</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bermuda
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">796485</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">839783</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">996242</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1083297</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1248001</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Montenegro
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">574525</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">758137</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1023563</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1162364</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1190619</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Curaçao
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">499590</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">426260</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">864327</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">934552</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1130807</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Seychelles
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">500410</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">798438</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1004200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1009754</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1065424</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Malawi
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">587223</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">594343</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">966034</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">998452</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1011918</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Fiji
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">497955</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">509571</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">754222</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">919916</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">995840</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Rwanda
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">519775</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">700782</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">877658</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">943800</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">990895</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tajikistan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">409961</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">531570</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">685324</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">748281</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">970652</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Eswatini
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">187689</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">236797</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">318595</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">488959</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">938326</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Suriname
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">562590</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">537923</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">640176</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">631291</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">920532</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Gabon
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1223783</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2090197</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2873826</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3110964</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">901002</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Mauritania
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">795836</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">792868</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">943009</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">955737</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">837324</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Djibouti
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">513523</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">613231</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">768536</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">787288</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">729630</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sudan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1665688</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1366377</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1589651</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">640733</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">683640</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Togo
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">437852</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">532786</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">563125</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">613710</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">643298</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Barbados
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">276650</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">371650</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">428100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">511100</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">610200</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saint Lucia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">229871</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">303040</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">454949</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">539601</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">597610</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Antigua and Barbuda
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">312311</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">342611</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">502420</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">529555</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">556628</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Grenada
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">198924</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">229123</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">266875</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">390075</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">428764</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Lesotho
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">388247</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">409392</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">447524</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">413783</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">414997</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Timor-Leste
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">845764</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">549453</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">701280</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">396375</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">404592</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Liberia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">372905</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">401451</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">433653</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">404633</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">393978</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sierra Leone
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">165000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">266634</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">288401</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">347528</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">385857</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Belize
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">170387</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">293364</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">349935</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">307792</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">362462</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Burundi
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">241262</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">287456</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">349227</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">372908</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">352215</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sint Maarten (Dutch part)
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">162758</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">227305</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">235098</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">330392</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">338032</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cabo Verde
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">218535</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">228607</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">247992</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">278312</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">298337</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Solomon Islands
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">152235</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">151005</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">218390</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">254153</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">248416</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saint Kitts and Nevis
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">155246</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">151969</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">231807</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">293982</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">238860</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Vanuatu
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">184702</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">225023</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">229590</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">168510</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">238833</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Bhutan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">225521</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">136161</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">209715</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">323392</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">227833</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Comoros
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">104393</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">162192</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">208370</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">206599</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">208528</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guinea-Bissau
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">132106</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">168288</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">179089</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">189453</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">201895</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Saint Vincent and the Grenadines
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">92017</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">101854</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">154713</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">186525</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">196315</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tonga
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">105558</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">83662</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">112972</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">149866</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">161065</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Gambia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">109164</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">118870</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">135522</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">150190</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">160904</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Dominica
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">114640</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">114624</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">119344</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">151703</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">156782</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Turks and Caicos Islands
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">55101</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">74988</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">100727</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">120110</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">133217</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Samoa
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">241499</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">236573</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">292953</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">360587</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">128030</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Anguilla
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">56902</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">60441</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">82299</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">89787</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">95535</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Kiribati
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">40787</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">56886</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">94982</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">101362</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">95486</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Sao Tome and Principe
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">43372</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">49142</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">54583</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">76494</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">83045</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Naoero
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">41526</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">47018</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">63290</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">61176</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">78895</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Palau
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">54766</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">43095</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">58477</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">56136</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">62236</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Tuvalu
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">29759</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">31525</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">33147</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">32445</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">36388</td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Montserrat
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">16622</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">22261</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">24692</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">26888</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">28305</td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Chinese Taipei
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">37457000</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">39567000</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Marshall Islands
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">62823</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">73147</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">53902</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">55588</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            New Caledonia
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1024334</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1079499</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1364788</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1184835</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Libya, State of
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5186300</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8449200</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">8206400</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">10054500</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guinea
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2586070</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1165770</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">906190</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3283150</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Guyana
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1991915</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2886621</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3828213</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">4953562</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Haiti
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">491552</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">632059</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">688905</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">588350</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            French Polynesia
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">318224</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">336342</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">499587</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">478149</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Faroe Islands
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">266564</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">321769</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">422588</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">379233</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Equatorial Guinea
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1054387</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">890393</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">809555</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">822757</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Ethiopia
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5407637</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">6526048</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7452196</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">7633268</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Eritrea
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">131059</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">182317</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Congo
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1042881</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1707424</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1615690</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2743993</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Congo, Democratic Republic of the
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">2691407</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">3947852</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5000296</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">5680141</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cook Islands
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">58833</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">59854</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cuba
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1537765</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1686738</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2122708</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3392823</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Afghanistan
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1105212</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1461595</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2238368</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2315361</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Andorra
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">505664</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">639337</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">654383</td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Myanmar
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">3265161</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2006342</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">2140457</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1688433</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Cayman Islands
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1276001</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1426273</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1678813</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">1803544</td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Central African Republic
+                                </td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">354901</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">296199</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">282264</td><td title="Data reported according to the BPM6 methodology" style="color:#218FFF;">246127</td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Turkmenistan
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">6289792</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4952735</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Yemen
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1397646</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">1327763</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:White;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Venezuela, Bolivarian Republic of
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">4540821</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">5608837</td><td></td><td></td><td></td>
+		</tr><tr align="right" style="background-color:#F7F6F3;font-size:80%;">
+			<td align="left" style="width:30%;">
+                            Syrian Arab Republic
+                                </td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">585671</td><td title="Value estimated by UNCTAD and WTO." style="color:MediumSeaGreen;">658489</td><td></td><td></td><td></td>
+		</tr>
+	</table>
+</div></body></html>

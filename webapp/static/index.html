@@ -940,6 +940,28 @@ input[type=file]::file-selector-button:hover {
     <div class="error-msg" id="error-msg"></div>
   </div>
 
+  <div class="card">
+    <div class="card-title"><i class="fas fa-flask"></i> Or try a bundled sample dataset</div>
+    <div class="row" style="gap:8px;">
+      <select id="sample" style="flex:1;min-width:0;">
+        <option value="">Select a sample dataset&hellip;</option>
+      </select>
+      <button id="load-sample" class="btn btn-secondary" type="button"
+              style="flex:0 0 auto;padding:8px 12px;">
+        <i class="fas fa-download"></i> Load sample
+      </button>
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
+      &nbsp;Sample files are pre-grouped by feature: <b>Goods</b> (US goods
+      files), <b>Services</b> (services files), <b>Quarterly</b> (KRA extracts)
+      and <b>Product</b> (crafts / coffee matrices). Loading one fills the upload
+      box with the matching files and selects that analysis type &mdash; then
+      just click <b>Generate Report</b>.
+    </div>
+    <div id="sample-summary" class="file-summary"></div>
+  </div>
+
   <div class="card log-card">
     <div class="card-title"><i class="fas fa-terminal"></i> Progress</div>
     <div id="log"><div class="log-empty"><i class="fas fa-inbox"></i>Waiting for files &mdash; pick your Excel files above, then hit Generate Report.</div></div>
@@ -988,6 +1010,9 @@ input[type=file]::file-selector-button:hover {
   const prepBtn = $('prep-checklist');
   const checklistBox = $('checklist');
   const promotionWrap = $('promotion-wrap');
+  const sampleSelect = $('sample');
+  const loadSampleBtn = $('load-sample');
+  const sampleSummary = $('sample-summary');
 
   const STAGES = [
     'Uploading files\u2026',
@@ -1139,6 +1164,96 @@ input[type=file]::file-selector-button:hover {
     }
   }
 
+  let sampleGroups = [];
+  let sampleFiles = [];
+
+  async function loadSamples() {
+    try {
+      const r = await fetch('/api/samples');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      sampleGroups = await r.json();
+      sampleSelect.innerHTML = '<option value="">Select a sample dataset&hellip;</option>';
+      for (const g of sampleGroups) {
+        const o = document.createElement('option');
+        o.value = g.id;
+        o.textContent = g.label + ' \u2014 ' + g.description + ' (' + g.files.length + ' files)';
+        sampleSelect.appendChild(o);
+      }
+      if (!sampleGroups.length) {
+        appendLog('No bundled sample datasets found on this server.', 'err');
+      }
+    } catch (e) {
+      appendLog('Could not load bundled sample datasets: ' + e, 'err');
+    }
+  }
+
+  loadSampleBtn.addEventListener('click', async () => {
+    const gid = sampleSelect.value;
+    if (!gid) {
+      showToast('error', 'No sample selected', 'Pick a bundled sample dataset first.');
+      return;
+    }
+    if (!sampleGroups.length) {
+      showError('Sample list not loaded yet \u2014 retry in a moment.');
+      return;
+    }
+    const g = sampleGroups.find(x => x.id === gid);
+    const btn = loadSampleBtn;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading&hellip;';
+    clearError();
+    try {
+      // Pre-select the analysis type this sample belongs to, so e.g. goods
+      // samples only ever feed the goods pipeline.
+      const radios = document.querySelectorAll('input[name="report_type"]');
+      let matched = false;
+      radios.forEach(r => {
+        if (r.value === g.report_type) {
+          r.checked = true;
+          r.dispatchEvent(new Event('change'));
+          matched = true;
+        }
+      });
+      if (!matched && radios.length) {
+        radios[0].checked = true;
+        radios[0].dispatchEvent(new Event('change'));
+      }
+      // Apply the recommended config when the relevant dropdown has it.
+      const cfgSel = g.report_type === 'product' ? productCfgSelect : cfgSelect;
+      if (g.config && [...cfgSel.options].some(o => o.value === g.config)) {
+        cfgSel.value = g.config;
+      }
+
+      // Stream every sample file from the server into the upload queue.
+      const dt = new DataTransfer();
+      for (const fn of g.files) {
+        const r = await fetch('/api/sample-file/' + encodeURIComponent(g.id) + '/' + encodeURIComponent(fn));
+        if (!r.ok) throw new Error(fn + ' \u2014 server answered ' + r.status);
+        const blob = await r.blob();
+        dt.items.add(new File([blob], fn, { type: blob.type || 'application/octet-stream' }));
+      }
+      sampleFiles = [...dt.files];
+      filesInput.files = dt.files;
+      filesInput.dispatchEvent(new Event('change'));
+      if (g.files.length) {
+        sampleSummary.innerHTML = '<div class="file-chips">' +
+          g.files.map(f => '<span class="file-chip" title="' + esc(f) +
+            '"><i class="fas fa-file-excel"></i><span>' + esc(shortenName(f)) +
+            '</span></span>').join('') + '</div>';
+        sampleSummary.classList.add('show');
+      }
+      showToast('success', 'Sample loaded', g.label + ' \u2014 ' + g.files.length +
+        ' files ready. Click Generate Report.');
+    } catch (e) {
+      const msg = String(e);
+      showError(msg);
+      showToast('error', 'Could not load sample', msg);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-download"></i> Load sample';
+    }
+  });
+
   async function loadProductProfiles() {
     try {
       const r = await fetch('/api/product-profiles');
@@ -1266,7 +1381,12 @@ input[type=file]::file-selector-button:hover {
 
   $('run').addEventListener('click', async () => {
     clearError();
-    const files = $('files').files;
+    let files = $('files').files;
+    if (!files.length && sampleFiles.length) {
+      const dt = new DataTransfer();
+      sampleFiles.forEach(f => dt.items.add(f));
+      files = $('files').files = dt.files;
+    }
     if (!files.length) {
       showError('Please select files before generating the report.');
       appendLog('Please choose files first.', 'err');
@@ -1374,6 +1494,7 @@ input[type=file]::file-selector-button:hover {
 
   loadConfigs();
   loadProductProfiles();
+  loadSamples();
 </script>
 </body>
 </html>

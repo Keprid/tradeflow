@@ -60,6 +60,7 @@ WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
 JOBS_DIR = WEBAPP_DIR / "jobs"
 CONFIG_DIR = BASE_DIR / "config"
+SAMPLE_DIR = BASE_DIR / "Samplefiles"
 JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
@@ -620,6 +621,134 @@ def api_goods_partner_setup(partner: str = "", year: int = 0):
     }
 
 
+# ---------------------------------------------------------------------------
+# Bundled sample datasets (Samplefiles/), grouped by app feature.
+# ---------------------------------------------------------------------------
+_SAMPLE_LABELS = {
+    "services": "Services Trade Flow",
+    "quarterly": "Quarterly Performance",
+    "product": "Product Profile",
+    "goods": "Goods Trade Flow",
+}
+
+
+def _iter_spreadsheets(directory):
+    """Yield every spreadsheet in a directory, skipping Office lock files
+    (``~$``), hidden files and anything whose name is not a real upload."""
+    if not directory.is_dir():
+        return
+    for f in sorted(directory.iterdir()):
+        if not f.is_file():
+            continue
+        low = f.name.lower()
+        if low.startswith(("~$", ".")):
+            continue
+        if not low.endswith(ALLOWED_EXT):
+            continue
+        yield f
+
+
+def _sniff_sample_mode(files):
+    """Map sample filenames to the app feature they describe.
+
+    The services / quarterly / product keywords are tested first because some
+    of them overlap the generic goods markers (e.g. ``kenyas-imports-from``
+    also appears in product-profile matrix names).
+    """
+    low = [f.lower() for f in files]
+    if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in low):
+        return "services"
+    if any(any(k in n for k in QUARTERLY_RAW_KEYWORDS) for n in low):
+        return "quarterly"
+    if any(any(k in n for k in PRODUCT_RAW_KEYWORDS) for n in low):
+        return "product"
+    if any(any(k in n for k in RAW_KEYWORDS + CLASSIC_RAW_KEYWORDS) for n in low):
+        return "goods"
+    return "goods"
+
+
+def _product_sample_config(child):
+    """Pick the product-profile config a sample subfolder belongs to.
+
+    Derived directly from the folder name (""crafts"" -> product_profile_crafts,
+    ""Coffee"" -> product_profile_coffee), so the stored sample set always
+    builds without relying on value-based family auto-detection (which some
+    Trade Map baskets do not satisfy).
+    """
+    base = re.sub(r"[^a-z0-9]+", "_", (child or "").lower()).strip("_")
+    if base:
+        candidate = CONFIG_DIR / f"product_profile_{base}.json"
+        if candidate.exists():
+            return candidate.stem
+    return "__auto__"
+
+
+def _scan_sample_groups():
+    """Enumerate the bundled sample datasets under ``Samplefiles/``.
+
+    Every directory that directly holds spreadsheets becomes a sample group;
+    nested folders (e.g. ``Product_Profiles/crafts`` and
+    ``Product_Profiles/Coffee``) are each their own group.  Each group is
+    pinned to the report type its filenames describe, so goods samples are
+    only ever offered for the goods pipeline, services samples for the
+    services pipeline, and so on.
+    """
+    groups = []
+
+    def _walk(directory, trail):
+        for child in sorted(directory.iterdir()):
+            if not child.is_dir() or child.name.startswith((".", "~$")):
+                continue
+            names = [f.name for f in _iter_spreadsheets(child)]
+            if names:
+                mode = _sniff_sample_mode(names)
+                config = "services_world" if mode == "services" else (
+                    _product_sample_config(child.name) if mode == "product"
+                    else "__auto__")
+                groups.append({
+                    "id": ("_".join(trail + [child.name]) if trail
+                           else child.name),
+                    "label": child.name.replace("_", " ").strip(),
+                    "feature": mode,
+                    "report_type": mode,
+                    "description": _SAMPLE_LABELS.get(mode, mode),
+                    "dir": str(child.relative_to(SAMPLE_DIR)).replace(os.sep, "/"),
+                    "config": config,
+                    "files": names,
+                })
+            _walk(child, trail + [child.name])
+
+    if SAMPLE_DIR.is_dir():
+        _walk(SAMPLE_DIR, [])
+    return [g for g in groups if g["files"]]
+
+
+@app.get("/api/samples")
+def api_samples():
+    """List the bundled sample datasets, grouped by the app feature they demo."""
+    return JSONResponse(_scan_sample_groups())
+
+
+@app.get("/api/sample-file/{group_id}/{filename:path}")
+def api_sample_file(group_id: str, filename: str):
+    """Stream a single file of a bundled sample dataset.
+
+    The filename must be an exact member of the group's file list (plain
+    basenames only), which also makes path-traversal impossible.
+    """
+    group = next((g for g in _scan_sample_groups() if g["id"] == group_id),
+                 None)
+    if group is None:
+        raise HTTPException(404, f"Sample dataset '{group_id}' not found")
+    if filename not in group["files"]:
+        raise HTTPException(
+            404, f"File '{filename}' not found in sample dataset '{group_id}'")
+    p = (SAMPLE_DIR / group["dir"] / filename).resolve()
+    if not p.is_file() or SAMPLE_DIR.resolve() not in p.parents:
+        raise HTTPException(404, "File not found")
+    return FileResponse(str(p), filename=os.path.basename(p))
+
+
 def _detect_mode(uploads_dir, report_type="goods"):
     names = [f.lower() for f in os.listdir(uploads_dir) if f.lower().endswith(ALLOWED_EXT)]
     if not names:
@@ -655,6 +784,8 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Uploaded files: {uploaded}\n"
             f"Expected ITC matrix filenames containing any of: {kw_list}")
     if report_type == "services":
+        if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
+            return "services_raw", ""
         uploaded = ", ".join(sorted(names))
         kw_list = ", ".join(SERVICE_RAW_KEYWORDS)
         return None, (
