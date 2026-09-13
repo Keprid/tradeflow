@@ -128,7 +128,7 @@ SHORT_NAMES = {
 AFRICA_COUNTRIES = {
     "algeria", "angola", "benin", "botswana", "burkina faso",
     "burundi", "cabo verde", "cape verde", "cameroon", "central african republic",
-    "chad", "comoros", "congo", "congo, democratic republic of the",
+    "chad", "comoros", "congo", "congo, democratic republic of the", "dr congo",
     "democratic republic of the congo", "congo, republic of", "republic of the congo",
     "cote d'ivoire", "côte d'ivoire", "ivory coast", "djibouti", "egypt",
     "equatorial guinea", "eritrea", "eswatini", "swaziland", "ethiopia", "gabon",

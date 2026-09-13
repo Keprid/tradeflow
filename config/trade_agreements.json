@@ -1,0 +1,104 @@
+{
+  "note": "Membership lists by trade agreement, as featured in the 2024 Kenya trade policy review. Names are written to match the partner-country labels used in ITC Trade Map downloads; the 'aliases' entries cover variant spellings (e.g. 'United Republic of Tanzania'). Kenya is the reporting country and is therefore excluded from every bloc. EAC is a subset of COMESA, and both are subsets of AfCFTA, so the same trade is counted under each of those market-access umbrellas.",
+  "agreements": [
+    {
+      "id": "eac",
+      "name": "East African Community (EAC) Customs Union",
+      "short": "EAC",
+      "kind": "regional",
+      "blurb": "Preferential tariff rates inside the EAC Customs Union (Burundi, Kenya, Rwanda, South Sudan, Democratic Republic of the Congo, Somalia, Uganda and Tanzania).",
+      "members": [
+        "Burundi",
+        "Rwanda",
+        "South Sudan",
+        "Uganda",
+        "Somalia",
+        {"name": "Tanzania", "aliases": ["United Republic of Tanzania"]},
+        {"name": "Democratic Republic of the Congo", "aliases": ["DR Congo", "Congo", "Congo, Democratic Republic of the"]}
+      ]
+    },
+    {
+      "id": "comesa",
+      "name": "Common Market for Eastern and Southern Africa (COMESA)",
+      "short": "COMESA",
+      "kind": "regional",
+      "blurb": "Free Trade Area covering 21 states across eastern and southern Africa, headquartered in Lusaka, Zambia.",
+      "members": [
+        "Burundi",
+        "Comoros",
+        "Djibouti",
+        "Egypt",
+        "Eritrea",
+        "Ethiopia",
+        "Libya",
+        "Madagascar",
+        "Malawi",
+        "Mauritius",
+        "Rwanda",
+        "Seychelles",
+        "Somalia",
+        "Sudan",
+        "Tunisia",
+        "Uganda",
+        "Zambia",
+        "Zimbabwe",
+        {"name": "Democratic Republic of the Congo", "aliases": ["DR Congo", "Congo"]},
+        {"name": "Eswatini", "aliases": ["Swaziland"]}
+      ]
+    },
+    {
+      "id": "afcfta",
+      "name": "African Continental Free Trade Area (AfCFTA)",
+      "short": "AfCFTA",
+      "kind": "africa",
+      "africa": true,
+      "blurb": "Single continental market of roughly 1.3 billion people across African Union members; every African market except Kenya is counted."
+    },
+    {
+      "id": "agoa",
+      "name": "African Growth and Opportunity Act (AGOA) - United States",
+      "short": "AGOA",
+      "kind": "preferential",
+      "blurb": "Duty-free access to the US market for qualifying Kenyan apparel and agricultural exports (reauthorised to 31 December 2028), framed by the US-EAC and US-COMESA TIFAs.",
+      "members": [
+        {"name": "United States of America", "aliases": ["United States", "USA", "U.S.A.", "United States (USA)"]}
+      ]
+    },
+    {
+      "id": "eu_epa",
+      "name": "EU-UK Economic Partnership Agreement (EPA) / ACP Markets",
+      "short": "EU-EPA",
+      "kind": "preferential",
+      "blurb": "Duty-reduced, quota-free access for Kenyan exports to the European Union under the 2023 EPA (plus the UK-Kenya EPA and the ACP/Cotonou successor preferences).",
+      "members": [
+        "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Denmark",
+        "Estonia", "Finland", "France", "Germany", "Greece", "Hungary",
+        "Ireland", "Italy", "Latvia", "Lithuania", "Luxembourg", "Malta",
+        "Netherlands", "Poland", "Portugal", "Romania", "Slovakia",
+        "Slovenia", "Spain", "Sweden",
+        {"name": "Czech Republic", "aliases": ["Czechia"]},
+        {"name": "United Kingdom", "aliases": ["UK", "United Kingdom (UK)"]}
+      ]
+    },
+    {
+      "id": "gsp",
+      "name": "Generalized System of Preferences (GSP) Markets",
+      "short": "GSP",
+      "kind": "preferential",
+      "blurb": "Preferential duty treatment in developed partners outside the EU and the US: Australia, Canada, Japan, New Zealand, Norway and Switzerland. (EU and AGOA/US are captured separately above.)",
+      "members": ["Australia", "Canada", "Japan", "New Zealand", "Norway", "Switzerland"]
+    },
+    {
+      "id": "bilaterals",
+      "name": "Bilateral Trade Agreement Partners",
+      "short": "Bilaterals",
+      "kind": "bilateral",
+      "blurb": "Countries with signed bilateral trade agreements with Kenya that are not already captured by the EAC, COMESA, AfCFTA, EU-EPA or AGOA groupings above.",
+      "members": [
+        "Argentina", "Bangladesh", "China", "India", "Iraq", "Lesotho",
+        "Liberia", "Nigeria", "Pakistan", "Russia", "Thailand",
+        {"name": "Korea, Republic of", "aliases": ["South Korea", "Republic of Korea", "Korea"]}
+      ]
+    }
+  ]
+}

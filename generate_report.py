@@ -215,7 +215,11 @@ def find_excel_files(excel_dir):
             found["table6"] = path
         elif "table 7" in low:
             found["table7"] = path          # optional: bilateral alignment
-        elif "product by partner" in low or "table 8" in low:
+        elif "table 8" in low and "export" in low:
+            found["kenya_exports_by_partner"] = path  # optional: Kenya by partner
+        elif "table 8" in low and "import" in low:
+            found["kenya_imports_by_partner"] = path  # optional: Kenya by partner
+        elif "product by partner" in low:
             found["product_partner"] = path  # optional: per-product origin detail
         elif "balance" in low or "figure 1" in low:
             found["balance"] = path
@@ -536,6 +540,18 @@ class Analysis:
                 self.set_africa_import_share(self.load_africa_import_share(pp))
         except Exception:
             self.set_africa_import_share({})
+        # Optional Trade Agreements analysis, driven by the Kenya-reported
+        # 'by partner' downloads surfaced as Table 8 (exports + imports).
+        self.trade_agreements = None
+        if "kenya_exports_by_partner" in files and "kenya_imports_by_partner" in files:
+            try:
+                import trade_agreements as _ta
+                _exp8 = parse_rank_table(files["kenya_exports_by_partner"])
+                _imp8 = parse_rank_table(files["kenya_imports_by_partner"])
+                self.trade_agreements = _ta.build(_exp8, _imp8, year=self.year)
+            except Exception as _e:
+                print(f"[WARN] Trade Agreements analysis skipped: {_e}",
+                      file=sys.stderr)
         if self.table1["years"]:
             self.years = self.table1["years"]
         if self.year not in self.years:
@@ -1222,6 +1238,96 @@ def build_narratives(a: Analysis, cfg):
             f"Kenya's bilateral imports from {narrative_ref(c['name'])} recorded a "
             f"{_cagri*100:,.1f}% compound annual growth rate over the series.")
     t["fig3_note"] = " ".join(note_i) if note_i else ""
+
+    # ---- Trade Agreements (optional, Kenya-reported by-partner data) -------
+    _ta = getattr(a, "trade_agreements", None)
+    t["trade_agreements"] = []
+    t["trade_agreements_intro"] = None
+    t["trade_agreements_note"] = ""
+    t["trade_agreements_rows"] = _ta.get("rows") if _ta else None
+    if _ta:
+        _yta = _ta["year"]
+        _rows = _ta["rows"]
+
+        def _ta_fmt(v, dec=1):
+            return (usd_auto(v, dec=dec, unit="billion")
+                    if v is not None else "n/a")
+
+        t["trade_agreements_intro"] = (
+            f"Kenya is a signatory to a range of regional and bilateral trade "
+            f"arrangements - the WTO, the African Continental Free Trade Area "
+            f"(AfCFTA), COMESA, the EAC Customs Union, the US AGOA/TIFA frameworks, "
+            f"the EU-UK Economic Partnership Agreement (EPA), Generalised System of "
+            f"Preferences (GSP) schemes and several bilateral agreements. Using "
+            f"Kenya-reported partner-level trade data, this section measures "
+            f"Kenya's performance against the markets featured in these "
+            f"agreements in {_yta}.")
+
+        _eb, _ib = _ta["exports_share"], _ta["imports_share"]
+        t["trade_agreements"].append(
+            f"Exports to the markets covered by the agreements below reached "
+            f"USD {_ta_fmt(_ta['exports_matched'])} in {_yta}, {pct(_eb)} of Kenya's "
+            f"goods exports to the world, while imports from those markets "
+            f"totalled USD {_ta_fmt(_ta['imports_matched'])} "
+            f"({pct(_ib)} of Kenya's imports).")
+
+        _exc = [r for r in _rows if r["exports"] is not None]
+        _exc.sort(key=lambda r: r["exports"], reverse=True)
+        for _r in _exc[:4]:
+            _top = (", ".join(p["name"] for p in _r["top_exports"][:2])
+                    or "n/a")
+            t["trade_agreements"].append(
+                f"{_r['short']} markets absorbed USD {_ta_fmt(_r['exports'])} "
+                f"({pct(_r['exports_share'])}) of Kenya's exports in {_yta}, "
+                f"led by {_top}.")
+
+        _af = next((r for r in _rows if r.get("africa")), None)
+        if _af and _af.get("exports") is not None:
+            t["trade_agreements"].append(
+                f"Across the continent, AfCFTA markets - East African neighbours "
+                f"and wider Africa - took USD {_ta_fmt(_af['exports'])} "
+                f"({pct(_af['exports_share'])}) of Kenya's exports and supplied "
+                f"USD {_ta_fmt(_af['imports'])} of Kenya's imports in {_yta}, "
+                f"underscoring the weight of continental integration.")
+
+        _imc = [r for r in _rows if r["imports"] is not None]
+        _imc.sort(key=lambda r: r["imports"], reverse=True)
+        if _imc:
+            _r0 = _imc[0]
+            _topi = (", ".join(p["name"] for p in _r0["top_imports"][:2])
+                     or "n/a")
+            t["trade_agreements"].append(
+                f"On imports, {_r0['short']} markets were the leading source "
+                f"bloc, supplying USD {_ta_fmt(_r0['imports'])} "
+                f"({pct(_r0['imports_share'])}) of Kenya's imports in {_yta}, "
+                f"mainly from {_topi}.")
+
+        _bal = [r for r in _rows if r["balance"] is not None and r["balance"] != 0]
+        if _bal:
+            _sur = max(_bal, key=lambda r: r["balance"])
+            _def = min(_bal, key=lambda r: r["balance"])
+            t["trade_agreements"].append(
+                f"Kenya recorded its largest trade surplus among these blocs "
+                f"with {_sur['short']} (USD {_ta_fmt(abs(_sur['balance']))}), "
+                f"while its largest deficit was with {_def['short']} "
+                f"(USD {_ta_fmt(abs(_def['balance']))}).")
+
+        _cov = None
+        if _ta["exports_total"]:
+            _cov = _ta["exports_matched"] / _ta["exports_total"]
+        t["trade_agreements_note"] = (
+            f"Notes: EAC is a subset of COMESA and both are nested within "
+            f"AfCFTA, so the same flow is counted under each agreement's "
+            f"market-access umbrella. Markets outside the listed agreements "
+            f"accounted for {pct(1 - _cov) if _cov is not None else 'n/a'} of "
+            f"Kenya's exports by value in {_yta}.")
+        _gaps = [r for r in _rows if r.get("missing")]
+        if _gaps:
+            _det = "; ".join(
+                f"{r['short']} (missing: {', '.join(r['missing'][:3])})"
+                for r in _gaps)
+            t["trade_agreements_note"] += (
+                f" Partner data was not found for some members: {_det}.")
 
     return t
 
@@ -1969,6 +2075,43 @@ class ReportBuilder:
         self._fit_table_on_page(table)
         return table
 
+    def add_trade_agreement_table(self, rows, year):
+        """Table 8: Kenya's trade performance by trade agreement bloc.
+
+        ``rows`` holds one entry per agreement (from the Trade Agreements
+        analysis); values are in USD billions.
+        """
+        n = len(rows)
+        table = self.doc.add_table(rows=1 + n, cols=6)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._set_table_widths(table, [3146, 902, 2316, 1658, 2142, 1552])
+        head = ["Agreement / market-access bloc", "Members",
+                "Kenya exports (USD B)", "Share of exports",
+                "Kenya imports (USD B)", "Trade balance (USD B)"]
+        for ci, h in enumerate(head):
+            self._cell_text(table.cell(0, ci), h, bold=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        for ri, r in enumerate(rows, 1):
+            members = "All Africa" if r.get("africa") else str(r["partners"])
+            self._cell_text(table.cell(ri, 0), r["name"], wrap=True)
+            self._cell_text(table.cell(ri, 1), members,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 2),
+                            num(r["exports"]) if r["exports"] is not None else "n/a",
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 3),
+                            pct(r["exports_share"]) if r["exports_share"] is not None else "n/a",
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 4),
+                            num(r["imports"]) if r["imports"] is not None else "n/a",
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 5),
+                            num(r["balance"]) if r["balance"] is not None else "n/a",
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
+        return table
+
     def add_africa_focus_table(self, a: Analysis, table=None):
         """Compact Table showing the partner's exports destined to Africa,
         with the Kenya row highlighted.  Backs the 'Africa / Kenya' insight."""
@@ -2240,6 +2383,17 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     c = cfg["country"]
     rep = cfg["report"]
     Y = a.year
+    # The Trade Agreements section (optional) is inserted as Section 4 when
+    # Kenya-reported by-partner data is available; the later section numbers
+    # shift accordingly.
+    _ta = getattr(a, "trade_agreements", None)
+    _ta_rows = (_ta or {}).get("rows") or []
+    has_ta = bool(_ta_rows) and any(
+        (r.get("exports") is not None) or (r.get("imports") is not None)
+        for r in _ta_rows)
+    sec_exp = "5" if has_ta else "4"
+    sec_map = "6" if has_ta else "5"
+    sec_facts = "7" if has_ta else "6"
 
     b = ReportBuilder(cfg, narr)
     b.a = a
@@ -2421,23 +2575,53 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
         italic=True)
     b.page_break()
 
-    # ============================== SECTION 4 ===============================
-    b.add_heading(f"4. KENYA'S EXPORT POTENTIAL ON {c['title'].upper()} MARKET")
+    # ============== SECTION 4 (optional): TRADE AGREEMENTS ==================
+    if has_ta:
+        _ta = a.trade_agreements
+        _yta = _ta["year"]
+        _rows = narr["trade_agreements_rows"] or []
+        b.add_heading("4. KENYA'S TRADE PERFORMANCE UNDER TRADE AGREEMENTS")
+        if narr.get("trade_agreements_intro"):
+            b.add_para(narr["trade_agreements_intro"])
+        b.add_table_caption(
+            f"Figure 4: Kenya's Exports and Imports by Trade Agreement in {_yta}")
+        b.add_word_chart(
+            "bar",
+            f"Kenya's Exports and Imports under Trade Agreements "
+            f"(USD Billion, {_yta})",
+            [r["short"] for r in _rows],
+            [("Kenya exports", [r["exports"] for r in _rows]),
+             ("Kenya imports", [r["imports"] for r in _rows])],
+            width_in=6.3, height_in=4.2, name="Figure 4 - Trade Agreements")
+        b.add_source()
+        b.add_table_caption(
+            f"Table 8: Kenya's Trade Performance by Trade Agreement in {_yta}")
+        b.add_trade_agreement_table(_rows, _yta)
+        b.add_source()
+        for line in narr.get("trade_agreements", []):
+            b.add_bullet(line)
+        if narr.get("trade_agreements_note"):
+            b.add_para(narr["trade_agreements_note"], italic=True, size=9)
+        b.page_break()
+
+    # ============================== SECTION 4/5 =============================
+    b.add_heading(f"{sec_exp}. KENYA'S EXPORT POTENTIAL ON {c['title'].upper()} MARKET")
     ep = cfg.get("export_potential", {}) or {}
-    b.add_table_caption(f"Figure 4: Kenya's products with export potential to {c['name']}.")
+    fig_exp = "Figure 5" if has_ta else "Figure 4"
+    b.add_table_caption(f"{fig_exp}: Kenya's products with export potential to {c['name']}.")
     img = resolve_path(cfg_path, ep.get("image"))
     if img:
         b.add_figure(img)
     else:
-        b.add_para("[Placeholder: insert ITC Export Potential chart for "
+        b.add_para(f"[Placeholder: insert ITC Export Potential chart for "
                    f"{c['name']} in config 'export_potential.image']", italic=True, color=RGBColor(0x60, 0x60, 0x60))
     b.add_source()
     for para in ep.get("paragraphs", []):
         b.add_bullet(para)
     b.page_break()
 
-    # ============================== SECTION 5 ===============================
-    b.add_heading(f"5. Annex 1: The Map of {c['name']}")
+    # ============================== SECTION 5/6 =============================
+    b.add_heading(f"{sec_map}. Annex 1: The Map of {c['name']}")
     mp = cfg.get("map", {}) or {}
     img = resolve_path(cfg_path, mp.get("image"))
     if img:
@@ -2448,8 +2632,8 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     b.add_source(f"Source: {mp.get('source', 'Google map')}")
     b.page_break()
 
-    # ============================== SECTION 6 ===============================
-    b.add_heading("6. Annex II: Quick Facts")
+    # ============================== SECTION 6/7 =============================
+    b.add_heading(f"{sec_facts}. Annex II: Quick Facts")
     b.add_quick_facts(cfg.get("quick_facts", []))
     b.page_break()
 

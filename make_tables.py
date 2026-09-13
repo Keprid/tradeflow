@@ -263,6 +263,18 @@ def find_source_files(excel_dir):
         if not is_spreadsheet(fname):
             continue
         low = fname.lower().replace(" ", "_")
+        # Kenya-reported 'by partner' downloads (''kenyas-exports-to-world-
+        # by-importer'' / ''kenyas-imports-from-world-by-exporter'') are an
+        # OPTIONAL pair that drives the Trade Agreements analysis (Table 8).
+        # They must be claimed before the partner-market roles below, whose
+        # keywords ('exports-to-world by-importer', etc.) they also contain.
+        if low.startswith("kenyas-"):
+            if "exports-to-world" in low and "by-importer" in low:
+                found.setdefault("kenya_exports_by_partner", fname)
+                continue
+            if "imports-from-world" in low and "by-exporter" in low:
+                found.setdefault("kenya_imports_by_partner", fname)
+                continue
         if "bilateral_trade_between_kenya_and" in low:
             bilaterals.append(fname)
         elif "list_of_supplying_markets_for_a_product_imported" in low \
@@ -1685,6 +1697,35 @@ def generate_tables(excel_dir, out_dir, top_n):
     set_widths(ws, BALANCE_WIDTHS)
     out["balance"] = bal_path
     _finalize(ws, out["balance"], cache)
+
+    # ---- Table 8 (optional): Kenya's exports/imports by partner market ----
+    # Only present when the Kenya-reported 'by partner' downloads are among
+    # the uploaded files; they drive the Trade Agreements analysis at report
+    # time.  Kept out of the required set, so the report still builds when
+    # they are not supplied.
+    if "kenya_exports_by_partner" in files and "kenya_imports_by_partner" in files:
+        for role, is_exports, fname_out, title in (
+                ("kenya_exports_by_partner", True,
+                 "Table 8 Kenya Exports by Partner.xlsx",
+                 "Kenya's Exports to World by Partner Market"),
+                ("kenya_imports_by_partner", False,
+                 "Table 8 Kenya Imports by Partner.xlsx",
+                 "Kenya's Imports from World by Partner Market")):
+            rows, ycols, years, labels = parse_source(files[role])
+            total, items = extract_markets(rows, ycols)
+            d8 = prepare({"total": total, "items": items}, years, TOP_MARKETS,
+                         1e6, is_markets=True)
+            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 8"
+            cache = []
+            write_market_table(ws, d8, "Kenya", is_exports=is_exports,
+                               unit_row=True, kenya_highlight=False,
+                               row1_label="Table 8:", row1_title=title)
+            set_widths(ws, {"A": 7, "B": 40, "C": 12, "D": 12, "E": 12,
+                            "F": 12, "G": 12, "H": 12})
+            out_key = "t8e" if is_exports else "t8i"
+            out[out_key] = os.path.join(out_dir, fname_out)
+            _finalize(ws, out[out_key], cache)
+        print("      Table 8 (Kenya by partner) written")
 
     # ---- Combined workbook: all seven sheets in one file -------------------
     wb_all = openpyxl.Workbook()
