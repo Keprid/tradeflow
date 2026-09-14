@@ -120,6 +120,17 @@ def pct(share, decimals=1):
     return f"{share * 100:.{decimals}f}%"
 
 
+# Rich-text markers used by the narrative builders.  ``**...**`` renders a
+# bold run; ``^{...}`` renders a superscript run (used for ordinal suffixes
+# such as 34^{th}).  Text without markers falls through to a single run so
+# non-narrative paragraphs are untouched.
+_RICH_TOKEN = re.compile(r"(\*\*[^*\n]+\*\*|\^\{[^}]*\})")
+
+
+def rich_text_present(text):
+    return bool(text) and ("**" in text or "^{" in text)
+
+
 def _title_case(text):
     """Title-case a caption/title (delegates to the shared helper)."""
     return title_case(text)
@@ -1515,6 +1526,40 @@ class ReportBuilder:
         if color is not None:
             run.font.color.rgb = color
 
+    @staticmethod
+    def _has_rich(text):
+        return rich_text_present(text)
+
+    def _add_narrative_run(self, p, text, size=None, bold=None, italic=None,
+                           color=None):
+        r = p.add_run(text)
+        self._style_run(r, size=size, bold=bold, italic=italic, color=color)
+        return r
+
+    def _emit_rich_text(self, p, text, size=None, bold=None, italic=None,
+                        color=None):
+        """Render ``text`` honouring the ``**bold**`` and ``^{superscript}``
+        markers (see ``_RICH_TOKEN``); plain text is a single run."""
+        if not self._has_rich(text):
+            self._add_narrative_run(p, text, size=size, bold=bold,
+                                    italic=italic, color=color)
+            return
+        for piece in _RICH_TOKEN.split(text):
+            if not piece:
+                continue
+            if piece.startswith("**") and piece.endswith("**") \
+                    and len(piece) > 4:
+                self._add_narrative_run(p, piece[2:-2], size=size, bold=True,
+                                        italic=italic, color=color)
+            elif piece.startswith("^{") and piece.endswith("}"):
+                r = self._add_narrative_run(p, piece[2:-1], size=size,
+                                            bold=bold, italic=italic,
+                                            color=color)
+                r.font.superscript = True
+            else:
+                self._add_narrative_run(p, piece, size=size, bold=bold,
+                                        italic=italic, color=color)
+
     def add_letterhead(self):
         """KEPROBA letterhead in the running header of every page.
 
@@ -1542,8 +1587,8 @@ class ReportBuilder:
         if space_before is not None:
             p.paragraph_format.space_before = Pt(space_before)
         if text:
-            r = p.add_run(text)
-            self._style_run(r, size=size, bold=bold, italic=italic, color=color)
+            self._emit_rich_text(p, text, size=size, bold=bold, italic=italic,
+                                 color=color)
         return p
 
     def add_background_para(self, segments):
@@ -1574,8 +1619,7 @@ class ReportBuilder:
             return None
         p = self.doc.add_paragraph(style="List Bullet")
         p.paragraph_format.space_after = Pt(8)
-        r = p.add_run(text)
-        self._style_run(r)
+        self._emit_rich_text(p, text)
         return p
 
     def add_table_caption(self, text):
@@ -1592,6 +1636,8 @@ class ReportBuilder:
         return p
 
     def add_source(self, text=SRC):
+        if text and not text.lower().startswith("source"):
+            text = "Source: %s" % text
         p = self.doc.add_paragraph()
         r = p.add_run(text)
         self._style_run(r, italic=True, size=10)

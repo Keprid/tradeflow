@@ -768,11 +768,12 @@ def _latest_year(row, rev):
 
 
 def ordinal_list(names, sep=", ", last=" and "):
-    if not names:
+    items = list(names)
+    if not items:
         return ""
-    if len(names) == 1:
-        return names[0]
-    return sep.join(names[:-1]) + last + names[-1]
+    if len(items) == 1:
+        return items[0]
+    return sep.join(items[:-1]) + last + items[-1]
 
 
 def _shares(rows, years):
@@ -888,7 +889,10 @@ def margin_decomposition(rows, start, rev):
     """
     tracked = {}
     for r in rows:
-        key = r.get("label") or r.get("code")
+        if r.get("label") and r.get("code"):
+            key = "%s (%s)" % (r["label"], r["code"])
+        else:
+            key = r.get("label") or r.get("code")
         if not key:
             continue
         tracked[key] = (r["years"].get(start) or 0.0,
@@ -1067,15 +1071,16 @@ class ProfileBuilder(ReportBuilder):
         self.tcap = 0
         self.fcap = 0
 
+    # The source line must sit *below* the table / figure body.  These
+    # methods therefore emit the caption only; every table / figure builder
+    # calls ``add_source`` last, after the body has been written.
     def _next_table(self, title, source):
         self.tcap += 1
         self.add_table_caption("Table %d: %s" % (self.tcap, title))
-        self.add_source(source)
 
     def _next_figure(self, title, source):
         self.fcap += 1
         self.add_table_caption("Figure %d: %s" % (self.fcap, title))
-        self.add_source(source)
 
     def add_value_table(self, first_col_header, rows, years, share_header,
                         title, source, total_label=None, rank=False,
@@ -1164,6 +1169,7 @@ class ProfileBuilder(ReportBuilder):
         self._style_table(table, rank=rank, label_cols=label_cols, n=n,
                           total_label=total_label)
         self._fit_table_on_page(table)
+        self.add_source(source)
         return table
 
     def _style_table(self, table, rank=False, label_cols=1, n=1,
@@ -1271,13 +1277,35 @@ def make_donut(pairs, tmp_dir, name, title):
     return path
 
 
+def _add_share_donut(b, pairs, title, name, width_in=6.3, height_in=4.2,
+                     hole_size=58):
+    """Native, Word-editable doughnut for the share figures.
+
+    Keeps the top 5 slices and folds the remainder into an ``Others`` slice,
+    mirroring the static PNG doughnuts this replaces; ``add_word_chart``
+    installs a real chart the reader can click and edit (Chart Design / Edit
+    Data).  Returns the chart r-id, or ``None`` when there is nothing to plot.
+    """
+    pairs = [p for p in pairs if p[1] > 0.0]
+    if not pairs:
+        return None
+    pairs.sort(key=lambda p: p[1], reverse=True)
+    if len(pairs) > 5:
+        top, rest = pairs[:5], pairs[5:]
+        pairs = top + [("Others", sum(s for _, s in rest))]
+    return b.add_word_chart(
+        "doughnut", title, [l for l, _ in pairs], [s for _, s in pairs],
+        width_in=width_in, height_in=height_in, name=name,
+        colors=[c.lstrip("#") for c in THEME], hole_size=hole_size)
+
+
 def family_members_line(data, top=12):
     members = data.members
     if len(members) <= 1:
         return ""
     by_code = {m["code"]: m["label"] for m in members}
     shown = members[:top]
-    items = ["%s (%s)" % (m["code"], short_label(by_code[m["code"]], 60))
+    items = ["%s (%s)" % (m["code"], short_label(by_code[m["code"]], 100))
              for m in shown]
     tail = ""
     if len(members) > top:
@@ -1302,7 +1330,7 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
     members = data.members
     if not members:
         return
-    b._next_table("Trend on %s: Kenya's Exports by Product" % family, source)
+    b._next_table("Trend in %s: Kenya's Exports by Product" % family, source)
     members_tbl = top_rows(members, cfg.get("top_n", 10), years,
                            "All other products")
     b.add_value_table("Product", members_tbl, years, "Share in %d" % rev,
@@ -1317,34 +1345,27 @@ def section_trade_family(b, cfg, data, source, tmp_dir):
         follows = pairs[1:3]
     if lead:
         txt = ("The leading Kenyan export product of %s in %d was %s, which "
-               "accounted for %.1f%% of Kenya's exports of the family."
-               % (family.lower(), rev, short_label(lead[0], 70), lead[1] * 100))
+               "accounted for **%.1f%%** of Kenya's exports of the family."
+               % (family.lower(), rev, short_label(lead[0], 100),
+                  lead[1] * 100))
         if follows:
             txt += " It was followed by %s." % ordinal_list(
-                ["%s (%.1f%%)" % (short_label(l, 50), s * 100)
+                ["%s (**%.1f%%**)" % (short_label(l, 100), s * 100)
                  for l, s in follows])
         b.add_bullet(txt)
 
     totals = _year_totals(members)
-    g = growth_phrase(cagr([totals.get(y) for y in years], years),
-                      period_phrase(years[0], rev))
-    yo = None
-    if len(years) >= 2:
-        yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
-                        years[-2], years[-1])
-    if g:
-        sentence = "Kenya's total exports of %s %s." % (family.lower(), g)
-        if yo:
-            sentence = sentence[:-1] + ", and %s." % yo
-        b.add_bullet(sentence)
+    for p_ in _growth_paragraphs(years, totals, "Kenya's total exports of",
+                                 family.lower(), rows=members):
+        b.add_bullet(p_)
 
     if len(members) >= 2:
-        img = make_donut(pairs, tmp_dir, "f1_share.png",
-                         "Share of %s" % family)
-        if img:
-            b._next_figure("Share of Kenya's Exports of %s by Product, %d"
-                           % (family, rev), source)
-            b.add_figure(img)
+        _add_share_donut(
+            b, pairs, "Share of Kenya's Exports of %s by Product, %d"
+            % (family, rev), "Share of %s by Product" % family)
+        b._next_figure("Share of Kenya's Exports of %s by Product, %d"
+                       % (family, rev), source)
+        b.add_source(source)
 
 
 def section_kenya_exports(b, cfg, data, source, tmp_dir):
@@ -1367,29 +1388,19 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
 
     totals = _year_totals(destinations)
     total_last = totals.get(rev)
-    g = growth_phrase(cagr([totals.get(y) for y in years], years),
-                      period_phrase(years[0], rev))
-    yo = None
-    if len(years) >= 2:
-        yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
-                        years[-2], years[-1])
 
-    parts = []
     if total_last:
-        parts.append("Kenya's exports of %s were valued at %s in %d."
+        b.add_bullet("Kenya's exports of %s were valued at **%s** in **%d**."
                      % (anchor.lower(), usd_phrase(total_last), rev))
-    if g:
-        parts.append("They %s." % g)
-    if yo:
-        parts.append("They %s." % yo)
-    for p_ in parts:
+    for p_ in _growth_paragraphs(years, totals, "Kenya's exports of",
+                                 anchor.lower(), rows=destinations):
         b.add_bullet(p_)
 
     first = destinations[0] if destinations else None
     if first and first["years"].get(rev):
         share = (first["years"].get(rev) or 0.0) / (total_last or 1.0) * 100
         b.add_bullet("The leading destination for Kenya's %s exports was %s "
-                     "(%s; %.1f%% of Kenya's exports of the product)."
+                     "(**%s**; **%.1f%%** of Kenya's exports of the product)."
                      % (anchor.lower(), first["label"],
                         usd_phrase(first["years"].get(rev)), share))
 
@@ -1407,12 +1418,13 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
                    key=lambda d: d["years"].get(rev) or 0.0, reverse=True), 1)
                      if d["label"] == lead_afr["label"]), None)
         text = ("Kenya's leading African destination for %s was %s "
-                "(%s; %.1f%% of Kenya's exports of the product)"
+                "(**%s**; **%.1f%%** of Kenya's exports of the product)"
                 % (anchor.lower(), lead_afr["label"],
                    usd_phrase(rev_val),
                    rev_val / (total_last or 1.0) * 100))
         if rank:
-            text += ", ranked %s among all destination markets" % _ordinal(rank)
+            text += (", ranked %s among all destination markets"
+                     % _ordinal(rank, bold=True))
         b.add_bullet(text + ".")
 
     # Market-risk callout: heavy reliance on a single destination.
@@ -1426,12 +1438,13 @@ def section_kenya_exports(b, cfg, data, source, tmp_dir):
 
     pairs = _shares(destinations, years)
     if len(pairs) >= 2:
-        img = make_donut(pairs, tmp_dir, "f2_dest.png",
-                         "Kenya's %s Exports by Destination" % anchor)
-        if img:
-            b._next_figure("Kenya's %s Exports by Destination, %d"
-                           % (anchor, rev), source)
-            b.add_figure(img)
+        _add_share_donut(
+            b, pairs,
+            "Kenya's %s Exports by Destination, %d" % (anchor, rev),
+            "Kenya's %s Exports by Destination" % anchor)
+        b._next_figure("Kenya's %s Exports by Destination, %d"
+                       % (anchor, rev), source)
+        b.add_source(source)
 
 
 def section_competitiveness(b, cfg, data, source):
@@ -1452,13 +1465,13 @@ def section_competitiveness(b, cfg, data, source):
         first_y, first_k, first_w, first_s = share_series[0]
         last_y, last_k, last_w, last_s = share_series[-1]
         txt = ("Kenya's share of world exports of %s %s between %d and %d "
-               "(%.2f%% in %d; %.2f%% in %d)."
+               "(**%.2f%%** in %d; **%.2f%%** in %d)."
                % (anchor.lower(),
                   "rose" if last_s >= first_s else "fell",
                   first_y, last_y,
                   first_s * 100, first_y, last_s * 100, last_y))
         if last_s >= first_s:
-            txt += " Kenya exported %s of %s in %d." % (
+            txt += " Kenya exported **%s** of %s in %d." % (
                 usd_phrase(last_k), family.lower(), last_y)
         parts.append(txt)
 
@@ -1467,14 +1480,15 @@ def section_competitiveness(b, cfg, data, source):
     if spec and spec["years"]:
         speclast = spec["years"][-1]
         fam_share = speclast["share"]
-        txt = ("%s accounted for %.2f%% of Kenya's total merchandise exports "
-               "in %d (%s of %s), reflecting Kenya's export specialization."
+        txt = ("%s accounted for **%.2f%%** of Kenya's total merchandise "
+               "exports in **%d** (**%s** of **%s**), reflecting Kenya's "
+               "export specialization."
                % (family.title(), fam_share * 100, speclast["year"],
                   usd_phrase(speclast["family"]),
                   usd_phrase(speclast["total"])))
         if len(spec["years"]) >= 2:
             first_s = spec["years"][0]["share"]
-            txt += " This share was %.2f%% in %d." % (
+            txt += " This share was **%.2f%%** in %d." % (
                 first_s * 100, spec["years"][0]["year"])
         parts.append(txt)
 
@@ -1494,22 +1508,22 @@ def section_competitiveness(b, cfg, data, source):
                             reverse=True)[1]
             second_share = (second["years"].get(rev) or 0.0) / total * 100
             if len(members) == 2:
-                label = " %s was the runner-up with %.1f%%." % (
-                    short_label(second["label"], 50), second_share)
+                label = " %s was the runner-up with **%.1f%%**." % (
+                    short_label(second["label"], 100), second_share)
             else:
-                label = " %s was the runner-up with %.1f%%; the remaining %d " \
-                    "headings together accounted for %.1f%%." % (
-                        short_label(second["label"], 50), second_share,
+                label = " %s was the runner-up with **%.1f%%**; the remaining " \
+                    "%d headings together accounted for **%.1f%%**." % (
+                        short_label(second["label"], 100), second_share,
                         len(members) - 2,
                         max(0.0, 100 - lead_share - second_share))
         concentration = ("highly concentrated" if hhi >= 2500 else
                          "moderately concentrated" if hhi >= 1500 else
                          "diversified")
-        txt = ("Kenya's exports of %s are %s across %d product headings: "
-               "the leading heading (%s) accounted for %.1f%% of the family "
-               "total in %d.%s"
+        txt = ("Kenya's exports of %s are %s across **%d** product headings: "
+               "the leading heading (%s) accounted for **%.1f%%** of the "
+               "family total in %d.%s"
                % (family.lower(), concentration, len(members),
-                  short_label(lead["label"], 50), lead_share, rev, label))
+                  short_label(lead["label"], 100), lead_share, rev, label))
         parts.append(txt)
 
     if parts:
@@ -1541,7 +1555,7 @@ def section_global(b, cfg, data, source, tmp_dir):
     years = data.years
     rev = data.review_year
 
-    b.add_heading("EXPORT OF %s GLOBALLY" % anchor.upper(), level=1)
+    b.add_heading("GLOBAL EXPORTS OF %s" % anchor.upper(), level=1)
 
     all_exporters = data.exporters()
     exporters = _ranked_rows(all_exporters, cfg.get("top_n", 10), years,
@@ -1556,12 +1570,12 @@ def section_global(b, cfg, data, source, tmp_dir):
         geo_bullets(b, exporters, years, anchor, "exporter")
         pairs = _shares(exporters, years)
         if len(pairs) >= 2:
-            img = make_donut(pairs, tmp_dir, "f3_exporters.png",
-                             "Share of World Exports of %s" % anchor)
-            if img:
-                b._next_figure("World Exports of %s by Economy, %d"
-                               % (anchor, rev), source)
-                b.add_figure(img)
+            _add_share_donut(
+                b, pairs, "World Exports of %s by Economy, %d" % (anchor, rev),
+                "World Exports of %s by Economy" % anchor)
+            b._next_figure("World Exports of %s by Economy, %d"
+                           % (anchor, rev), source)
+            b.add_source(source)
 
     all_importers = data.importers()
     importers = _ranked_rows(all_importers, cfg.get("top_n", 10), years,
@@ -1576,17 +1590,17 @@ def section_global(b, cfg, data, source, tmp_dir):
         geo_bullets(b, importers, years, anchor, "importer")
         pairs = _shares(importers, years)
         if len(pairs) >= 2:
-            img = make_donut(pairs, tmp_dir, "f4_importers.png",
-                             "Share of World Imports of %s" % anchor)
-            if img:
-                b._next_figure("World Imports of %s by Economy, %d"
-                               % (anchor, rev), source)
-                b.add_figure(img)
+            _add_share_donut(
+                b, pairs, "World Imports of %s by Economy, %d" % (anchor, rev),
+                "World Imports of %s by Economy" % anchor)
+            b._next_figure("World Imports of %s by Economy, %d"
+                           % (anchor, rev), source)
+            b.add_source(source)
 
     g_exp = top_rows(data.global_export_products(),
                      cfg.get("top_n", 10), years, "All other products")
     if g_exp:
-        b._next_table("Trend on %s Globally - Export" % family, source)
+        b._next_table("Trend in %s Globally - Export" % family, source)
         b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
                           "Global Exports of %s by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -1595,7 +1609,7 @@ def section_global(b, cfg, data, source, tmp_dir):
     g_imp = top_rows(data.global_import_products(),
                      cfg.get("top_n", 10), years, "All other products")
     if g_imp:
-        b._next_table("Trend on %s Globally - Import" % family, source)
+        b._next_table("Trend in %s Globally - Import" % family, source)
         b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
                           "Global Imports of %s by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -1627,15 +1641,17 @@ def _kenya_standing_bullets(b, rows, years, anchor_short, role):
         return
     parts = ["Kenya ranked"]
     if global_rank and n_total:
-        parts.append("%s of %d %s" % (_ordinal(global_rank), n_total, group))
+        parts.append("%s among **%d** %s"
+                     % (_ordinal(global_rank, bold=True), n_total, group))
     if africa_rank and n_africa:
         if len(parts) > 1:
             parts.append("and")
-        parts.append("%s of %d %s"
-                     % (_ordinal(africa_rank), n_africa, africa_group))
+        parts.append("%s among **%d** %s"
+                     % (_ordinal(africa_rank, bold=True), n_africa,
+                        africa_group))
     if len(parts) > 1:
-        b.add_bullet(" ".join(parts) + " of %s in %d, with %s valued at "
-                     "%s." % (anchor, rev, action, usd_phrase(value)))
+        b.add_bullet(" ".join(parts) + " of %s in **%d**, with %s valued at "
+                     "**%s**." % (anchor, rev, action, usd_phrase(value)))
 
 
 RESIDUE = {"exporter": "All other economies",
@@ -1666,7 +1682,7 @@ def geo_bullets(b, rows, years, anchor_short, role):
         return
     if role == "source":
         b.add_bullet("The leading source of Kenya's imports of %s in %d was "
-                     "%s (%s; %.1f%% of Kenya's imports)."
+                     "%s (**%s**; **%.1f%%** of Kenya's imports)."
                      % (anchor_short.lower(), last, real[0][0],
                         usd_phrase(next((r["years"].get(last) for r in rows
                                          if r["label"] == real[0][0]), None)),
@@ -1674,21 +1690,21 @@ def geo_bullets(b, rows, years, anchor_short, role):
         denom = "Kenya's imports in %d" % last
     else:
         b.add_bullet("%s was the world's leading %s of %s in %d, with %s "
-                     "(%.1f%% of the world total)."
+                     "(**%.1f%%** of the world total)."
                      % (real[0][0], word, anchor_short.lower(), last,
                         usd_phrase(next((r["years"].get(last) for r in rows
                                          if r["label"] == real[0][0]), None)),
                         real[0][1] * 100))
         denom = "the world total in %d" % last
-    names = ["%s (%s; %.1f%%)" % (l, usd_phrase(next(
+    names = ["%s (**%s**; **%.1f%%**)" % (l, usd_phrase(next(
         (r["years"].get(last) for r in rows if r["label"] == l), None)), s * 100)
         for l, s in real[:5]]
     b.add_bullet("The top five %s were %s." % (group, ordinal_list(names)))
     top5 = sum(s for _, s in real[:5]) * 100
-    b.add_bullet("Together, the top five %s accounted for %.1f%% of %s."
+    b.add_bullet("Together, the top five %s accounted for **%.1f%%** of %s."
                  % (group, top5, denom))
     if residual_share > 0:
-        b.add_bullet("%s together accounted for %.1f%% of %s."
+        b.add_bullet("%s together accounted for **%.1f%%** of %s."
                      % (residue, residual_share * 100, denom))
 
 
@@ -1705,30 +1721,22 @@ def trend_bullets(b, rows, years, family, noun, scope="World",
     subj = ("%s %s" % (scope, noun)).strip()
     denom = "Kenya's imports" if scope == "Kenya's" else "the world total"
     lead, share = real[0]
-    txt = ("%s of %s in %d were led by %s (%.1f%% of %s)"
-           % (subj, family.lower(), last, short_label(lead, 60), share * 100,
+    txt = ("%s of %s in %d were led by %s (**%.1f%%** of %s)"
+           % (subj, family.lower(), last, short_label(lead, 100), share * 100,
               denom))
     follows = real[1:3]
     if follows:
         txt += ", followed by %s" % ordinal_list(
-            ["%s (%.1f%%)" % (short_label(l, 50), s * 100)
+            ["%s (**%.1f%%**)" % (short_label(l, 100), s * 100)
              for l, s in follows])
     b.add_bullet(txt + ".")
     lead_share = sum(s for _, s in real)
-    b.add_bullet("Together, the leading product headings accounted for %.1f%% "
-                 "of %s." % (lead_share * 100, denom))
+    b.add_bullet("Together, the leading product headings accounted for "
+                 "**%.1f%%** of %s." % (lead_share * 100, denom))
     totals = _year_totals(rows)
-    g = growth_phrase(cagr([totals.get(y) for y in years], years),
-                      period_phrase(years[0], last))
-    yo = None
-    if len(years) >= 2:
-        yo = yoy_phrase(yoy_change([totals.get(y) for y in years], years),
-                        years[-2], years[-1])
-    if g:
-        sentence = "%s of %s %s." % (subj, family.lower(), g)
-        if yo:
-            sentence = sentence[:-1] + ", and %s." % yo
-        b.add_bullet(sentence)
+    for p_ in _growth_paragraphs(years, totals, "%s of" % subj,
+                                 family.lower(), rows=rows):
+        b.add_bullet(p_)
 
 
 def section_kenya_global_position(b, cfg, data, source):
@@ -1766,30 +1774,42 @@ def section_kenya_global_position(b, cfg, data, source):
         k = r["kenya"].get(rev) or 0.0
         w = r["world"].get(rev) or 0.0
         display_rows.append({
-            "label": "%s %s" % (r["code"], short_label(r["label"], 44)),
+            "label": short_label(r["label"], 120),
             "years": {"Kenya": k, "World": w},
             "code": r["code"],
             "share": (k / w * 100.0) if w else None,
         })
-    _kenya_world_table(b, display_rows, rev, k_tot, w_tot,
-                       first_col="Six-digit HS code")
+    _kenya_world_table(b, display_rows, rev, k_tot, w_tot, source,
+                       first_col="HS code")
 
     # -- bullet point on Kenya's share and position ----------------------
     overall = (k_tot / w_tot * 100.0) if w_tot else None
     if overall is not None:
-        b.add_bullet("Kenya accounted for %.1f%% of world exports of %s in "
-                     "%d (%s of %s)."
+        b.add_bullet("Kenya accounted for **%.1f%%** of world exports of %s "
+                     "in **%d** (**%s** of **%s**)."
                      % (overall, family.lower(), rev, usd_phrase(k_tot),
                         usd_phrase(w_tot)))
     if rows:
-        code, k, w = rows[0]["code"], rows[0]["kenya"].get(rev) or 0.0, \
-            rows[0]["world"].get(rev) or 0.0
-        share = (k / w * 100.0) if w else None
+        row0 = rows[0]
+        code = row0["code"]
+        k, w = row0["kenya"].get(rev) or 0.0, row0["world"].get(rev) or 0.0
+        fam_share = (k / k_tot * 100.0) if k_tot else None
+        world_share = (k / w * 100.0) if w else None
         txt = ("Kenya's leading export heading of %s in %d was %s, valued "
-               "at %s." % (family.lower(), rev, code, usd_phrase(k)))
-        if share is not None:
-            txt += (" That heading accounted for %.1f%% of Kenya's exports "
-                    "of the family." % share)
+               "at **%s**."
+               % (family.lower(), rev, product_ref(row0["label"], code),
+                  usd_phrase(k)))
+        if fam_share is not None:
+            txt += (" That heading accounted for **%.1f%%** of Kenya's "
+                    "exports of the family" % fam_share)
+            if world_share is not None:
+                txt += (" and **%.1f%%** of world exports of the heading."
+                        % world_share)
+            else:
+                txt += "."
+        elif world_share is not None:
+            txt += (" That heading accounted for **%.1f%%** of world exports "
+                    "of the heading." % world_share)
         b.add_bullet(txt)
     if metrics:
         gr = metrics.get("global_rank")
@@ -1798,64 +1818,191 @@ def section_kenya_global_position(b, cfg, data, source):
         na = metrics.get("n_africa")
         parts = ["Kenya ranked"]
         if gr and nr:
-            parts.append("%s among %d world exporters of %s"
-                         % (_ordinal(gr), nr, family.lower()))
+            parts.append("%s among **%d** world exporters of %s"
+                         % (_ordinal(gr, bold=True), nr, family.lower()))
         if ar and na:
             if len(parts) > 1:
                 parts.append("and")
-            parts.append("%s among %d African exporters" % (_ordinal(ar), na))
+            parts.append("%s among **%d** African exporters"
+                         % (_ordinal(ar, bold=True), na))
         if len(parts) > 1:
-            b.add_bullet(" ".join(parts) + " in %d." % rev)
+            b.add_bullet(" ".join(parts) + " in **%d**." % rev)
 
 
-def _ordinal(n):
-    return "%d%s" % (n, "th" if 10 <= n % 100 <= 20 else
-                     {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th"))
+def _ordinal(n, bold=False):
+    """Ordinal with a superscript suffix for Word: 34 -> '34^{th}'.
+
+    ``bold`` wraps the numeral in ``**...**`` so the figure reads bold in
+    ranking sentences; the suffix stays superscript either way.
+    """
+    suffix = "th" if 10 <= n % 100 <= 20 else \
+        {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    if bold:
+        return "**%d**^{%s}" % (n, suffix)
+    return "%d^{%s}" % (n, suffix)
 
 
-def _kenya_world_table(b, rows, year, kenya_total, world_total, first_col):
+def product_ref(label, code=None, maxlen=100):
+    """Product reference for narrative text: full-enough label plus code.
+
+    Labels are kept long enough that HS descriptions are never left cut off
+    mid-clause ('...of a kind suitable'), while the six-digit code is shown in
+    parentheses so products are always identifiable.
+    """
+    name = short_label(label, maxlen)
+    if code:
+        return "%s (%s)" % (name, code)
+    return name
+
+
+def _unit_mult(unit):
+    """Display multiplier for an ITC raw (USD-thousand) value in ``unit``."""
+    return 0.001 if unit == "USD Million" else 1.0
+
+
+def _share_suffix(share_cf):
+    """Excel formula fragment correcting a cross-column unit mismatch, e.g.
+    Kenya in USD Thousand vs World in USD Million."""
+    return "" if share_cf == 1.0 else "*%.4f" % share_cf
+
+
+def _decline_cause(rows, year, years):
+    """Attribute a yearly decline in a total to its biggest negative driver.
+
+    Returns ``None`` or a prose fragment such as 'a 12.4% fall in Fresh cut
+    roses & buds (060311)' for the row whose USD drop was the largest that
+    year.
+    """
+    if not rows or year not in years:
+        return None
+    idx = years.index(year)
+    if idx < 1:
+        return None
+    base_year = years[idx - 1]
+    drops = []
+    for r in rows:
+        bv = r["years"].get(base_year) or 0.0
+        cv = r["years"].get(year) or 0.0
+        if bv > 0 and cv < bv:
+            drops.append((cv - bv, bv, r))
+    if not drops:
+        return None
+    drops.sort(key=lambda t: t[0])
+    drop, bv, r = drops[0]
+    name = short_label(r.get("label") or r.get("code") or "", 96)
+    code = r.get("code")
+    label = "%s (%s)" % (name, code) if code else name
+    return "a %.1f%% fall in %s" % (abs(drop) / bv * 100.0, label)
+
+
+def _growth_paragraphs(years, totals, subject, family, rows=None):
+    """Granular, year-on-year growth narrative bullets.
+
+    Reports the average annual rate and then each year's year-on-year change,
+    so a mid-period decline is no longer hidden inside a single CAGR figure.
+    When ``rows`` is supplied, every declining year is attributed to its
+    biggest contributor (the largest negative driver in the data).
+    """
+    paras = []
+    if len(years) < 2:
+        return paras
+    g = cagr([totals.get(y) for y in years], years)
+    if g is not None:
+        verb = "grew" if g >= 0 else "contracted"
+        paras.append("%s %s %s at an average annual rate of **%.1f%%** %s."
+                     % (subject, family, verb, abs(g) * 100.0,
+                        period_phrase(years[0], years[-1])))
+    yoy = []
+    for i in range(1, len(years)):
+        prev, cur = totals.get(years[i - 1]), totals.get(years[i])
+        if prev and cur:
+            yoy.append((years[i], cur / prev - 1.0))
+    if yoy:
+        seq = ", ".join("**%d** %s%.1f%%"
+                        % (y, "+" if c >= 0 else "", abs(c) * 100.0)
+                        for y, c in yoy)
+        detail = "Year on year, the path was: %s." % seq
+        declines = [(y, c) for y, c in yoy if c < 0]
+        for y, c in declines[:3]:
+            cause = _decline_cause(rows, y, years) if rows else None
+            if cause:
+                detail += " The decline in %d mainly reflected %s." % (y, cause)
+        paras.append(detail)
+    return paras
+
+
+def _margin_headline(m, family, start, rev, noun, dimension):
+    net = m["net"]
+    direction = "grew" if net >= 0 else "shrank"
+    parts = ["Between %d and %d, Kenya's exports of %s %s by %s from %s to "
+             "%s, a net change of **%s**."
+             % (start, rev, family.lower(), direction, dimension,
+                usd_phrase(m["total_start"]), usd_phrase(m["total_rev"]),
+                usd_phrase(abs(net)))]
+    if net:
+        if noun == "product heading":
+            enter_txt = "%s new to the export basket" % noun
+            exit_txt = "%s no longer exported" % noun
+        else:
+            enter_txt = "destination markets newly served"
+            exit_txt = "destination markets no longer served"
+        parts.append(
+            "**%.0f%%** of that change came from existing %s deepening their "
+            "sales, **%.0f%%** from %s, and **%.0f%%** was offset by %s."
+            % (m["intensive_share"] * 100, noun, m["entering_share"] * 100,
+               enter_txt, abs(m["exiting_share"]) * 100, exit_txt))
+    return " ".join(parts)
+
+
+def _kenya_world_table(b, rows, year, kenya_total, world_total, source,
+                       first_col="HS code"):
     """Table with a Kenya / World value pair per row plus overall totals.
 
-    Columns: label | Kenya exports | World exports | share.  Reuses
-    ``add_value_table``'s styling by treating this as a 2 data-column
-    matrix (n=2) plus a share column.  Each column picks its own display
-    unit (USD Million / USD Thousand) so that small sub-category values
-    never round to 0.0 in millions.
+    Columns: HS code | Product | Kenya exports | World exports | Kenya share
+    of world.  The code and the product description are separate columns so a
+    heading is never presented as a single run-together 'code + label' cell.
+    Each value column picks its own display unit (USD Million / USD Thousand)
+    so that small sub-category values never round to 0.0 in millions; the
+    share is computed from the raw (USD-thousand) values so it is unit-safe.
     """
     k_unit = _series_unit([r["years"].get("Kenya") for r in rows]
                           + [kenya_total or 0.0])
     w_unit = _series_unit([r["years"].get("World") for r in rows]
                           + [world_total or 0.0])
-    table = b.doc.add_table(rows=2 + len(rows) + 1, cols=4, style="Table Grid")
+    table = b.doc.add_table(rows=2 + len(rows) + 1, cols=5, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     hdr = table.rows[0]
-    hdr.cells[0].text = "%s, %d" % (first_col, year)
-    hdr.cells[1].text = "Kenya exports (%s)" % k_unit
-    hdr.cells[2].text = "World exports (%s)" % w_unit
-    hdr.cells[3].text = "Kenya share of world"
+    hdr.cells[0].text = "Code"
+    hdr.cells[1].text = "Product"
+    hdr.cells[2].text = "Kenya exports (%s)" % k_unit
+    hdr.cells[3].text = "World exports (%s)" % w_unit
+    hdr.cells[4].text = "Kenya share of world"
     r2 = table.rows[1]
-    r2.cells[1].text = str(year)
     r2.cells[2].text = str(year)
     r2.cells[3].text = str(year)
+    r2.cells[4].text = str(year)
     for ri, r in enumerate(rows, start=2):
-        table.rows[ri].cells[0].text = r["label"]
-        table.rows[ri].cells[1].text = fmt_for_unit(
-            r["years"].get("Kenya"), k_unit)
+        table.rows[ri].cells[0].text = str(r.get("code") or "")
+        table.rows[ri].cells[1].text = r["label"]
         table.rows[ri].cells[2].text = fmt_for_unit(
+            r["years"].get("Kenya"), k_unit)
+        table.rows[ri].cells[3].text = fmt_for_unit(
             r["years"].get("World"), w_unit)
-        table.rows[ri].cells[3].text = (
+        table.rows[ri].cells[4].text = (
             "%.1f%%" % r["share"] if r["share"] is not None else "")
     t = table.rows[2 + len(rows)]
-    t.cells[0].text = "Total, %s" % first_col
-    t.cells[1].text = fmt_for_unit(kenya_total if kenya_total else None,
+    t.cells[0].text = ""
+    t.cells[1].text = "Total, %s" % first_col
+    t.cells[2].text = fmt_for_unit(kenya_total if kenya_total else None,
                                    k_unit)
-    t.cells[2].text = fmt_for_unit(world_total if world_total else None,
+    t.cells[3].text = fmt_for_unit(world_total if world_total else None,
                                    w_unit)
-    t.cells[3].text = (
+    t.cells[4].text = (
         "%.1f%%" % (kenya_total / world_total * 100.0) if world_total else "")
-    b._set_table_widths(table, [3500, 1600, 1600, 1500])
-    b._style_table(table, rank=False, label_cols=1, n=2, total_label=True)
+    b._set_table_widths(table, [900, 3000, 1500, 1500, 1500])
+    b._style_table(table, rank=False, label_cols=2, n=2, total_label=True)
     b._fit_table_on_page(table)
+    b.add_source(source)
 
 
 def section_kenya_imports(b, cfg, data, source):
@@ -1923,6 +2070,8 @@ def section_potential(b, cfg, data, pot, source):
                "Potential Map (projection year %s)."
                % (pot_year if pot_year else "unknown"))
     cols = 3 if gap_known else 2
+    b._next_table("Unrealised export potential for %s, by destination market"
+                  % family, source)
     table = b.doc.add_table(rows=1 + len(top), cols=cols, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     hdr = table.rows[0]
@@ -1938,13 +2087,14 @@ def section_potential(b, cfg, data, pot, source):
     b._set_table_widths(table, [3000, 2800, 2800] if gap_known else [4200, 3000])
     b._style_table(table, rank=False, label_cols=1, n=2 if gap_known else 1)
     b._fit_table_on_page(table)
-    b.add_bullet("Together, these %d markets offer the greatest headroom for "
-                 "additional exports of %s." % (len(top), family.lower()))
+    b.add_source(source)
+    b.add_bullet("Together, these **%d** markets offer the greatest headroom "
+                 "for additional exports of %s." % (len(top), family.lower()))
     if gap_known:
         lead = gap_known[0]
         b.add_bullet("The largest unrealised opportunity is estimated to be "
-                     "%s: potential exports of %s versus current exports of "
-                     "%s."
+                     "%s: potential exports of **%s** versus current exports "
+                     "of **%s**."
                      % (lead["label"], fmt_for_unit(lead["potential"], unit),
                         fmt_for_unit(lead["actual"], unit)))
 
@@ -1972,10 +2122,11 @@ def section_growth_decomposition(b, cfg, data, source):
                   % anchor.upper(), level=1)
     if prod_m and prod_m["total_rev"]:
         b.add_bullet(_margin_headline(prod_m, family, start, rev,
-                                      "product headings"))
+                                      "product heading", "product heading"))
     if dest_m and dest_m["total_rev"]:
         b.add_bullet(_margin_headline(dest_m, family, start, rev,
-                                      "destination markets"))
+                                      "destination market",
+                                      "destination market"))
     if prod_m and prod_m["total_rev"]:
         _margin_table(b, "Growth of Kenya's exports of %s by product "
                          "heading, %d-%d" % (family, start, rev),
@@ -1988,44 +2139,45 @@ def section_growth_decomposition(b, cfg, data, source):
         if not m or m["net"] <= 0:
             continue
         if m["top_entering"]:
-            names = " ".join(short_label(t[0], 45) for t in m["top_entering"][:3])
-            b.add_bullet("%d new %s(s) entered the export basket after %d "
-                         "(led by %s)."
-                         % (m["n_entering"], noun, start, names))
+            names = ordinal_list(short_label(t[0], 90)
+                                 for t in m["top_entering"][:3])
+            names = names if names else ""
+            if noun == "product heading":
+                b.add_bullet("**%d** product heading(s) entered Kenya's "
+                             "export basket after **%d** (led by **%s**)."
+                             % (m["n_entering"], start, names))
+            else:
+                b.add_bullet("**%d** destination market(s) were newly served "
+                             "after **%d** (the largest: **%s**)."
+                             % (m["n_entering"], start, names))
         if m["top_exiting"]:
-            names = " ".join(short_label(t[0], 45) for t in m["top_exiting"][:3])
-            b.add_bullet("%d %s(s) ceased being exported; the largest were %s."
-                         % (m["n_exiting"], noun, names))
-
-
-def _margin_headline(m, family, start, rev, noun):
-    net = m["net"]
-    parts = ["Between %d and %d, Kenya's exports of %s %s from %s to %s, "
-             "a net change of %s."
-             % (start, rev, family.lower(),
-                "grew" if net >= 0 else "shrank",
-                usd_phrase(m["total_start"]), usd_phrase(m["total_rev"]),
-                usd_phrase(abs(net)))]
-    if net:
-        parts.append("%.0f%% of that change came from existing %s deepening "
-                     "their sales, %.0f%% from %s new to the basket, and "
-                     "%.0f%% was offset by %s that stopped being exported."
-                     % (m["intensive_share"] * 100, noun,
-                        m["entering_share"] * 100, noun,
-                        abs(m["exiting_share"]) * 100, noun))
-    return " ".join(parts)
+            names = ordinal_list(short_label(t[0], 90)
+                                 for t in m["top_exiting"][:3])
+            names = names if names else ""
+            if noun == "product heading":
+                b.add_bullet("**%d** product heading(s) ceased being exported "
+                             "after **%d** (the largest were **%s**)."
+                             % (m["n_exiting"], start, names))
+            else:
+                b.add_bullet("**%d** destination market(s) were no longer "
+                             "served in **%d** (the largest were **%s**)."
+                             % (m["n_exiting"], rev, names))
 
 
 def _margin_table(b, title, m, source, noun):
     b._next_table(title, source)
     values = [m["intensive"], m["entering"], m["exiting"]]
     unit = _series_unit([abs(v) for v in values] + [abs(m["net"])])
-    rows = [("Existing %s deepening" % noun, m["intensive"],
+    if noun == "product heading":
+        enter_label = "Product heading(s) new to the export basket"
+        exit_label = "Product heading(s) no longer exported"
+    else:
+        enter_label = "Destination market(s) newly served"
+        exit_label = "Destination market(s) no longer served"
+    rows = [("Existing %s(s) deepening" % noun, m["intensive"],
              m["intensive_share"]),
-            ("%s(s) new to the export basket" % noun.capitalize(),
-             m["entering"], m["entering_share"]),
-            ("%s(s) no longer exported" % noun.capitalize(),
-             m["exiting"], m["exiting_share"]),
+            (enter_label, m["entering"], m["entering_share"]),
+            (exit_label, m["exiting"], m["exiting_share"]),
             ("Net change", m["net"], None)]
     table = b.doc.add_table(rows=1 + len(rows), cols=3, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -2042,6 +2194,7 @@ def _margin_table(b, title, m, source, noun):
     b._set_table_widths(table, widths)
     b._style_table(table, rank=False, label_cols=1, n=2)
     b._fit_table_on_page(table)
+    b.add_source(source)
 
 
 def section_market_attractiveness(b, cfg, data, source, pot):
@@ -2076,6 +2229,8 @@ def section_market_attractiveness(b, cfg, data, source, pot):
         headers.append("Potential gap (%s)" % gap_unit)
     headers.append("Score")
     cols = len(headers)
+    b._next_table("Attractiveness ranking of Kenya's destination markets, %d"
+                  % rev, source)
     table = b.doc.add_table(rows=1 + len(top), cols=cols, style="Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     hdr = table.rows[0]
@@ -2098,20 +2253,22 @@ def section_market_attractiveness(b, cfg, data, source, pot):
     b._style_table(table, rank=False, label_cols=1,
                    n=cols - 1)
     b._fit_table_on_page(table)
-    leaders = " ".join(short_label(r["label"], 40) for r in top[:3])
-    b.add_bullet("Priority markets for the next phase of export growth: %s. "
-                 "%s tops the attractiveness ranking on current momentum "
-                 "and headroom." % (leaders, top[0]["label"]))
+    b.add_source(source)
+    leaders = ordinal_list([r["label"] for r in top[:3]])
+    b.add_bullet("Priority markets for the next phase of export growth: "
+                 "**%s**. %s tops the attractiveness ranking on current "
+                 "momentum and headroom." % (leaders, top[0]["label"]))
     fast = [r for r in top if r["growth"] and r["growth"] > 0]
     if len(fast) >= 2:
-        b.add_bullet("Fast-growth destinations worth deepening: %s."
-                     % ", ".join(short_label(r["label"], 30)
-                                 for r in fast[:3]))
+        b.add_bullet("Fast-growth destinations worth deepening: **%s**."
+                     % ordinal_list([r["label"] for r in fast[:3]]))
     big_gaps = [r for r in top if r["gap"] is not None]
     if len(big_gaps) >= 2:
-        b.add_bullet("Markets with the largest unrealised headroom: %s."
-                     % ", ".join(short_label(r["label"], 30)
-                                 for r in big_gaps[:3]))
+        b.add_bullet("Markets with the largest unrealised headroom: **%s**."
+                     % ordinal_list([r["label"] for r in big_gaps[:3]]))
+    b.add_bullet("Focus sectors should be aligned with these ranked markets "
+                 "and the preferential routes open to Kenya's exports of %s."
+                 % family.lower())
     b.add_bullet("Focus sectors should be aligned with these ranked markets "
                  "and the preferential routes open to Kenya's exports of %s."
                  % family.lower())
@@ -2155,17 +2312,17 @@ def section_competitor_watch(b, cfg, data, source):
         b._set_table_widths(table, [2600, 1300, 1300, 1300])
         b._style_table(table, rank=False, label_cols=1, n=3)
         b._fit_table_on_page(table)
+        b.add_source(source)
     krow = next((r for r in sc["rows"] if r["label"] == "Kenya"), None)
     if krow and abs(krow["delta_pp"]) >= 0.05:
-        b.add_bullet("Kenya's share of world exports %s by %.1f percentage "
-                     "points between %d and %d (%.1f%% to %.1f%%)."
+        b.add_bullet("Kenya's share of world exports %s by **%.1f** percentage "
+                     "points between %d and %d (**%.1f%%** to **%.1f%%**)."
                      % ("rose" if krow["delta_pp"] > 0 else "fell",
                         abs(krow["delta_pp"]), start, rev,
                         krow["start_share"] * 100, krow["rev_share"] * 100))
     if gainers:
         b.add_bullet("The main share-gainers were %s."
-                     % " ".join(short_label(r["label"], 40)
-                                for r in gainers[:3]))
+                     % ordinal_list([r["label"] for r in gainers[:3]]))
 
 
 def section_strategy(b, cfg, data, source, pot):
@@ -2202,33 +2359,35 @@ def section_strategy(b, cfg, data, source, pot):
         label = m["label"]
         share = (m["years"].get(rev) or 0.0) / total * 100 if total else 0.0
         g = cagr([m["years"].get(y) for y in years], years)
-        growth = ("grew at %.1f%% CAGR between %d and %d"
-                  % (g * 100, years[0], rev) if g is not None
-                  else "showed no clear trend over %d-%d" % (years[0], rev))
-        growth_verb = "grew" if (g is None or g <= 0) else "accelerated"
+        if g is not None:
+            growth = ("grew at **%.1f%%** CAGR between %d and %d"
+                      % (g * 100, years[0], rev) if g > 0 else
+                      "declined at **%.1f%%** CAGR between %d and %d"
+                      % (abs(g) * 100, years[0], rev))
+        else:
+            growth = "showed no clear trend over %d-%d" % (years[0], rev)
         action = []
         if priority:
-            action.append("prioritise %s" % " and ".join(priority))
+            action.append("prioritise %s" % ordinal_list(priority))
         if i == 1:
-            action.append("anchor heading - defend and deepen")
-        bullet = ("%d. %s (%s) - %.1f%% of Kenya's exports of %s in %d; %s."
-                   % (i, short_label(label, 55), code, share, family.lower(),
-                      rev, growth))
+            action.append("anchor heading: defend and deepen")
+        bullet = "%d. %s (%s): **%.1f%%** of Kenya's exports of %s in **%d**; %s." \
+            % (i, short_label(label, 100), code, share, family.lower(),
+               rev, growth)
         if action:
             bullet += " Recommended action: %s." % "; ".join(action)
         b.add_bullet(bullet)
     if top_dest and dest_total:
         dshare = (top_dest["years"].get(rev) or 0.0) / dest_total * 100
         if dshare >= 15.0:
-            b.add_bullet("Risk to manage: %.1f%% of Kenya's %s exports go to "
-                         "a single destination (%s); deepen a second market."
+            b.add_bullet("Risk to manage: **%.1f%%** of Kenya's %s exports go "
+                         "to a single destination (%s); deepen a second market."
                          % (dshare, family.lower(), top_dest["label"]))
     if att:
-        b.add_bullet("Net takeaway: concentrate promotion on %s where "
+        b.add_bullet("Net takeaway: concentrate promotion on **%s** where "
                      "momentum, headroom and preferential access reinforce "
                      "one another."
-                     % " and ".join(short_label(r["label"], 30)
-                                    for r in att[:3]))
+                     % ordinal_list([r["label"] for r in att[:3]]))
 
 
 # --------------------------------------------------------------------------
@@ -2447,6 +2606,7 @@ def write_excel_deliverable(cfg, data, out_path):
             fill=hdr_fill, align=cm)
         _xc(ws, 1, 5, "Kenya share of world", bold=True, fill=hdr_fill,
             align=cm)
+        share_cf = _unit_mult(w_unit) / _unit_mult(k_unit)
         for ri, r in enumerate(shares["rows"], start=2):
             k_raw = r["kenya"].get(rev) or 0.0
             w_raw = r["world"].get(rev) or 0.0
@@ -2464,15 +2624,17 @@ def write_excel_deliverable(cfg, data, out_path):
             else:
                 _xc(ws, ri, 4, round(display(w_raw), 1),
                     number_format=val_fmt, align=cm)
-            _xc(ws, ri, 5, "=C%d/D%d" % (ri, ri), bold=True,
-                number_format="0.0%", align=cm)
+            _xc(ws, ri, 5,
+                "=C%d/D%d%s" % (ri, ri, _share_suffix(share_cf)),
+                bold=True, number_format="0.0%", align=cm)
         ti = ri + 1
         _xc(ws, ti, 2, "Total", bold=True)
         for c, letter in ((3, "C"), (4, "D")):
             _xc(ws, ti, c, "=SUM(%s2:%s%d)" % (letter, letter, ri),
                 bold=True, number_format=val_fmt, align=cm)
-        _xc(ws, ti, 5, "=C%d/D%d" % (ti, ti), bold=True,
-            number_format="0.0%", align=cm)
+        _xc(ws, ti, 5,
+            "=C%d/D%d%s" % (ti, ti, _share_suffix(share_cf)),
+            bold=True, number_format="0.0%", align=cm)
         ws.column_dimensions["A"].width = 12
         ws.column_dimensions["B"].width = 60
 

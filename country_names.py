@@ -154,20 +154,18 @@ def _repair_mojibake(text):
 def fix_label(name, maxlen=None):
     """Repair a mangled ITC label (e.g. "C?te d'Ivoire" -> "Côte d'Ivoire").
 
-    Unlike ``display_name`` this only corrects the mojibake / spelling, so
-    journals that prefer to keep the official names (e.g. "United States of
-    America", "Korea, Republic of") can do so without the short-form
-    remapping.  Unmangled names pass through unchanged (tidied).
+    Corrects mojibake / spelling and also maps verbose official names to the
+    professional short forms used in running prose (e.g. "Macedonia, North" ->
+    "North Macedonia", "United Arab Emirates" -> "UAE"), so lists and tables
+    never print country names in the awkward ITC ordering.  Unmangled names
+    that have no short form pass through unchanged (tidied).
     """
     if name is None:
         return ""
     text = re.sub(r"\s+", " ", str(name)).strip().rstrip(" ,;:")
     repaired = _repair_mojibake(text)
-    if repaired != text:
-        mapped = SHORT_NAMES.get(repaired.lower())
-        if mapped:
-            return mapped if maxlen is None else mapped
-        return repaired
+    mapped = SHORT_NAMES.get((repaired or text).lower())
+    text = mapped or repaired
     if maxlen and len(text) > maxlen:
         head = text[: maxlen - 1]
         cut = head.rsplit(" ", 1)[0].rstrip(" ,;:")

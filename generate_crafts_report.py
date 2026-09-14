@@ -59,7 +59,7 @@ from docx.oxml.ns import nsdecls, qn
 from docx.shared import Pt
 
 from generate_product_profile import (
-    ProfileBuilder, make_donut,
+    ProfileBuilder, make_donut, _add_share_donut,
     cagr, yoy_change, display, usd_phrase, growth_phrase, yoy_phrase,
     period_phrase, ordinal_list, _shares, _year_totals, top_rows,
     _ranked_rows, short_label, _ordinal, _series_unit, fmt_for_unit,
@@ -773,13 +773,14 @@ def section_categories(b, cfg, data, source, tmp_dir):
                                cat.total_kenya(rev))
             pairs = _shares(theme_rows, years)
             if len(pairs) >= 2:
-                img = make_donut(pairs, tmp_dir, "f_cat_prod.png",
-                                 "Share of %s" % title)
-                if img:
-                    b._next_figure(
-                        "Share of Kenya's Exports of %s by Product, %d"
-                        % (title, rev), source)
-                    b.add_figure(img)
+                _add_share_donut(
+                    b, pairs,
+                    "Share of Kenya's Exports of %s by Product, %d"
+                    % (title, rev), "Share of %s by Product" % title)
+                b._next_figure(
+                    "Share of Kenya's Exports of %s by Product, %d"
+                    % (title, rev), source)
+                b.add_source(source)
 
         # -- Kenya's destination markets ------------------------------------
         if cat.destinations:
@@ -796,13 +797,14 @@ def section_categories(b, cfg, data, source, tmp_dir):
             _narrative_dest(b, rows, title, years, rev, cat.total_dest(rev))
             pairs = _shares(dest_rows, years)
             if len(pairs) >= 2:
-                img = make_donut(pairs, tmp_dir, "f_cat_dest.png",
-                                 "Kenya's %s Exports by Destination" % title)
-                if img:
-                    b._next_figure(
-                        "Kenya's %s Exports by Destination, %d"
-                        % (title, rev), source)
-                    b.add_figure(img)
+                _add_share_donut(
+                    b, pairs,
+                    "Kenya's %s Exports by Destination, %d" % (title, rev),
+                    "Kenya's %s Exports by Destination" % title)
+                b._next_figure(
+                    "Kenya's %s Exports by Destination, %d"
+                    % (title, rev), source)
+                b.add_source(source)
 
         # -- World exporters of the category -------------------------------
         if cat.exporters:
@@ -866,12 +868,12 @@ def section_whole(b, cfg, data, source, tmp_dir):
             b.add_bullet(txt)
         pairs = _shares(by_cat, years)
         if len(pairs) >= 2:
-            img = make_donut(pairs, tmp_dir, "f_whole_cat.png",
-                             "Kenya's %s Exports by Category" % family)
-            if img:
-                b._next_figure("%s Exports by Category, %d"
-                               % (family, rev), source)
-                b.add_figure(img)
+            _add_share_donut(
+                b, pairs, "%s Exports by Category, %d" % (family, rev),
+                "Kenya's %s Exports by Category" % family)
+            b._next_figure("%s Exports by Category, %d"
+                           % (family, rev), source)
+            b.add_source(source)
 
     # -- Kenya's craft exports by destination ------------------------------
     dest = data.destinations()
@@ -888,13 +890,14 @@ def section_whole(b, cfg, data, source, tmp_dir):
                         lead_only=True)
         pairs = _shares(dest_rows, years)
         if len(pairs) >= 2:
-            img = make_donut(pairs, tmp_dir, "f_whole_dest.png",
-                             "Kenya's %s Exports by Destination" % family)
-            if img:
-                b._next_figure(
-                    "Kenya's %s Exports by Destination, %d" % (family, rev),
-                    source)
-                b.add_figure(img)
+            _add_share_donut(
+                b, pairs,
+                "Kenya's %s Exports by Destination, %d" % (family, rev),
+                "Kenya's %s Exports by Destination" % family)
+            b._next_figure(
+                "Kenya's %s Exports by Destination, %d" % (family, rev),
+                source)
+            b.add_source(source)
 
     # -- World exporters of commercial crafts ------------------------------
     exporters = data.exporters()
@@ -912,13 +915,14 @@ def section_whole(b, cfg, data, source, tmp_dir):
         _narrative_exporters(b, exporters, family, years, rev, total_world)
         pairs = _shares(exp_rows, years)
         if len(pairs) >= 2:
-            img = make_donut(pairs, tmp_dir, "f_whole_exp.png",
-                             "Share of World Exports of %s" % family)
-            if img:
-                b._next_figure(
-                    "World Exports of %s by Economy, %d" % (family, rev),
-                    source)
-                b.add_figure(img)
+            _add_share_donut(
+                b, pairs,
+                "World Exports of %s by Economy, %d" % (family, rev),
+                "Share of World Exports of %s" % family)
+            b._next_figure(
+                "World Exports of %s by Economy, %d" % (family, rev),
+                source)
+            b.add_source(source)
 
     # -- World exports of crafts by product --------------------------------
     wprod = data.world_products()

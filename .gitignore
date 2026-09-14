@@ -62,3 +62,8 @@ Samplefiles/**/._*
 # policy dashboard: ingested datasets + downloaded source files (not source code)
 policydata/data/
 policydata/incoming/
+
+# Research & Document Assistant (kept local only)
+opencode.json
+webapp/docx_footnotes.py
+webapp/opencode-sidecar.log
