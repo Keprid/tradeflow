@@ -3,12 +3,30 @@
   "subtitle": "2025 Edition",
   "family_title": "Meat",
   "unit": "USD",
-  "value_scale": 1e6,
+  "value_scale": 1000000.0,
   "unit_label": "USD Million",
   "top_n": 12,
-  "include_imports": false,
+  "global_top_n": 25,
+  "include_analysis": false,
+  "include_imports": true,
+  "competitor_top": 5,
+  "sub_families": [
+    {
+      "title": "Meat and edible meat offal",
+      "codes": [
+        "02"
+      ]
+    },
+    {
+      "title": "Preparations of meat (processed meat)",
+      "codes": [
+        "16"
+      ]
+    }
+  ],
   "include_codes": [
-    "02", "16"
+    "02",
+    "16"
   ],
   "source": "International Trade Centre (ITC), Trade Map, 2025",
   "org": "Kenya Export Promotion and Branding Agency",
@@ -21,5 +39,26 @@
     "The family draws together fresh, chilled and frozen meat of bovine animals, sheep, goats, swine, poultry and other species, edible offal, and prepared or preserved meat products such as sausages. Presenting them as a single portfolio provides a clearer picture of the size, growth and market orientation of Kenya's meat exports."
   ],
   "data_dir": "Meat",
-  "output": "output/Product Profile - Meat 2025.docx"
+  "output": "output/Product Profile - Meat 2025.docx",
+  "global_intro": [
+    "Global trade in meat and meat preparations is among the largest in agricultural products, led by the major beef, poultry and swine producing economies."
+  ],
+  "africa_intro": [
+    "Africa supplies a small but growing share of world meat exports. The tables below summarise the position of the leading African exporting and importing economies."
+  ],
+  "kenya_intro": [
+    "Kenya's exports and imports of meat and meat products are traced below, by destination and source market, by product and by quantity, over the review period."
+  ],
+  "recommendations": [
+    "Deepen Kenya's position in close regional markets - South Sudan and the wider EAC - where Kenya already commands a leading share of meat imports.",
+    "Pursue food-safety, veterinary sanctity and cold-chain certification to open high-value Middle East markets such as the United Arab Emirates and Saudi Arabia.",
+    "Support feedlot and value-added processing capacity (HS 16 preparations) to capture higher unit values than live and chilled carcass exports."
+  ],
+  "references": [
+    "International Trade Centre, Trade Map database - trade statistics for international business development, 2025.",
+    "UN Comtrade Database - United Nations Statistics Division, bilateral merchandise trade data.",
+    "KNBS - Economic Survey, Kenya National Bureau of Statistics, trade in goods statistics."
+  ],
+  "max_years": 5,
+  "anchor": "Meat"
 }

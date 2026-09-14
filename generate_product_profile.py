@@ -40,7 +40,6 @@ Usage:
 """
 
 import argparse
-import glob
 import json
 import os
 import re
@@ -86,17 +85,359 @@ FILE_PREFIXES = {
     "export_potential": "export_potential",
 }
 
+# Ordered upload manifest the web app can surface: every required download for
+# a product-profile analysis (phase 1) followed by the optional ones (phase 2)
+# that fill the quantity, Africa, supplier and Export-Potential tables.  The
+# "name" uses Trade Map's slug with a placeholder for the product/anchor.
+REQUIRED_UPLOADS = [
+    {"prefix": "exporting-economies", "key": "world_exports_by_economy",
+     "label": "Top exporting economies of the product (value, USD Thousand)",
+     "measure": "value"},
+    {"prefix": "products-exported-globally", "key": "world_exports_by_product",
+     "label": "Exports of the product by product detail (value, USD Thousand)",
+     "measure": "value"},
+    {"prefix": "importing-economies", "key": "world_imports_by_economy",
+     "label": "Top importing economies of the product (value, USD Thousand)",
+     "measure": "value"},
+    {"prefix": "products-imported-globally", "key": "world_imports_by_product",
+     "label": "Imports of the product by product detail (value, USD Thousand)",
+     "measure": "value"},
+    {"prefix": "kenyas-exports-to-world-by-importer",
+     "key": "kenya_exports_by_partner",
+     "label": "Where does Kenya export the product (destinations, value)",
+     "measure": "value"},
+    {"prefix": "kenyas-exports-to-world-by-product",
+     "key": "kenya_exports_by_product",
+     "label": "Kenya's exports of the product by product detail (value)",
+     "measure": "value"},
+    {"prefix": "kenyas-imports-from-world-by-exporter",
+     "key": "kenya_imports_by_partner",
+     "label": "Kenya's imports of the product by source market (value)",
+     "measure": "value"},
+    {"prefix": "kenyas-imports-from-world-by-product",
+     "key": "kenya_imports_by_product",
+     "label": "Kenya's imports of the product by product detail (value)",
+     "measure": "value"},
+]
+
+OPTIONAL_UPLOADS = [
+    {"prefix": "products-exported-globally", "key": "world_exports_by_product",
+     "kind": "quantity",
+     "label": "Exports of the product by product detail (Quantity, Tonnes) - "
+              "same file, exported with the Tonnes option",
+     "measure": "quantity",
+     "note": "fills Table 3 (global export quantities)"},
+    {"prefix": "products-imported-globally", "key": "world_imports_by_product",
+     "kind": "quantity",
+     "label": "Imports of the product by product detail (Quantity, Tonnes)",
+     "measure": "quantity",
+     "note": "fills Table 6 (global import quantities)"},
+    {"prefix": "kenyas-exports-to-world-by-product",
+     "key": "kenya_exports_by_product", "kind": "quantity",
+     "label": "Kenya's exports by product (Quantity, Tonnes)",
+     "measure": "quantity", "note": "fills Table 14"},
+    {"prefix": "kenyas-imports-from-world-by-product",
+     "key": "kenya_imports_by_product", "kind": "quantity",
+     "label": "Kenya's imports by product (Quantity, Tonnes)",
+     "measure": "quantity", "note": "fills Table 17"},
+    {"prefix": "africas-exports-to-world-by-product",
+     "key": "africa_exports_by_product",
+     "label": "Exports of the product by product detail from Africa (value)",
+     "measure": "value", "note": "fills Table 8"},
+    {"prefix": "africas-imports-from-world-by-product",
+     "key": "africa_imports_by_product",
+     "label": "Imports of the product by product detail into Africa (value)",
+     "measure": "value", "note": "fills Table 10"},
+    {"prefix": "south-sudan-imports-from-world-by-exporter",
+     "key": "supplier_south_sudan", "kind": "supplier",
+     "label": "List of supplying markets for a product imported by <Top "
+              "Destination> (one file per market, value)",
+     "measure": "value",
+     "note": "one file per top destination - fills Table 18 and the "
+             "competitor analysis; download after phase 1 identifies the "
+             "markets",
+     "repeat": "per top destination market"},
+    {"prefix": "export_potential", "key": "export_potential",
+     "kind": "potential",
+     "label": "Export Potential Map for the product (markets x potential)",
+     "measure": "value",
+     "note": "one map per product sub-family - fills the Export Potential "
+             "figures and table",
+     "repeat": "one per product sub-family"},
+]
+
+DEFAULT_MAX_YEARS = 5
+
+
+def upload_manifest(anchor="<product>"):
+    """Ordered list of files the web app should ask the user to upload for a
+    product-profile analysis.  Each entry has ``required``, ``name``,
+    ``label`` and (for optionals) ``phase``/``note`` so the UI can render the
+    checklist and surface click-to-download hints."""
+    out = []
+    for spec in REQUIRED_UPLOADS:
+        out.append({"required": True, "phase": 1, "name":
+                    "%s_%s.xlsx" % (spec["prefix"], anchor),
+                    "measure": spec["measure"], "label": spec["label"]})
+    for i, spec in enumerate(OPTIONAL_UPLOADS, start=1):
+        out.append({
+            "required": False,
+            "phase": 2 if spec.get("kind") in ("supplier",) else 2,
+            "name": "%s_%s.xlsx" % (spec["prefix"], anchor),
+            "measure": spec["measure"], "label": spec["label"],
+            "note": spec["note"], "repeat": spec.get("repeat", "")})
+    return out
+
 
 # --------------------------------------------------------------------------
 # ITC matrix loading
 # --------------------------------------------------------------------------
-def _find_file(data_dir, prefix):
-    hits = [p for p in glob.glob(os.path.join(data_dir, "*")) if
+def _walk_files(data_dir):
+    """Every regular file under ``data_dir``, recursing into sub-folders.
+
+    Web-app uploads arrive as individually-uniqued objects (their original
+    names may collide across uploads - e.g. a value and a quantity twin that
+    share the exact same filename) so the loader must not assume the files
+    sit flat in one directory.  Hidden files (``~``, leading ``.``) are
+    skipped.
+    """
+    out = []
+    for dirpath, _dirs, files in os.walk(data_dir):
+        for f in files:
+            base = f.lower()
+            if base.startswith("~") or base.startswith("."):
+                continue
+            out.append(os.path.join(dirpath, f))
+    return sorted(out)
+
+
+def _find_files(data_dir, prefix):
+    """All files under ``data_dir`` (recursively) whose basename begins with
+    ``prefix``; when nothing matches, files that merely contain ``prefix``.
+    Sorted so the browser "(1)" copies never win over the primary file."""
+    all_files = _walk_files(data_dir)
+    hits = [p for p in all_files if
             os.path.basename(p).lower().startswith(prefix)]
     if not hits:
-        hits = [p for p in glob.glob(os.path.join(data_dir, "*")) if
+        hits = [p for p in all_files if
                 prefix in os.path.basename(p).lower()]
-    return sorted(hits)[0] if hits else None
+    return hits
+
+
+def _find_file(data_dir, prefix):
+    hits = _find_files(data_dir, prefix)
+    return hits[0] if hits else None
+
+
+_MEASURE_HDR_RE = re.compile(
+    r"\s*(20\d\d)\s*\(\s*(?P<unit>[^)]{1,40}?)\s*\)")
+_QTY_SLUG_RE = re.compile(r"(tonne|tonnes|quantity| kg)", re.IGNORECASE)
+
+
+def _matrix_unit(path):
+    """Classify an ITC matrix download as ``"value"`` or ``"quantity"`` by the
+    unit of its year-column headers.
+
+    Trade Map lets every by-product download be exported either in *value*
+    (``2016 (USD Thousand)``) or in *quantity* (``2016 (Tonnes)`` /
+    ``2016 (Quantity in tonnes)``).  The two look identical otherwise - and
+    can even share the same filename when uploaded through the web app - so
+    the measure is read from the ``path``'s header before the file is
+    assigned to the value pipeline or the tonnes pipeline.  Classic HTML
+    ``.xls`` downloads (an "Exported value"/"Tons" unit row in the table
+    body) are read textually; if no unit is found the filename slug decides,
+    then ``"value"``."""
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        ws = wb.worksheets[0]
+        header = next(ws.iter_rows(values_only=True))
+        wb.close()
+    except Exception:
+        header = ()
+    for h in header:
+        m = _MEASURE_HDR_RE.match(str(h or ""))
+        if m:
+            unit = m.group("unit").lower()
+            if ("ton" in unit or "kg" in unit or "quantity" in unit):
+                return "quantity"
+            return "value"
+    unit = _classic_unit(path)
+    if unit is not None:
+        return unit
+    if _QTY_SLUG_RE.search(os.path.basename(path)):
+        return "quantity"
+    return "value"
+
+
+# Classic HTML ``.xls`` files carry their unit as a table-body row
+# ("Exported quantity ... Tons") rather than in a parenthetical header, so
+# the measure is read from a short textual scan of the file head.
+def _classic_unit(path):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            head = fh.read(12000)
+    except Exception:
+        return None
+    head = head.lower()
+    has_tons = bool(re.search(r"\b(tonnes?|tons?)\b", head))
+    has_usd = bool(re.search(r"\b(usd\b|usd thousand|exchanged value|thousand us)",
+                             head))
+    if has_tons and not has_usd:
+        return "quantity"
+    return "value" if has_usd else None
+
+
+# Classic Trade Map HTML ``.xls`` downloads are named after the report they
+# are ("Trade_Map_-_List_of_exporters_for_the_selected_product_(...).xls")
+# rather than ITC's beta-product slugs.  Map those stems back to the same
+# loader keys used by the slugged files.
+_CLASSIC_STEMS = {
+    "world_exports_by_economy":
+        ("list_of_exporters_for_the_selected_product",),
+    "world_imports_by_economy":
+        ("list_of_importers_for_the_selected_product",),
+    "world_exports_by_product":
+        ("list_of_exported_products_for_the_selected_product",),
+    "world_imports_by_product":
+        ("list_of_imported_products_for_the_selected_product",),
+    "kenya_exports_by_product":
+        ("list_of_products_exported_by_kenya",),
+    "kenya_imports_by_product":
+        ("list_of_products_imported_by_kenya",),
+    "kenya_exports_by_partner":
+        ("list_of_importing_markets_for_a_product_exported_by_kenya",
+         "list_of_destination_countries_for_a_product_exported_by_kenya"),
+    "kenya_imports_by_partner":
+        ("list_of_exporting_markets_for_a_product_imported_by_kenya",),
+    "export_potential": ("export_potential",),
+}
+_BY_ECONOMY_KEYS = {"world_exports_by_economy", "world_imports_by_economy"}
+_BY_PARTNER_KEYS = {"kenya_exports_by_partner", "kenya_imports_by_partner"}
+_BY_PRODUCT_KEYS = {
+    "world_exports_by_product", "world_imports_by_product",
+    "kenya_exports_by_product", "kenya_imports_by_product",
+    "africa_exports_by_product", "africa_imports_by_product",
+}
+
+
+def _classic_group(path):
+    """The product group of a classic filename: ``(..._((Meat_and_edible_
+    meat_offal)).xls`` -> ``Meat and edible meat offal``."""
+    m = re.search(r"\(([^()]+)\)\.?\s*xls?$",
+                  os.path.basename(path), re.IGNORECASE)
+    if not m:
+        return ""
+    return " ".join(
+        re.sub(r"[-_]+", " ", m.group(1)).lower().split())
+
+
+def _classic_candidates(data_dir, key):
+    """Classic ``.xls`` downloads under ``data_dir`` that supply ``key``.
+
+    A family economy download ("List of exporters for the selected product")
+    often sits next to per-sub-product twins; when several match, only the
+    candidate whose group matches the family's by-product download is kept
+    (otherwise the aggregate row would be shadowed by a sub-product file)."""
+    probes = _CLASSIC_STEMS.get(key) or ()
+    if not probes:
+        return []
+    by_name = []
+    for p in _walk_files(data_dir):
+        base = os.path.basename(p).lower()
+        if any(stem in base for stem in probes):
+            by_name.append(p)
+    if not by_name:
+        return []
+    if key in _BY_ECONOMY_KEYS and len(by_name) > 1:
+        family = ""
+        for stem in ("list_of_exported_products_for_the_selected_product",
+                     "list_of_imported_products_for_the_selected_product"):
+            mate = _classic_candidates(data_dir, "world_exports_by_product" if
+                                       "export" in stem else
+                                       "world_imports_by_product")
+            if mate:
+                family = _classic_group(mate[0])
+                break
+        if family:
+            picks = [p for p in by_name if _classic_group(p) == family]
+            if picks:
+                by_name = picks
+    return by_name
+
+
+def _classic_to_matrix(key, records):
+    """Convert classic ``{code, label, years}`` records to the matrix shape
+    the profile accessors expect (``reporter``/``partner``/``product``)."""
+    out = []
+    for r in records:
+        code = str(r.get("code") or "").strip()
+        label = r.get("label")
+        years = r.get("years") or {}
+        if not code and not label:
+            continue
+        is_world = code.lower() in ("world", "total", "all")
+        if key in _BY_ECONOMY_KEYS:
+            out.append({"reporter": "000" if is_world else code,
+                        "reporter_label": "World" if is_world else code,
+                        "partner": "000", "partner_label": "World",
+                        "product": "", "product_label": "", "years": years})
+        elif key in _BY_PARTNER_KEYS:
+            out.append({"reporter": "404", "reporter_label": "Kenya",
+                        "partner": "000" if is_world else code,
+                        "partner_label": "World" if is_world else code,
+                        "product": "", "product_label": "", "years": years})
+        elif key in _BY_PRODUCT_KEYS:
+            out.append({"reporter": "000", "reporter_label": "World",
+                        "partner": "000", "partner_label": "World",
+                        "product": code, "product_label": str(label or ""),
+                        "years": years})
+    return out
+
+
+def _load_any(path):
+    """Load an ITC matrix workbook, falling back to the HTML-table parser for
+    Trade Map's classic ``.xls`` downloads (BIFF/HTML saved under ``.xls``)."""
+    try:
+        return load_matrix(path)
+    except Exception:
+        return load_html_matrix(path)
+
+
+def _find_region_product_file(data_dir, flow):
+    """Locate a 'List of products exported/imported by <region>' workbook.
+
+    Trade Map regions report their trade as a pseudo-economy (e.g. Africa), so
+    the by-product download for a region carries the same shape as the world
+    by-product matrix but with ``africa`` in the filename.  Both the beta slug
+    (``africas-exports-to-world-by-product_all.xlsx``) and the classic name
+    (``Trade_Map_-_List_of_products_exported_by_Africa.xls``) are recognised.
+    """
+    verbs = {"export": ("export", "exported", "exports"),
+             "import": ("import", "imported", "imports")}[flow]
+    for path in _walk_files(data_dir):
+        base = os.path.basename(path).lower()
+        if "africa" in base:
+            if any(v in base for v in verbs) and \
+                    ("by-product" in base or "list_of_products" in base):
+                return path
+    return None
+
+
+def _supplier_market_label(path):
+    """Best-effort market name from a per-market supplying-markets download.
+
+    ``united-arab-emirates-imports-from-world-by-exporter_all.xlsx`` ->
+    ``United Arab Emirates``; ``Trade_Map_-_List_of_supplying_markets_for_a_
+    product_imported_by_Saudi_Arabia.xls`` -> ``Saudi Arabia``."""
+    stem = os.path.splitext(os.path.basename(path))[0].lower()
+    m = re.match(r"^([a-z0-9\-_ ]+?)-?imports-from-world-by-exporter", stem) \
+        or re.search(r"imported_by[_\s]+(.+?)\.", stem)
+    if not m:
+        return None
+    name = re.sub(r"[-_]+", " ", m.group(1)).strip().title()
+    if not name or name.lower() in ("kenya", "world"):
+        return None
+    return display_name(fix_label(name))
 
 
 def load_matrix(path):
@@ -202,23 +543,127 @@ def load_html_matrix(path):
 class ProfileData:
     """Loads every ITC file in the folder and derives the analysis tables."""
 
-    def __init__(self, data_dir, include_codes=None, family_title=None):
+    def __init__(self, data_dir, include_codes=None, family_title=None,
+                 max_years=None):
         self.data_dir = os.path.abspath(data_dir)
         self.include_codes = list(include_codes or [])
         self.family_title = family_title
+        self.max_years = max_years or DEFAULT_MAX_YEARS
         self.warnings = []
-        self.files = {}
+        self.files = {}                        # value (USD Thousand) matrices
+        self.qty_files = {}                    # parallel Quantity (Tonnes)
+        self.potential_files = []              # one Export Potential Map each
+
+        # Every known download is matched by prefix; value and quantity twins
+        # of a product table are told apart by their header measure, so both
+        # can live in one folder.
+        qty_keys = set(FILE_PREFIXES.values()) - {"export_potential"}
         for prefix, key in FILE_PREFIXES.items():
-            path = _find_file(self.data_dir, prefix)
-            if path is None:
-                if key not in ("export_potential", "kenya_exports_by_partner"):
-                    self.warnings.append(
-                        "missing %s file(s) in %s - related sections skipped"
-                        % (prefix, self.data_dir))
+            candidates = _find_files(self.data_dir, prefix)
+            # A slugged download and a classic Trade Map .xls for the same
+            # report can coexist (e.g. value as .xlsx + the Tonnes twin as the
+            # classic HTML .xls): keep every candidate, each is then sorted
+            # into the value / quantity pipelines by its header measure.
+            for p in _classic_candidates(self.data_dir, key):
+                if p not in candidates:
+                    candidates.append(p)
+            if not candidates:
+                continue  # surfaced as a structured alert in file_status
+            if key == "export_potential":
+                for p in candidates:
+                    years, records = _load_any(p)
+                    if not records:
+                        continue
+                    label = next((r["product_label"] for r in records
+                                  if r.get("product_label")), "") or \
+                        os.path.splitext(os.path.basename(p))[0]
+                    self.potential_files.append(
+                        {"path": p, "years": years, "records": records,
+                         "label": label})
                 continue
-            years, records = load_matrix(path)
+            value_hits = [p for p in candidates if _matrix_unit(p) == "value"]
+            qty_hits = [p for p in candidates if _matrix_unit(p) == "quantity"]
+            if len(value_hits) > 1:
+                self.warnings.append(
+                    "%d value candidates for '%s' in %s - using %s"
+                    % (len(value_hits), prefix, self.data_dir,
+                       os.path.basename(value_hits[0])))
+            if len(qty_hits) > 1:
+                self.warnings.append(
+                    "%d quantity candidates for '%s' in %s - using %s"
+                    % (len(qty_hits), prefix, self.data_dir,
+                       os.path.basename(qty_hits[0])))
+
+            def _store(path, store_self):
+                try:
+                    years, records = _load_any(path)
+                except Exception:
+                    return False
+                if records is None:
+                    return False
+                if records and "product" not in records[0] and \
+                        key in (_BY_ECONOMY_KEYS | _BY_PARTNER_KEYS |
+                                _BY_PRODUCT_KEYS):
+                    records = _classic_to_matrix(key, records)
+                (self.files if store_self else self.qty_files)[key] = \
+                    {"path": path, "years": years, "records": records}
+                return True
+
+            if value_hits:
+                _store(value_hits[0], True)
+            if qty_hits and key in qty_keys:
+                # A quantity-only download fills the Tonnes table on its own;
+                # the value table is left empty (surfaced as an alert).
+                if not value_hits:
+                    _store(qty_hits[0], False)
+                else:
+                    qy, qr = _load_any(qty_hits[0])
+                    if qr:
+                        self.qty_files[key] = {"path": qty_hits[0],
+                                               "years": qy, "records": qr}
+            elif qty_hits:
+                if not value_hits:
+                    self.warnings.append(
+                        "unsupported measure in %s file(s) in %s" %
+                        (prefix, self.data_dir))
+
+        # ---- region by-product downloads (e.g. Africa) --------------------
+        # An ITC region reports its trade as a pseudo-economy, so a "List of
+        # products exported/imported by Africa" download drives the template's
+        # Africa sub-section tables.
+        for flow, key in (("export", "africa_exports_by_product"),
+                          ("import", "africa_imports_by_product")):
+            path = _find_region_product_file(self.data_dir, flow)
+            if path is None:
+                continue
+            years, records = _load_any(path)
+            if records is None:
+                continue
+            if records and "product" not in records[0]:
+                records = _classic_to_matrix(key, records)
             self.files[key] = {"path": path, "years": years,
                                "records": records}
+
+        # ---- per-market supplying-markets downloads ------------------------
+        # For the template's Competitor Analysis section (Kenya's market share
+        # within its top destination markets) each market's own
+        # "List of supplying markets for a product imported by <Market>"
+        # download is mapped back to the destination label.
+        self.suppliers = {}
+        for path in _walk_files(self.data_dir):
+            base = os.path.basename(path).lower()
+            if ("kenyas" in base or
+                    ("imports-from-world-by-exporter" not in base and
+                     "list_of_supplying_markets" not in base)):
+                continue
+            label = _supplier_market_label(path)
+            if not label:
+                continue
+            years, records = _load_any(path)
+            if not records:
+                continue
+            self.suppliers[label] = {"path": path, "years": years,
+                                     "records": records}
 
         # ---- supplementary ITC HTML .xls downloads (optional) -------------
         # Kenya's total merchandise exports (RCA / specialization) and the
@@ -251,22 +696,49 @@ class ProfileData:
         self.all_years = sorted({y for k, f in self.files.items()
                                  if k != "export_potential"
                                  for y in f["years"]})
+        # Keep the tables compact: analyse only the most recent years, even
+        # when the portfolio carries a decade of history (ITC data runs the
+        # full profile window but a 10-year matrix no longer fits a page).
+        full_years = self.all_years
+        if self.max_years and len(self.all_years) > self.max_years:
+            self.all_years = self.all_years[-self.max_years:]
+        self._full_years = full_years
 
-        # Anchor product (the product of the by-importer download)
+        # Anchor product (the product of the by-importer download).  A missing
+        # by-importer download must not abort the profile: it falls back to
+        # the configured family so every other table still generates and the
+        # data-availability note flags the file.
         partner_rows = self._rows("kenya_exports_by_partner")
         anchor_product = None
         if partner_rows:
             counts = {}
             for r in partner_rows:
-                counts[r["product"]] = counts.get(r["product"], 0) + 1
-            anchor_product = max(counts, key=counts.get)
+                product = r.get("product") or r.get("code")
+                if product:
+                    counts[product] = counts.get(product, 0) + 1
+            if counts:
+                anchor_product = max(counts, key=counts.get)
+        if anchor_product is None:
+            candidate = self.include_codes[0] if self.include_codes else None
+            if candidate is None:
+                records = self._rows("kenya_exports_by_product")
+                candidate = next((r.get("product") or r.get("code") or None
+                                  for r in records), None)
+            if candidate is not None:
+                anchor_product = candidate
+                self.warnings.append(
+                    "by-importer file not found - anchor inferred from the "
+                    "by-product download (%s)" % anchor_product)
         if anchor_product is None:
             raise OSError("Missing the by-importer file; cannot detect the "
                           "anchor product in %s." % self.data_dir)
         self.anchor_hs = anchor_product
         self.anchor_label = next(
             (r["product_label"] for r in partner_rows
-             if r["product"] == anchor_product), "")
+             if (r.get("product") or r.get("code")) == anchor_product
+             and r.get("product_label")), "")
+        if not self.anchor_label and self.family_title:
+            self.anchor_label = self.family_title
 
         # Total rows: a product code whose series equals the sum of all the
         # other codes in the same file (the basket aggregate of a selection
@@ -277,26 +749,53 @@ class ProfileData:
             if key in self.files:
                 self._file_totals[key] = self._total_codes(key)
 
-        # Family members: product detail rows of the by-product download
+        # Family members: product detail rows of Kenya's by-product download
         # (its total row, if any, is excluded), filtered by include_codes.
-        total = self._file_totals.get("kenya_exports_by_product", set())
-        members = []
-        for r in self._rows("kenya_exports_by_product"):
-            if r["partner"] != "000" or r["product"] in total:
-                continue
-            if not self._code_ok(r["product"]):
-                continue
-            members.append({"code": r["product"], "label": r["product_label"],
-                            "years": r["years"]})
-        members.sort(key=lambda m: m["years"].get(self.review_year) or 0.0,
-                     reverse=True)
-        self.members = members
-        self.anchor_is_total = anchor_product in total
+        self.members = self._family_product_rows(self.files,
+                                                 "kenya_exports_by_product")
+        self.anchor_is_total = anchor_product in \
+            self._file_totals.get("kenya_exports_by_product", set())
         if self.anchor_is_total and self.family_title:
             # The anchor is the ITC selection group (e.g. "coffee one"), whose
             # group name is not meaningful on its own.  Use the configured
             # family title ("Coffee") for headings and tables instead.
             self.anchor_label = self.family_title
+
+        # ---- data availability manifest ------------------------------------
+        # Presence of every file the reports draw on, plus human-readable
+        # alerts. The web app shows these alerts as info/warning banners and
+        # the profile prints them as a data-availability note, so a missing
+        # file never silently blanks a table.
+        self.file_status = {}
+        self.alerts = []
+        for spec in REQUIRED_UPLOADS:
+            present = spec["key"] in self.files
+            if not present:
+                self.alerts.append({"level": "warning",
+                                    "topic": spec["key"],
+                                    "message": "Missing required download "
+                                               "\"%s\": %s" %
+                                               (spec["prefix"], spec["label"])})
+            self.file_status[spec["key"]] = {"present": present,
+                                             "required": True}
+        for spec in OPTIONAL_UPLOADS:
+            if spec.get("kind") == "supplier":
+                present = bool(self.suppliers)
+            elif spec.get("kind") == "potential":
+                present = bool(self.potential_files)
+            elif spec.get("measure") == "quantity":
+                present = spec["key"] in self.qty_files
+            else:
+                present = spec["key"] in self.files
+            self.file_status.setdefault(spec["key"], {})["present"] = present
+            if not present:
+                self.alerts.append({"level": "info", "topic": spec["key"],
+                                    "message": "Optional download \"%s\" not "
+                                               "provided (%s) - the related "
+                                               "tables are skipped until it "
+                                               "is added."
+                                               % (spec["prefix"],
+                                                  spec["note"])})
 
     def _code_ok(self, code):
         """True when ``code`` matches the configured include_codes.
@@ -354,12 +853,14 @@ class ProfileData:
         """Normalise an HS code to its digits (e.g. "4420.10" -> "442010")."""
         return re.sub(r"[^0-9]", "", str(code or ""))
 
-    def _total_codes(self, key):
-        """Codes in ``key`` whose review-year value equals the sum of all the
-        other codes in the same file (the selection total row)."""
+    def _total_codes(self, key, store=None):
+        """Codes in ``key`` (or ``store[key]``) whose review-year value equals
+        the sum of all the other codes in the same file (the selection total
+        row)."""
+        store = self.files if store is None else store
         by_code = {}
-        for r in self._rows(key):
-            if r["partner"] != "000":
+        for r in store.get(key, {}).get("records", []):
+            if r.get("partner") != "000" or "product" not in r:
                 continue
             by_code.setdefault(r["product"], r["years"])
         codes = [c for c in by_code if by_code[c].get(self.review_year)]
@@ -374,8 +875,59 @@ class ProfileData:
         return out
 
     # -- accessors ----------------------------------------------------------
-    def _rows(self, key):
-        return self.files.get(key, {}).get("records", [])
+    def _rows(self, key, store=None):
+        store = self.files if store is None else store
+        return store.get(key, {}).get("records", [])
+
+    def _family_product_rows(self, store, key):
+        """Product-detail rows of a by-product download.
+
+        ``store`` is the value or quantity pipeline; rows are filtered to the
+        configured family, its selection-total row is dropped and the rest are
+        ranked by their review-year value.  Also accepts the classic HTML
+        ``.xls`` records (code/label/years) used for region downloads.
+        """
+        records = store.get(key, {}).get("records", [])
+        if not records:
+            return []
+        total = self._total_codes(key, store) if "product" in records[0] \
+            else set()
+        rows = []
+        for r in records:
+            code = r.get("product") or r.get("code")
+            if code is None:
+                continue
+            code = str(code)
+            if "product" in r:
+                label = r["product_label"]
+                if r["partner"] != "000" or code in total:
+                    continue
+            else:
+                label = r.get("label") or ""
+                stem = code.upper()
+                if stem in ("TOTAL", "WORLD") or \
+                        str(label).lower().strip() in ("total", "world",
+                                                       "all products", "all"):
+                    continue
+            if not self._code_ok(code):
+                continue
+            rows.append({"code": code, "label": label, "years": r["years"]})
+        rows.sort(key=lambda m: m["years"].get(self.review_year) or 0.0,
+                  reverse=True)
+        return rows
+
+    def sub_family_members(self, codes):
+        """Members of ``self.members`` that fall under one of ``codes`` -- the
+        sub-family (e.g. processed meat = HS 16) of the template's Table 13."""
+        if not codes:
+            return []
+        wanted = [self._norm_code(c) for c in codes]
+        out = []
+        for m in self.members:
+            c = self._norm_code(m["code"])
+            if any(c.startswith(w) for w in wanted if w):
+                out.append(m)
+        return out
 
     @property
     def review_year(self):
@@ -422,34 +974,90 @@ class ProfileData:
                 for r in rows]
 
     def kenya_import_products(self):
-        total = self._file_totals.get("kenya_imports_by_product", set())
-        rows = sorted((r for r in self._rows("kenya_imports_by_product")
-                       if r["partner"] == "000" and r["product"] not in total
-                       and self._code_ok(r["product"])),
-                      key=lambda r: r["years"].get(self.review_year) or 0.0,
-                      reverse=True)
-        return [{"code": r["product"], "label": r["product_label"],
-                 "years": r["years"]} for r in rows]
+        return self._family_product_rows(self.files, "kenya_imports_by_product")
 
     def global_export_products(self):
-        total = self._file_totals.get("world_exports_by_product", set())
-        rows = sorted((r for r in self._rows("world_exports_by_product")
-                       if r["partner"] == "000" and r["product"] not in total
-                       and self._code_ok(r["product"])),
-                      key=lambda r: r["years"].get(self.review_year) or 0.0,
-                      reverse=True)
-        return [{"code": r["product"], "label": r["product_label"],
-                 "years": r["years"]} for r in rows]
+        return self._family_product_rows(self.files, "world_exports_by_product")
 
     def global_import_products(self):
-        total = self._file_totals.get("world_imports_by_product", set())
-        rows = sorted((r for r in self._rows("world_imports_by_product")
-                       if r["partner"] == "000" and r["product"] not in total
-                       and self._code_ok(r["product"])),
-                      key=lambda r: r["years"].get(self.review_year) or 0.0,
+        return self._family_product_rows(self.files, "world_imports_by_product")
+
+    def global_export_products_qty(self):
+        """World exports of the family by product in Quantity (Tonnes)."""
+        return self._family_product_rows(self.qty_files,
+                                         "world_exports_by_product")
+
+    def global_import_products_qty(self):
+        """World imports of the family by product in Quantity (Tonnes)."""
+        return self._family_product_rows(self.qty_files,
+                                         "world_imports_by_product")
+
+    def kenya_export_products_qty(self):
+        """Kenya's exports of the family by product in Quantity (Tonnes)."""
+        return self._family_product_rows(self.qty_files,
+                                         "kenya_exports_by_product")
+
+    def kenya_import_products_qty(self):
+        """Kenya's imports of the family by product in Quantity (Tonnes)."""
+        return self._family_product_rows(self.qty_files,
+                                         "kenya_imports_by_product")
+
+    def africa_exporters(self):
+        """All African exporters of the family, ranked (template Table 7)."""
+        return [e for e in self.exporters() if is_africa(e["label"])]
+
+    def africa_importers(self):
+        """All African importers of the family, ranked (template Table 9)."""
+        return [i for i in self.importers() if is_africa(i["label"])]
+
+    def africa_export_products(self):
+        """Africa's exports of the family by product (template Table 8)."""
+        return self._family_product_rows(self.files, "africa_exports_by_product")
+
+    def africa_import_products(self):
+        """Africa's imports of the family by product (template Table 10)."""
+        return self._family_product_rows(self.files, "africa_imports_by_product")
+
+    def market_suppliers(self):
+        """Per-market importing-side data from the supplying-markets downloads.
+
+        Returns ``{market_label: {"years", "total", "total_label", "rows"}}``
+        where ``total`` is the market's total imports of the family by year and
+        ``rows`` are the ranked supplier rows (Kenya included).  Markets whose
+        download is not present are simply absent from the dict.
+        """
+        out = {}
+        for label, d in self.suppliers.items():
+            records = d["records"]
+            total = {}
+            total_year = None
+            rows = []
+            for r in records:
+                if "product" in r:
+                    # By-exporter matrix: the importing market is the reporter
+                    # and the total (suppliers = World) row is partner '000'.
+                    if r["partner"] == "000":
+                        total = r["years"]
+                        total_year = d["years"]
+                    else:
+                        rows.append({"label": fix_label(r["partner_label"]),
+                                     "years": r["years"]})
+                else:
+                    stem = (r.get("code") or "").upper()
+                    lab = str(r.get("label") or "")
+                    if stem in ("TOTAL", "WORLD") or lab.lower().strip() in (
+                            "world", "total"):
+                        total = r["years"]
+                        total_year = d["years"]
+                    else:
+                        rows.append({"label": fix_label(r.get("label") or ""),
+                                     "years": r["years"]})
+            rows.sort(key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
-        return [{"code": r["product"], "label": r["product_label"],
-                 "years": r["years"]} for r in rows]
+            out[label] = {"years": d["years"], "total": total,
+                          "total_year": total_year, "rows": rows,
+                          "label": label}
+        return out
 
     @staticmethod
     def _is_kenya_label(label):
@@ -701,6 +1309,25 @@ def fmt_for_unit(v, unit, decimals=1):
     if unit == "USD Thousand":
         return num(v, decimals)
     return num(display(v), decimals)
+
+
+def _qty_unit(values):
+    """Display unit for a raw quantity (tonnes) series."""
+    vs = [abs(v) for v in values if v]
+    if not vs:
+        return "Tonnes"
+    if max(vs) >= 1_000_000.0:
+        return "Thousand Tonnes"
+    return "Tonnes"
+
+
+def fmt_qty(v, unit):
+    """Format a raw quantity (tonnes) value in ``unit``."""
+    if v is None:
+        return ""
+    if unit == "Thousand Tonnes":
+        return num(v / 1000.0, 1)
+    return num(v, 1)
 
 
 def usd_phrase(v):
@@ -1085,7 +1712,7 @@ class ProfileBuilder(ReportBuilder):
     def add_value_table(self, first_col_header, rows, years, share_header,
                         title, source, total_label=None, rank=False,
                         unit_label="USD Million", widths=None,
-                        adaptive_unit=True):
+                        adaptive_unit=True, quantity=False):
         """Structure a value matrix table.
 
         ``rows`` = list of ``{"label", "years": {y: v}}`` already truncated
@@ -1096,7 +1723,8 @@ class ProfileBuilder(ReportBuilder):
         When *adaptive_unit* is ``True`` (default) the whole table is shown in
         USD Thousand (instead of Millions) if any nonzero value would
         otherwise round to 0.0 in millions, so small sub-category values
-        never disappear.
+        never disappear.  With ``quantity=True`` the table instead measures a
+        tons-series and uses ``Tonnes`` / ``Thousand Tonnes`` units.
         """
         n = len(years)
         code_cols = 1 if any(row.get("code") for row in rows) else 0
@@ -1105,9 +1733,14 @@ class ProfileBuilder(ReportBuilder):
         c_label = (1 if rank else 0) + code_cols
         nrows = 2 + len(rows) + (1 if total_label else 0)
         unit = unit_label
-        if adaptive_unit:
+        if quantity:
+            unit = _qty_unit([v for r in rows for y in years
+                              if (v := r["years"].get(y)) is not None])
+        elif adaptive_unit:
             unit = _series_unit([v for r in rows for y in years
                                  if (v := r["years"].get(y)) is not None])
+        fmt = (lambda v: fmt_qty(v, unit)) if quantity else \
+            (lambda v: fmt_for_unit(v, unit))
         table = self.doc.add_table(rows=nrows, cols=cols, style="Table Grid")
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
@@ -1145,7 +1778,7 @@ class ProfileBuilder(ReportBuilder):
             table.rows[ri].cells[c].text = row["label"]
             for i, y in enumerate(years):
                 table.rows[ri].cells[c + 1 + i].text = \
-                    fmt_for_unit(row["years"].get(y), unit)
+                    fmt(row["years"].get(y))
             cur = row["years"].get(rev)
             if cur is None:
                 share = None
@@ -1159,7 +1792,7 @@ class ProfileBuilder(ReportBuilder):
             t.cells[c_label].text = total_label
             for i, y in enumerate(years):
                 tot = sum((r["years"].get(y) or 0.0) for r in rows)
-                t.cells[label_cols + i].text = fmt_for_unit(tot, unit)
+                t.cells[label_cols + i].text = fmt(tot)
             t.cells[label_cols + n].text = "100.0%"
 
         if widths is None:
@@ -2038,11 +2671,14 @@ def section_kenya_imports(b, cfg, data, source):
         trend_bullets(b, products, years, family, "imports", scope="Kenya's")
 
 
-def section_potential(b, cfg, data, pot, source):
+def section_potential(b, cfg, data, pot, source, tmp_dir=None, _figure=None):
     """Optional export-potential section (ITC Export Potential Map file).
 
     Shows the largest unrealised opportunities: each market's potential
-    exports vs the actual base embedded in the download, ranked by the gap."""
+    exports vs the actual base embedded in the download, ranked by the gap.
+    When ``_figure`` is set the block is framed as a Figure (template's
+    Figures 3-6) with a share doughnut before the ranking table.
+    """
     markets, pot_year = _potential_markets(pot)
     if not markets:
         return
@@ -2064,10 +2700,22 @@ def section_potential(b, cfg, data, pot, source):
     unit = _series_unit([r["potential"] for r in records]
                         + [r.get("gap") or 0.0 for r in records])
     gap_known = [r for r in top if r["gap"] is not None]
-    b.add_heading("EXPORT POTENTIAL FOR %s" % family.upper(), level=1)
-    b.add_para("The markets below show the gap between Kenya's current "
-               "exports and the potential demand estimated by the ITC Export "
-               "Potential Map (projection year %s)."
+    if _figure is None:
+        b.add_heading("EXPORT POTENTIAL FOR %s" % family.upper(), level=1)
+    title = "Export Potential for %s" % family
+    if gap_known and _figure:
+        totals = {r["label"]: (r["gap"] if r.get("gap") is not None
+                               else r["actual"] or 0.0) for r in top}
+        total = sum(totals.values())
+        pairs = [(lab, (v / total if total else 0.0))
+                 for lab, v in totals.items() if v > 0.0]
+        img = make_donut(pairs, tmp_dir, "pot_%d.png" % (_figure or 0), title)
+        if img:
+            b._next_figure(title, source)
+            b.add_figure(img)
+    b.add_para("Markets ranked by the gap between Kenya's current exports and "
+               "the potential demand estimated by the ITC Export Potential Map "
+               "(projection year %s)."
                % (pot_year if pot_year else "unknown"))
     cols = 3 if gap_known else 2
     b._next_table("Unrealised export potential for %s, by destination market"
@@ -2391,6 +3039,463 @@ def section_strategy(b, cfg, data, source, pot):
 
 
 # --------------------------------------------------------------------------
+# Template-mirror sections (Meat Product Profile August-2026 structure)
+# --------------------------------------------------------------------------
+def section_background(b, cfg, data, source):
+    """1.0 BACKGROUND."""
+    family = cfg.get("family_title", "the product family")
+    b.add_heading("1.0 BACKGROUND", level=1)
+    for par in cfg.get("intro", []):
+        b.add_para(par)
+    g = data.kenya_global_metrics()
+    rev = data.review_year
+    if g:
+        b.add_para(
+            "Kenya, the country profiled in this report, ranked %s among the "
+            "world's exporters of %s in %d, with %s of the world total "
+            "(%s) and a %s position among African exporters."
+            % (("No. %s" % _ordinal(g["global_rank"])) if g["global_rank"]
+               else "-",
+               family.lower(), rev,
+               pct(g["share"]) if g["share"] is not None else "-",
+               usd_phrase(g["value"]),
+               ("No. %s of %d African exporters"
+                % (_ordinal(g["africa_rank"]), g["n_africa"]))
+               if g["africa_rank"] else "-"))
+    line = family_members_line(data)
+    if line:
+        b.add_para(line)
+
+    # Data-availability note: reflect every missing download so it never
+    # silently blanks a table. Optional gaps are info-level; a required file
+    # missing ends the note with a warning so the reader re-uploads it.
+    alerts = [a for a in data.alerts if a["level"] == "warning"] + \
+        [a for a in data.alerts if a["level"] == "info"]
+    if alerts:
+        b.add_para("")
+        b.add_para("Data availability. This profile is built from the ITC "
+                   "files uploaded for \"%s\" and covers %d to %d (the most "
+                   "recent %d years of %d available). Where a download is "
+                   "missing, the related table is skipped and the analysis "
+                   "continues with what is available." %
+                   (family, min(data.years), max(data.years), len(data.years),
+                    len(data._full_years)), italic=True)
+        for a in alerts:
+            b.add_bullet("%s: %s" %
+                         ("Missing required file" if a["level"] == "warning"
+                          else "Info", a["message"]))
+
+
+def _mirror_geo_table(b, cfg, data, source, side, economy_rows,
+                      product_rows, scope_title, residual):
+    """Emit the value-then-quantity pair of product tables plus the economy
+    table for one side (export/import) of the global coverage."""
+    family = cfg.get("family_title", "the product family")
+    top = cfg.get("global_top_n", 25)
+    years = data.years
+    rev = data.review_year
+    noun = "Exports" if side == "export" else "Imports"
+    noun_l = "exports" if side == "export" else "imports"
+
+    if economy_rows:
+        b._next_table("Top %d %s Markets by %s of %s"
+                      % (top, scope_title, noun, family), source)
+        b.add_value_table("Economy", economy_rows, years, "Share in %d" % rev,
+                          "%s of %s by Economy" % (noun, family), source,
+                          total_label="Total", rank=True)
+
+    if product_rows:
+        b._next_table("%s of %s by Product" % (noun, family), source)
+        b.add_value_table("Product", product_rows, years, "Share in %d" % rev,
+                          "%s of %s by Product" % (noun, family), source,
+                          total_label="Total")
+        trend_bullets(b, product_rows, years, family, noun_l, scope=scope_title)
+
+
+def _mirror_global(b, cfg, data, source, tmp_dir):
+    """2.0 GLOBAL <FAMILY> SECTOR: tables 1-6 plus the Africa sub-section
+    (tables 7-10) and Figures 1-2."""
+    family = cfg.get("family_title", "the product family")
+    top = cfg.get("global_top_n", 25)
+    years = data.years
+    rev = data.review_year
+
+    b.add_heading("2.0 GLOBAL %s SECTOR" % family.upper(), level=1)
+    for par in cfg.get("global_intro") or []:
+        b.add_para(par)
+
+    # Table 1 / Figure 1 - world exports
+    exporters = _ranked_rows(data.exporters(), top, years,
+                             ensure_label="Kenya")
+    if exporters:
+        b._next_table("Top %d Exporting Economies of %s" % (top, family),
+                      source)
+        b.add_value_table("Exporting economy", exporters, years,
+                          "Share in %d" % rev,
+                          "Exports of %s by Economy" % family, source,
+                          total_label="World", rank=True)
+        img = make_donut(_shares(exporters, years), tmp_dir, "g1_share.png",
+                         "Share of world exports")
+        if img:
+            b._next_figure("Share of World %s Exports, %d" % (family, rev),
+                           source)
+            b.add_figure(img)
+
+    # Table 2 - world exports by product (value)
+    g_exp = top_rows(data.global_export_products(), top, years,
+                     "All other products")
+    if g_exp:
+        b._next_table("Exports of %s by Product" % family, source)
+        b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
+                          "Exports of %s by Product" % family, source,
+                          total_label="World")
+
+    # Table 3 - world exports by product (quantity)
+    g_exp_q = top_rows(data.global_export_products_qty(), top, years,
+                       "All other products")
+    if g_exp_q:
+        b._next_table("Quantity of %s Exports by Product (Tonnes)" % family,
+                      source)
+        b.add_value_table("Product", g_exp_q, years, "Share in %d" % rev,
+                          "Exports of %s by Product (Tonnes)" % family, source,
+                          total_label="World", quantity=True)
+
+    # Table 4 / Figure 2 - world imports
+    importers = _ranked_rows(data.importers(), top, years,
+                             ensure_label="Kenya")
+    if importers:
+        b._next_table("Top %d Importing Economies of %s" % (top, family),
+                      source)
+        b.add_value_table("Importing economy", importers, years,
+                          "Share in %d" % rev,
+                          "Imports of %s by Economy" % family, source,
+                          total_label="World", rank=True)
+        img = make_donut(_shares(importers, years), tmp_dir, "g2_share.png",
+                         "Share of world imports")
+        if img:
+            b._next_figure("Share of World %s Imports, %d" % (family, rev),
+                           source)
+            b.add_figure(img)
+
+    # Table 5 - world imports by product (value)
+    g_imp = top_rows(data.global_import_products(), top, years,
+                     "All other products")
+    if g_imp:
+        b._next_table("Imports of %s by Product" % family, source)
+        b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
+                          "Imports of %s by Product" % family, source,
+                          total_label="World")
+
+    # Table 6 - world imports by product (quantity)
+    g_imp_q = top_rows(data.global_import_products_qty(), top, years,
+                       "All other products")
+    if g_imp_q:
+        b._next_table("Quantity of %s Imports by Product (Tonnes)" % family,
+                      source)
+        b.add_value_table("Product", g_imp_q, years, "Share in %d" % rev,
+                          "Imports of %s by Product (Tonnes)" % family, source,
+                          total_label="World", quantity=True)
+
+    # ---- Global exports from Africa ---------------------------------------
+    b.page_break()
+    b.add_heading("Global %s Exports from Africa" % family, level=2)
+    for par in cfg.get("africa_intro") or []:
+        b.add_para(par)
+
+    africa_exp = _ranked_rows(data.africa_exporters(), top, years,
+                              ensure_label="Kenya")
+    if africa_exp:  # Table 7
+        b._next_table("Top %d African Exporting Economies of %s"
+                      % (top, family), source)
+        b.add_value_table("African exporting economy", africa_exp, years,
+                          "Share in %d" % rev,
+                          "Exports of %s from Africa" % family, source,
+                          total_label="Total", rank=True)
+
+    africa_exp_p = top_rows(data.africa_export_products(), top, years,
+                            "All other products")
+    if africa_exp_p:  # Table 8
+        b._next_table("Exports of %s from Africa by Product" % family, source)
+        b.add_value_table("Product", africa_exp_p, years, "Share in %d" % rev,
+                          "Exports of %s from Africa by Product" % family,
+                          source, total_label="Total")
+
+    africa_imp = _ranked_rows(data.africa_importers(), top, years,
+                              ensure_label="Kenya")
+    if africa_imp:  # Table 9
+        b._next_table("Top %d African Importing Economies of %s"
+                      % (top, family), source)
+        b.add_value_table("African importing economy", africa_imp, years,
+                          "Share in %d" % rev,
+                          "Imports of %s into Africa" % family, source,
+                          total_label="Total", rank=True)
+
+    africa_imp_p = top_rows(data.africa_import_products(), top, years,
+                            "All other products")
+    if africa_imp_p:  # Table 10
+        b._next_table("Imports of %s into Africa by Product" % family, source)
+        b.add_value_table("Product", africa_imp_p, years, "Share in %d" % rev,
+                          "Imports of %s into Africa by Product" % family,
+                          source, total_label="Total")
+
+    if not (africa_exp or africa_imp or africa_exp_p or africa_imp_p):
+        b.add_bullet("Africa-level download(s) not available; the Africa "
+                     "sub-section is limited to the by-economy tables above.")
+
+
+def section_mirror_kenya(b, cfg, data, source):
+    """3.0 KENYA'S EXPORTS AND IMPORTS MARKET TRENDS: tables 11-17 plus the
+    sub-family table 13."""
+    family = cfg.get("family_title", "the product family")
+    top = cfg.get("top_n", 10)
+    years = data.years
+    rev = data.review_year
+
+    b.add_heading("3.0 KENYA'S %s EXPORTS AND IMPORTS MARKET TRENDS"
+                  % family.upper(), level=1)
+    for par in cfg.get("kenya_intro") or []:
+        b.add_para(par)
+
+    # Table 11 - Kenya's exports by destination
+    dests = _ranked_rows(data.destinations(), cfg.get("global_top_n", 25),
+                         years)
+    if dests:
+        b._next_table("Top %d Destination Markets of Kenya's %s Exports"
+                      % (cfg.get("global_top_n", 25), family), source)
+        b.add_value_table("Destination market", dests, years,
+                          "Share in %d" % rev,
+                          "Kenya's %s Exports by Destination" % family,
+                          source, total_label="Total", rank=True)
+        lead = next((d for d in dests if d["label"] != "All other markets"),
+                    None)
+        if lead:
+            lead_share = _shares(dests, years)
+            top_share = next((s for l, s in lead_share
+                              if l == lead["label"]), 0.0)
+            b.add_bullet("The leading destination of Kenya's %s exports in %d "
+                         "was %s, absorbing %s (%.1f%% of the total)."
+                         % (family.lower(), rev, lead["label"],
+                            usd_phrase(lead["years"].get(rev)),
+                            top_share * 100.0))
+
+    # Table 12 - Kenya's exports by product
+    members = top_rows(data.members, top, years, "All other products")
+    if members:
+        b._next_table("Kenya's %s Exports by Product" % family, source)
+        b.add_value_table("Product", members, years, "Share in %d" % rev,
+                          "Kenya's %s Exports by Product" % family, source,
+                          total_label="Total", adaptive_unit=True)
+
+    # Table 13 - Kenya's exports of the sub-family (e.g. processed meat)
+    for i, sf in enumerate(cfg.get("sub_families") or []):
+        title = sf.get("title") or family
+        rows = data.sub_family_members(sf.get("codes") or [])
+        rows = top_rows(rows, top, years, "All other products")
+        if not rows:
+            continue
+        b._next_table("Kenya's Exports of %s by Product" % title, source)
+        b.add_value_table("Product", rows, years, "Share in %d" % rev,
+                          "Kenya's Exports of %s by Product" % title, source,
+                          total_label="Total", adaptive_unit=True)
+        lead = next((r for r in rows if r["label"] != "All other products"),
+                    None)
+        if lead and i == 0:
+            share = ((lead["years"].get(rev) or 0.0) /
+                     sum((r["years"].get(rev) or 0.0) for r in rows)
+                     if rows else None)
+            b.add_bullet("Within %s, the leading export product heading is %s "
+                         "(%.1f%% of Kenya's exports of the sub-family in %d)."
+                         % (title.lower(), short_label(lead["label"], 60),
+                            (share or 0.0) * 100, rev))
+
+    # Table 14 - Kenya's exports by product (quantity)
+    ken_q = top_rows(data.kenya_export_products_qty(), top, years,
+                     "All other products")
+    if ken_q:
+        b._next_table("Quantity of Kenya's %s Exports by Product (Tonnes)"
+                      % family, source)
+        b.add_value_table("Product", ken_q, years, "Share in %d" % rev,
+                          "Quantity of Kenya's %s Exports by Product (Tonnes)"
+                          % family, source, total_label="Total",
+                          quantity=True)
+
+    # Table 15 - Kenya's imports by source
+    sources = _ranked_rows(data.kenya_import_sources(),
+                           cfg.get("global_top_n", 25), years)
+    if sources:
+        b._next_table("Top %d Supplying Markets of Kenya's %s Imports"
+                      % (cfg.get("global_top_n", 25), family), source)
+        b.add_value_table("Supplying market", sources, years,
+                          "Share in %d" % rev,
+                          "Kenya's %s Imports by Source" % family, source,
+                          total_label="Total", rank=True)
+        geo_bullets(b, sources, years, family, "source")
+
+    # Table 16 - Kenya's imports by product (value)
+    imports = top_rows(data.kenya_import_products(), top, years,
+                       "All other products")
+    if imports:
+        b._next_table("Kenya's %s Imports by Product" % family, source)
+        b.add_value_table("Product", imports, years, "Share in %d" % rev,
+                          "Kenya's %s Imports by Product" % family, source,
+                          total_label="Total", adaptive_unit=True)
+
+    # Table 17 - Kenya's imports by product (quantity)
+    imp_q = top_rows(data.kenya_import_products_qty(), top, years,
+                     "All other products")
+    if imp_q:
+        b._next_table("Quantity of Kenya's %s Imports by Product (Tonnes)"
+                      % family, source)
+        b.add_value_table("Product", imp_q, years, "Share in %d" % rev,
+                          "Quantity of Kenya's %s Imports by Product (Tonnes)"
+                          % family, source, total_label="Total",
+                          quantity=True)
+
+
+def section_mirror_potential(b, cfg, data, source, tmp_dir):
+    """3.1 EXPORT POTENTIAL: one figure + ranking table per Export Potential
+    Map download (the template's Figures 3-6)."""
+    family = cfg.get("family_title", "the product family")
+    b.add_heading("EXPORT POTENTIAL (EXPANSION SEEKING)", level=1)
+    for i, pot in enumerate(data.potential_files):
+        section_potential(b, cfg, data, pot, source, tmp_dir, _figure=(i + 1))
+    if not data.potential_files:
+        b.add_bullet("An Export Potential Map download is not available; the "
+                     "section is limited to the tables above.")
+
+
+def _competitor_rows(data, n=5):
+    """Kenya's leading destinations joined with each market's own
+    supplying-markets download.
+
+    Returns rows with ``market``, ``kenya_exports`` (Kenya's exports to the
+    market in the review year), ``market_imports`` (the market's total imports
+    of the family), ``share`` (Kenya's share of those imports) and
+    ``leader`` (the largest supplying economy other than Kenya) for every
+    destination that has a matching download.
+    """
+    rev = data.review_year
+    suppliers = {k: v for k, v in data.market_suppliers().items()}
+    rows = []
+    for d in data.destinations()[:n]:
+        key = display_name(fix_label(d["label"]))
+        s = suppliers.get(key)
+        if s is None:
+            continue
+        kenya_val = d["years"].get(rev)
+        total = s["total"].get(rev)
+        if total is None and s["rows"]:
+            total = sum((r["years"].get(rev) or 0.0) for r in s["rows"])
+        kenya_row = next((r for r in s["rows"]
+                          if data._is_kenya_label(r["label"])), None)
+        kenya_in = (kenya_row["years"].get(rev) or 0.0) if kenya_row else None
+        share = None
+        if total:
+            base = kenya_in if kenya_in is not None else kenya_val
+            if base is not None:
+                share = base / total
+        others = [r for r in s["rows"] if not data._is_kenya_label(r["label"])]
+        leader = None
+        if others:
+            leader = max(others, key=lambda r: r["years"].get(rev) or 0.0)
+        rows.append({"market": d["label"], "kenya_exports": kenya_val,
+                     "market_imports": total, "share": share,
+                     "leader": leader})
+    return rows
+
+
+def section_mirror_competitor(b, cfg, data, source):
+    """4.0 COMPETITOR ANALYSIS - Kenya's share inside its top destination
+    markets (the template's Table 18)."""
+    family = cfg.get("family_title", "the product family")
+    years = data.years
+    rev = data.review_year
+    b.add_heading("4.0 COMPETITOR ANALYSIS", level=1)
+    rows = _competitor_rows(data, cfg.get("competitor_top", 5))
+    if not rows:
+        top_markets = [d["label"] for d in
+                       data.destinations()[:cfg.get("competitor_top", 5)]]
+        b.add_bullet(
+            "The per-market supplying-markets downloads needed for this "
+            "table are not yet available. Download the \"List of supplying "
+            "markets for a product imported by ...\" file for each of "
+            "Kenya's top destinations (%s), drop them into the data folder "
+            "and re-run the profile to populate the competitor analysis."
+            % (" / ".join(top_markets) if top_markets
+               else "once destination data is loaded"))
+        return
+    b.add_para("The table below benchmarks Kenya against its competitors "
+               "within the destination markets that absorb the largest value "
+               "of Kenya's %s exports: Kenya's own exports to each market, "
+               "the market's total imports of the family, Kenya's resulting "
+               "share of that market, and the market's leading supplier."
+               % family.lower())
+    unit = _series_unit([r["kenya_exports"] or 0.0 for r in rows]
+                        + [r["market_imports"] or 0.0 for r in rows])
+    table = b.doc.add_table(rows=1 + len(rows), cols=5, style="Table Grid")
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0]
+    for c, t in enumerate(("Market",
+                           "Kenya's exports (%s)" % unit,
+                           "Market's total imports (%s)" % unit,
+                           "Kenya's share of market",
+                           "Leading competitor")):
+        hdr.cells[c].text = t
+    for i, r in enumerate(rows, start=1):
+        row = table.rows[i]
+        row.cells[0].text = r["market"]
+        row.cells[1].text = fmt_for_unit(r["kenya_exports"], unit)
+        row.cells[2].text = fmt_for_unit(r["market_imports"], unit)
+        row.cells[3].text = ("" if r["share"] is None
+                             else "%.1f%%" % (r["share"] * 100.0))
+        lead = r["leader"]
+        row.cells[4].text = (short_label(lead["label"], 45)
+                             if lead and (lead["years"].get(rev) or 0.0) > 0
+                             else "")
+    b._set_table_widths(table, [2400, 2200, 2400, 1900, 2200])
+    b._style_table(table, rank=False, label_cols=1, n=4,
+                   total_label=None)
+    b._fit_table_on_page(table)
+
+    dated = [r for r in rows if r["share"] is not None]
+    if dated:
+        dated.sort(key=lambda r: r["share"], reverse=True)
+        top_r = dated[0]
+        b.add_bullet("Kenya commands the largest share of %s within %s "
+                     "(%.1f%% of that market's %s imports in %d).%s"
+                     % (family.lower(), top_r["market"],
+                        top_r["share"] * 100.0, family.lower(), rev,
+                        (" Its closest rival is %s."
+                         % short_label(top_r["leader"]["label"], 45)
+                         if top_r["leader"] else "")))
+        if len(dated) > 1:
+            second = dated[1]
+            b.add_bullet("By comparison, Kenya holds only %.1f%% of the %s "
+                         "market - a market that imports %s of the family - "
+                         "indicating room to grow."
+                         % (second["share"] * 100.0, second["market"],
+                            usd_phrase(second["market_imports"])))
+
+
+def section_mirror_policy(b, cfg, source):
+    """5.0 POLICY RECOMMENDATIONS + references."""
+    b.add_heading("5.0 POLICY RECOMMENDATIONS", level=1)
+    recs = cfg.get("recommendations") or []
+    if not recs:
+        b.add_para("No policy recommendations were supplied in the "
+                   "configuration for this profile.")
+    for r in recs:
+        b.add_bullet(r)
+    b.page_break()
+    b.add_heading("References", level=1)
+    refs = cfg.get("references") or [
+        "International Trade Centre, Trade Map database (source: %s)."
+        % source]
+    for r in refs:
+        b.add_bullet(r)
+
+
+# --------------------------------------------------------------------------
 # Top-level build
 # --------------------------------------------------------------------------
 def build_profile_document(cfg, data, tmp_dir):
@@ -2398,21 +3503,33 @@ def build_profile_document(cfg, data, tmp_dir):
     source = cfg.get("source", "International Trade Centre Database")
     b = ProfileBuilder(cfg, {})
     b.title_page(cfg)
-    section_trade_family(b, cfg, data, source, tmp_dir)
-    section_kenya_global_position(b, cfg, data, source)
-    section_kenya_exports(b, cfg, data, source, tmp_dir)
-    section_growth_decomposition(b, cfg, data, source)
-    section_market_attractiveness(b, cfg, data, source,
-                                  data.files.get("export_potential"))
-    section_competitiveness(b, cfg, data, source)
-    section_global(b, cfg, data, source, tmp_dir)
-    section_competitor_watch(b, cfg, data, source)
-    if cfg.get("include_imports", True):
-        section_kenya_imports(b, cfg, data, source)
-    pot = data.files.get("export_potential")
-    if pot:
-        section_potential(b, cfg, data, pot, source)
-    section_strategy(b, cfg, data, source, pot)
+
+    # Template structure: Background -> Global (Africa sub) -> Kenya exports
+    # and imports -> Export Potential -> Competitor Analysis -> Policy.
+    section_background(b, cfg, data, source)
+    _mirror_global(b, cfg, data, source, tmp_dir)
+    section_mirror_kenya(b, cfg, data, source)
+    section_mirror_potential(b, cfg, data, source, tmp_dir)
+    section_mirror_competitor(b, cfg, data, source)
+    section_mirror_policy(b, cfg, source)
+
+    # Optional deep-dive sections kept behind a config flag.
+    if cfg.get("include_analysis"):
+        section_kenya_global_position(b, cfg, data, source)
+        section_growth_decomposition(b, cfg, data, source)
+        section_market_attractiveness(b, cfg, data, source,
+                                      data.potential_files[0]
+                                      if data.potential_files else None)
+        section_competitiveness(b, cfg, data, source)
+        section_global(b, cfg, data, source, tmp_dir)
+        section_competitor_watch(b, cfg, data, source)
+        if cfg.get("include_imports", True):
+            section_kenya_imports(b, cfg, data, source)
+        for pot in data.potential_files:
+            section_potential(b, cfg, data, pot, source, None)
+        section_strategy(b, cfg, data, source,
+                         data.potential_files[0] if data.potential_files
+                         else None)
     return b.doc
 
 
@@ -2420,9 +3537,10 @@ def build_profile_document(cfg, data, tmp_dir):
 # Excel deliverable
 # --------------------------------------------------------------------------
 def _xc(ws, r, c, value, bold=False, number_format=None, fill=None,
-        align=None):
+        align=None, color=None):
     cell = ws.cell(r, c, value)
-    cell.font = Font(name="Century Gothic", bold=bold)
+    cell.font = Font(name="Century Gothic", bold=bold,
+                     color=color if color else None)
     cell.border = BORDER
     if number_format:
         cell.number_format = number_format
@@ -2431,6 +3549,64 @@ def _xc(ws, r, c, value, bold=False, number_format=None, fill=None,
     if align:
         cell.alignment = align
     return cell
+
+
+def _excel_data_notes(wb, cfg, data):
+    """Data Notes sheet: the review window and which uploaded files are in
+    use, so analysts can see at a glance what a missing download would have
+    filled."""
+    ws = wb.create_sheet("Data Notes")
+    hdr_fill = PatternFill("solid", fgColor="1F4E79")
+    cm = Alignment(horizontal="center", vertical="center")
+    lm = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    _xc(ws, 1, 1, "PRODUCT PROFILE - DATA NOTES", bold=True,
+        fill=hdr_fill, color="FFFFFF", align=lm)
+    _xc(ws, 2, 1, "Family", bold=True); _xc(ws, 2, 2,
+        cfg.get("family_title", ""), align=lm)
+    _xc(ws, 3, 1, "Review period", bold=True)
+    _xc(ws, 3, 2, "%d to %d (%d of %d available years used)"
+        % (min(data.years), max(data.years), len(data.years),
+           len(data._full_years)), align=lm)
+    _xc(ws, 4, 1, "Included HS codes", bold=True)
+    _xc(ws, 4, 2, ", ".join(data.include_codes) or "(all)", align=lm)
+    _xc(ws, 5, 1, "Products analysed", bold=True)
+    _xc(ws, 5, 2, "%d product detail rows" % len(data.members), align=lm)
+    _xc(ws, 7, 1, "UPLOADED FILES", bold=True, fill=hdr_fill,
+        color="FFFFFF")
+    _xc(ws, 8, 1, "File (prefix)", bold=True, fill=hdr_fill, color="FFFFFF")
+    _xc(ws, 8, 2, "Required", bold=True, fill=hdr_fill, color="FFFFFF")
+    _xc(ws, 8, 3, "Present", bold=True, fill=hdr_fill, color="FFFFFF")
+    _xc(ws, 8, 4, "Fills", bold=True, fill=hdr_fill, color="FFFFFF")
+    row = 9
+    for spec in REQUIRED_UPLOADS:
+        st = data.file_status.get(spec["key"], {})
+        _xc(ws, row, 1, spec["prefix"] + "_<product>.xlsx", align=lm)
+        _xc(ws, row, 2, "yes", align=cm)
+        _xc(ws, row, 3, "yes" if st.get("present") else "no", align=cm)
+        _xc(ws, row, 4, spec["label"], align=lm)
+        row += 1
+    for spec in OPTIONAL_UPLOADS:
+        st = data.file_status.get(spec["key"], {})
+        _xc(ws, row, 1, spec["prefix"] + "_<product>.xlsx", align=lm)
+        _xc(ws, row, 2, "no", align=cm)
+        _xc(ws, row, 3, "yes" if st.get("present") else "no", align=cm)
+        _xc(ws, row, 4, spec["label"], align=lm)
+        row += 1
+    row += 1
+    _xc(ws, row, 1, "ALERTS", bold=True, fill=hdr_fill, color="FFFFFF")
+    row += 1
+    _xc(ws, row, 1, "Level", bold=True, fill=hdr_fill, color="FFFFFF")
+    _xc(ws, row, 2, "Message", bold=True, fill=hdr_fill, color="FFFFFF")
+    row += 1
+    for a in data.alerts:
+        _xc(ws, row, 1, a["level"], align=cm)
+        _xc(ws, row, 2, a["message"], align=lm)
+        row += 1
+    ws.column_dimensions["A"].width = 46
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 12
+    ws.column_dimensions["D"].width = 78
+    return ws
 
 
 def write_excel_deliverable(cfg, data, out_path):
@@ -2448,11 +3624,16 @@ def write_excel_deliverable(cfg, data, out_path):
         name = (prefix + " - " + label) if label else prefix
         return name[:31]
 
-    def value_sheet(name, first_col, rows, doughnut=None, unit=None):
+    def value_sheet(name, first_col, rows, doughnut=None, unit=None,
+                    quantity=False):
         ws = wb.create_sheet(name)
         if unit is None:
-            unit = _series_unit([v for r in rows for y in years
-                                 if (v := r["years"].get(y)) is not None])
+            if quantity:
+                unit = _qty_unit([v for r in rows for y in years
+                                  if (v := r["years"].get(y)) is not None])
+            else:
+                unit = _series_unit([v for r in rows for y in years
+                                     if (v := r["years"].get(y)) is not None])
         has_code = any(r.get("code") for r in rows)
         first = 1 + (1 if has_code else 0)
         if has_code:
@@ -2472,7 +3653,9 @@ def write_excel_deliverable(cfg, data, out_path):
             _xc(ws, ri, first, row["label"], align=lm)
             for i, y in enumerate(years):
                 raw = row["years"].get(y)
-                if unit == "USD Thousand":
+                if quantity:
+                    v_out = None if raw is None else round(raw, 1)
+                elif unit == "USD Thousand":
                     v_out = None if raw is None else round(raw, 1)
                 else:
                     v_out = None if raw is None else round(display(raw), 1)
@@ -2556,40 +3739,126 @@ def write_excel_deliverable(cfg, data, out_path):
         ws.add_chart(chart, "C%d" % top_row)
 
     # ---- sheets -----------------------------------------------------------
-    if data.members:
-        members = top_rows(data.members, cfg.get("top_n", 10), years,
-                           "All other products")
-        value_sheet("Kenya Exports by Product", "Product", members,
-                    doughnut=("Share of Kenya's %s by Product"
-                              % cfg.get("family_title"),
-                              [(m["label"], _share01(m, rev, members))
-                               for m in members]))
-    destinations = _ranked_rows(data.destinations(), 25, years,
-                                ensure_label="Kenya",
-                                residual="All other markets")
-    if destinations:
-        value_sheet(sheet_name("Destinations", data.anchor_label),
-                    "Destination market", destinations,
+    top = cfg.get("global_top_n", 25)
+    # Template mirror: Table 1..18 sheets in the template's exact order.
+    t1 = _ranked_rows(data.exporters(), top, years, ensure_label="Kenya",
+                      residual="All other economies")
+    if t1:
+        value_sheet("Table 1 - Exports by Economy", "Exporting economy", t1,
+                    doughnut=("Share of world exports",
+                              [(d["label"], _share01(d, rev, t1))
+                               for d in t1]))
+    t2 = top_rows(data.global_export_products(), top, years,
+                  "All other products")
+    if t2:
+        value_sheet("Table 2 - Exports by Product", "Product", t2)
+    t3 = top_rows(data.global_export_products_qty(), top, years,
+                  "All other products")
+    if t3:
+        value_sheet("Table 3 - Exports by Product (Tonnes)", "Product", t3,
+                    quantity=True)
+    t4 = _ranked_rows(data.importers(), top, years, ensure_label="Kenya",
+                      residual="All other economies")
+    if t4:
+        value_sheet("Table 4 - Imports by Economy", "Importing economy", t4,
+                    doughnut=("Share of world imports",
+                              [(d["label"], _share01(d, rev, t4))
+                               for d in t4]))
+    t5 = top_rows(data.global_import_products(), top, years,
+                  "All other products")
+    if t5:
+        value_sheet("Table 5 - Imports by Product", "Product", t5)
+    t6 = top_rows(data.global_import_products_qty(), top, years,
+                  "All other products")
+    if t6:
+        value_sheet("Table 6 - Imports by Product (Tonnes)", "Product", t6,
+                    quantity=True)
+    t7 = _ranked_rows(data.africa_exporters(), top, years,
+                      ensure_label="Kenya", residual="All other economies")
+    if t7:
+        value_sheet("Table 7 - Africa Exports by Economy",
+                    "African exporting economy", t7)
+    t8 = top_rows(data.africa_export_products(), top, years,
+                  "All other products")
+    if t8:
+        value_sheet("Table 8 - Africa Exports by Product", "Product", t8)
+    t9 = _ranked_rows(data.africa_importers(), top, years,
+                      ensure_label="Kenya", residual="All other economies")
+    if t9:
+        value_sheet("Table 9 - Africa Imports by Economy",
+                    "African importing economy", t9)
+    t10 = top_rows(data.africa_import_products(), top, years,
+                   "All other products")
+    if t10:
+        value_sheet("Table 10 - Africa Imports by Product", "Product", t10)
+    t11 = _ranked_rows(data.destinations(), top, years,
+                       residual="All other markets")
+    if t11:
+        value_sheet("Table 11 - Kenya Exports by Country", "Country", t11,
                     doughnut=("Kenya's exports by destination",
-                              [(d["label"], _share01(d, rev, destinations))
-                               for d in destinations]))
-    exporters = _ranked_rows(data.exporters(), cfg.get("top_n", 10), years,
-                             ensure_label="Kenya", residual="All other economies")
-    importers = _ranked_rows(data.importers(), cfg.get("top_n", 10), years,
-                             ensure_label="Kenya", residual="All other economies")
-    if exporters:
-        value_sheet(sheet_name("World Exporters"), "Exporting economy", exporters)
-    if importers:
-        value_sheet(sheet_name("World Importers"), "Importing economy", importers)
-    g_exp = top_rows(data.global_export_products(), cfg.get("top_n", 10),
-                     years, "All other products")
-    g_imp = top_rows(data.global_import_products(), cfg.get("top_n", 10),
-                     years, "All other products")
-    if g_exp:
-        value_sheet("Global Exports by Product", "Product", g_exp)
-    if g_imp:
-        value_sheet("Global Imports by Product", "Product", g_imp)
+                              [(d["label"], _share01(d, rev, t11))
+                               for d in t11]))
+    t12 = top_rows(data.members, cfg.get("top_n", 10), years,
+                   "All other products")
+    if t12:
+        value_sheet("Table 12 - Kenya Exports by Product", "Product", t12)
+    t13 = None
+    for sf in cfg.get("sub_families") or []:
+        rows = data.sub_family_members(sf.get("codes") or [])
+        rows = top_rows(rows, cfg.get("top_n", 10), years,
+                        "All other products")
+        if not rows:
+            continue
+        t13 = rows
+        value_sheet("Table 13 - Kenya %s Exports" % (sf.get("title") or "Sub")
+                    [:31], "Product", rows)
+    t14 = top_rows(data.kenya_export_products_qty(), cfg.get("top_n", 10),
+                   years, "All other products")
+    if t14:
+        value_sheet("Table 14 - Kenya Exports by Product (Tonnes)",
+                    "Product", t14, quantity=True)
+    t15 = _ranked_rows(data.kenya_import_sources(), top, years,
+                       residual="All other markets")
+    if t15:
+        value_sheet("Table 15 - Kenya Imports by Country", "Country", t15)
+    t16 = top_rows(data.kenya_import_products(), cfg.get("top_n", 10), years,
+                   "All other products")
+    if t16:
+        value_sheet("Table 16 - Kenya Imports by Product", "Product", t16)
+    t17 = top_rows(data.kenya_import_products_qty(), cfg.get("top_n", 10),
+                   years, "All other products")
+    if t17:
+        value_sheet("Table 17 - Kenya Imports by Product (Tonnes)",
+                    "Product", t17, quantity=True)
+    comp = _competitor_rows(data, cfg.get("competitor_top", 5))
+    if comp:
+        ws = wb.create_sheet("Table 18 - Competitor Analysis")
+        cu = _series_unit([r["kenya_exports"] or 0.0 for r in comp]
+                          + [r["market_imports"] or 0.0 for r in comp])
+        headers = ["Market", "Kenya exports (%s)" % cu,
+                   "Market total imports (%s)" % cu,
+                   "Kenya share of market", "Leading competitor"]
+        for c, h in enumerate(headers, 1):
+            _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
+        for i, r in enumerate(comp, start=2):
+            _xc(ws, i, 1, r["market"], align=lm)
+            for j, k in ((2, "kenya_exports"), (3, "market_imports")):
+                raw = r[k]
+                v = None if raw is None else (
+                    round(raw, 1) if cu == "USD Thousand"
+                    else round(display(raw), 1))
+                _xc(ws, i, j, v, number_format=val_fmt, align=cm)
+            _xc(ws, i, 4, r["share"] if r["share"] is not None else None,
+                number_format="0.0%", bold=True, align=cm)
+            lead = r["leader"]
+            _xc(ws, i, 5, short_label(lead["label"], 45) if lead else "",
+                align=lm)
+        ws.column_dimensions["A"].width = 32
+        ws.column_dimensions["E"].width = 45
 
+    # Existing deliverable sheets (analysis extras kept below the mirror;
+    # the simple value tables above are the mirror's Table 1..18 and are no
+    # longer duplicated here).
     # Kenya vs the World, by six-digit HS code (export focus)
     shares = data.kenya_world_shares()
     if shares["rows"]:
@@ -2694,7 +3963,7 @@ def write_excel_deliverable(cfg, data, out_path):
     start_year = years[0]
 
     # Export Potential gap sheet (ITC Export Potential Map file, if present)
-    pot = data.files.get("export_potential")
+    pot = data.potential_files[0] if data.potential_files else None
     if pot:
         markets, pot_year = _potential_markets(pot)
         pot_recs = [{"label": l, "actual": m["actual"],
@@ -2872,8 +4141,10 @@ def write_excel_deliverable(cfg, data, out_path):
             align=lm)
         ws.column_dimensions["A"].width = 70
 
+    _excel_data_notes(wb, cfg, data)
+
     # default "Sheet" removed by the first create_sheet call? keep membership
-    if "Sheet" in wb.sheetnames:
+    if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
         del wb["Sheet"]
     wb.save(out_path)
     return wb
@@ -2899,9 +4170,17 @@ def main():
     ap.add_argument("--tmp",
                     default=os.path.join(BASE_DIR, "output", ".tmp"),
                     help="Temporary directory for chart images")
+    ap.add_argument("--manifest", action="store_true",
+                    help="Print the JSON upload checklist and exit")
     args = ap.parse_args()
 
     cfg = json.load(open(args.config, encoding="utf-8"))
+
+    if args.manifest:
+        print(json.dumps(upload_manifest(cfg.get("anchor", "<product>")),
+                         indent=2))
+        return
+
     data_dir = args.excel_dir or os.path.join(
         BASE_DIR, cfg.get("data_dir", "Coffee"))
     out = args.output
@@ -2911,15 +4190,19 @@ def main():
     out = os.path.abspath(out)
 
     data = ProfileData(data_dir, cfg.get("include_codes"),
-                       cfg.get("family_title"))
+                       cfg.get("family_title"),
+                       max_years=cfg.get("max_years"))
     print("[1/4] Loading ITC files from      : %s" % data_dir)
     print("      family    = %s" % cfg.get("family_title"))
     print("      anchor    = %s (%s)" % (data.anchor_hs, data.anchor_label))
-    print("      period    = %d - %d" % (data.start_year, data.review_year))
+    print("      period    = %d - %d (of %d available)"
+          % (data.start_year, data.review_year, len(data._full_years)))
     print("      members   = %s (product detail rows)"
           % len(data.members))
     for w in data.warnings:
         print("      [warn] %s" % w)
+    for a in data.alerts:
+        print("      [%s] %s" % (a["level"], a["message"]))
 
     print("[2/4] Building report             : %s" % out)
     doc = build_profile_document(cfg, data, args.tmp)

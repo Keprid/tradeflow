@@ -3,11 +3,17 @@
   "subtitle": "2025 Edition",
   "family_title": "Coffee",
   "unit": "USD",
-  "value_scale": 1e6,
+  "value_scale": 1000000.0,
   "unit_label": "USD Million",
   "top_n": 10,
-  "include_imports": false,
-  "include_codes": ["0901"],
+  "global_top_n": 25,
+  "include_analysis": false,
+  "include_imports": true,
+  "competitor_top": 5,
+  "sub_families": [],
+  "include_codes": [
+    "0901"
+  ],
   "access_markets": [
     "European Union (EU 27)",
     "United States of America",
@@ -34,6 +40,27 @@
     "This profile examines Kenya's trade in coffee (HS 0901 - coffee, whether or not roasted or decaffeinated; coffee husks and skins; coffee substitutes containing coffee), based on trade values reported to the International Trade Centre (ITC). The analysis covers the period 2016 to 2025.",
     "Only product headings that relate to coffee are included in this profile; other headings under the spices section, such as tea and mate, are excluded to keep the analysis focused on the coffee value chain."
   ],
+  "global_intro": [
+    "Global trade in coffee is dominated by the major producing and consuming markets. The tables below trace world exports and imports of coffee by economy and by product over the review period."
+  ],
+  "africa_intro": [
+    "Africa supplies about a tenth of world coffee exports, led by the major coffee-producing economies. The tables below summarise the leading African exporting and importing economies."
+  ],
+  "kenya_intro": [
+    "Kenya's exports and imports of coffee are traced below, by destination and source market, by product and by quantity, over the review period."
+  ],
+  "recommendations": [
+    "Deepen market presence in premium, specialty-coffee destinations that reward Kenyan arabica quality.",
+    "Strengthen cupping and certification programmes to maintain Kenya's price premium relative to competing origins.",
+    "Expand manufacturing of roasted and value-added coffee to capture higher unit values than green-bean exports."
+  ],
+  "references": [
+    "International Trade Centre, Trade Map database - trade statistics for international business development, 2025.",
+    "International Coffee Organization (ICO) - coffee market report and statistical databases.",
+    "KNBS - Economic Survey, Kenya National Bureau of Statistics, trade in goods statistics."
+  ],
   "data_dir": "Coffee",
-  "output": "output/Product Profile - Coffee 2025.docx"
+  "output": "output/Product Profile - Coffee 2025.docx",
+  "max_years": 5,
+  "anchor": "Coffee"
 }
