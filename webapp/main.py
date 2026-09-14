@@ -35,7 +35,11 @@ import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import base64
 import openpyxl
+import subprocess
+import urllib.error
+import urllib.request
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -44,7 +48,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 LOG = logging.getLogger("tradeflow.webapp")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+WEBAPP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
+sys.path.insert(0, str(WEBAPP_DIR))
 
 import make_tables                       # noqa: E402
 import generate_report as gr             # noqa: E402
@@ -55,8 +61,8 @@ import make_quarterly_tables as mqt      # noqa: E402
 import generate_quarterly_report as gqr  # noqa: E402
 import generate_product_profile as gpp   # noqa: E402
 import generate_crafts_report as gcr     # noqa: E402
+import docx_footnotes                    # noqa: E402
 
-WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
 JOBS_DIR = WEBAPP_DIR / "jobs"
 CONFIG_DIR = BASE_DIR / "config"
@@ -64,6 +70,20 @@ SAMPLE_DIR = BASE_DIR / "Samplefiles"
 JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
+
+# Research assistant (opencode sidecar) ------------------------------------
+# A headless `opencode serve` process backs the /api/research chat.  It is
+# spawned here with cwd=BASE_DIR so its workspace is the whole project, and it
+# runs the read-only "researcher" agent defined in opencode.json (edit/bash/
+# webfetch are denied there, so it can only read and analyse).
+OC_PORT = int(os.environ.get("RESEARCH_OPENCODE_PORT", "4096"))
+OC_MODEL = os.environ.get("RESEARCH_MODEL", "")       # e.g. anthropic/...
+OC_PASSWORD = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
+OC_BIN = os.environ.get("RESEARCH_OPENCODE_BIN", "opencode")
+_OC_PROC = None
+_OC_READY = False
+_OC_SESSIONS = {}   # job_dir.name -> opencode session id (conversation memory)
+_OC_LOCK = threading.Lock()
 
 # The six raw ITC Trade Map downloads the Goods pipeline needs, in the order
 # make_tables expects (table1..table6).  Trade Map has no public API (it is an
@@ -153,7 +173,9 @@ CRAFTS_RAW_KEYWORDS = (
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     _cleanup_old_jobs()
+    _start_opencode_sidecar()
     yield
+    _stop_opencode_sidecar()
 
 app = FastAPI(title="Trade Flow Report Generator", lifespan=_lifespan)
 
@@ -178,6 +200,171 @@ def _cleanup_old_jobs():
                     shutil.rmtree(d, ignore_errors=True)
             except OSError:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# opencode research sidecar
+# ---------------------------------------------------------------------------
+def _oc_url(path):
+    return f"http://127.0.0.1:{OC_PORT}{path}"
+
+
+def _oc_headers():
+    headers = {"Content-Type": "application/json"}
+    if OC_PASSWORD:
+        token = base64.b64encode(
+            f"opencode:{OC_PASSWORD}".encode()).decode()
+        headers["Authorization"] = f"Basic {token}"
+    return headers
+
+
+def _oc_request(method, path, payload=None, timeout=20):
+    """Call the opencode server HTTP API. Returns (json_or_text, is_json, ok)."""
+    body = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(_oc_url(path), data=body,
+                                 headers=_oc_headers(), method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            try:
+                return json.loads(raw.decode()), True, True
+            except Exception:
+                return raw.decode(errors="replace"), False, True
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read().decode()), True, False
+        except Exception:
+            return str(e), False, False
+    except Exception as e:
+        return str(e), False, False
+
+
+def _oc_health():
+    data, is_json, ok = _oc_request("GET", "/global/health")
+    if ok and is_json and data.get("healthy"):
+        return True, data.get("version")
+    return False, None
+
+
+def _oc_resolve_windows_bin(bin_path):
+    """npm's Windows shims are `.cmd`/`.bat` files that just exec a real
+    binary, e.g.:  "%dp0%\\node_modules\\opencode-ai\\bin\\opencode.exe"  %*
+    Resolve that target so we can spawn it directly and dodge cmd.exe's
+    error-prone /c quoting of the shim file itself."""
+    if os.name != "nt" or not (bin_path or "").lower().endswith(
+            (".cmd", ".bat")):
+        return None
+    try:
+        text = Path(bin_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    dp0 = str(Path(bin_path).resolve().parent).replace("/", "\\")
+    text = text.replace("%dp0%", dp0).replace("%~dp0%", dp0) \
+                .replace("%~dp0", dp0)
+    hit = re.search(r'([A-Za-z]:\\[^"\' \t;%*?<>|]+?\.exe)', text)
+    if not hit:
+        return None
+    exe = hit.group(1)
+    return exe if os.path.exists(exe) else None
+
+
+def _oc_launch_command(extra_args):
+    """Build the subprocess command for the opencode binary.
+
+    On Windows `opencode` often resolves to a `.cmd`/`.bat` shim that
+    subprocess.Popen cannot execute directly (WinError 2); we resolve the real
+    `.exe` from the shim (npm style) or fall back to %COMSPEC%.  On Render/
+    Linux the npm global bin may not be on PATH when uvicorn starts, so fall
+    back to the common npm/global locations.
+    """
+    bin_path = shutil.which(OC_BIN)
+    if bin_path is None and os.name == "posix":
+        for cand in ("/usr/local/bin/opencode",
+                     "/opt/render/project/src/node_modules/.bin/opencode",
+                     "/opt/nodejs/current/bin/opencode",
+                     "/usr/bin/opencode"):
+            if os.path.exists(cand):
+                bin_path = cand
+                break
+    if not bin_path:
+        return None
+    lower = bin_path.lower()
+    if os.name == "nt" and (lower.endswith(".cmd") or lower.endswith(".bat")):
+        resolved = _oc_resolve_windows_bin(bin_path)
+        if resolved:
+            return [resolved] + extra_args
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        cmdline = " ".join(
+            ['"' + bin_path + '"'] + (['"' + a + '"' if " " in a else a
+                                       for a in extra_args]))
+        return [comspec, "/c", cmdline]
+    if lower.endswith(".js"):
+        return ["node", bin_path] + extra_args
+    return [bin_path] + extra_args
+
+
+def _start_opencode_sidecar():
+    """Spawn `opencode serve` once at app startup and wait until healthy."""
+    global _OC_PROC, _OC_READY
+    with _OC_LOCK:
+        if _OC_PROC is not None and _OC_PROC.poll() is None:
+            return
+        cmd = _oc_launch_command(
+            ["serve", "--port", str(OC_PORT), "--hostname", "127.0.0.1"])
+        if cmd is None:
+            LOG.warning("Research assistant disabled: '%s' not found on PATH.",
+                        OC_BIN)
+            return
+        env = dict(os.environ)
+        if OC_PASSWORD:
+            env["OPENCODE_SERVER_PASSWORD"] = OC_PASSWORD
+        LOG.info("Starting opencode research sidecar on port %s ...", OC_PORT)
+        # Log to a file, not a pipe: a pipe that fills up would deadlock the
+        # child until it exits, silently killing research requests.
+        logf = (WEBAPP_DIR / "opencode-sidecar.log").open("a",
+                                                          encoding="utf-8")
+        try:
+            _OC_PROC = subprocess.Popen(
+                cmd, cwd=str(BASE_DIR), env=env,
+                stdout=logf, stderr=subprocess.STDOUT)
+        except Exception as e:
+            LOG.warning("Research assistant disabled: could not start "
+                        "opencode sidecar: %s", e)
+            _OC_PROC = None
+            return
+        for _ in range(40):             # up to ~20s to become healthy
+            time.sleep(0.5)
+            ok, _ver = _oc_health()
+            if ok:
+                _OC_READY = True
+                LOG.info("opencode sidecar ready (model=%s).",
+                         OC_MODEL or "default")
+                return
+        LOG.warning("Research assistant disabled: opencode sidecar did not "
+                    "become healthy in time.")
+
+
+def _stop_opencode_sidecar():
+    global _OC_PROC, _OC_READY
+    with _OC_LOCK:
+        if _OC_PROC is not None:
+            try:
+                _OC_PROC.terminate()
+            except Exception:
+                pass
+            _OC_PROC = None
+        _OC_READY = False
+
+
+def _oc_find_agents():
+    data, is_json, ok = _oc_request("GET", "/agent", timeout=10)
+    if not (ok and is_json and isinstance(data, list)):
+        return []
+    return [a.get("name") for a in data]
+
+
+def _research_available():
+    return _OC_READY and "researcher" in _oc_find_agents()
 
 
 def _save_upload(uploads_dir, upload: UploadFile):
@@ -1309,6 +1496,360 @@ def _read_job_log(job_dir):
     return p.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
+# ---------------------------------------------------------------------------
+# Research assistant helpers
+# ---------------------------------------------------------------------------
+def _truncate(text, limit=3000):
+    return text if len(text) <= limit else text[:limit] + "\n...[truncated]"
+
+
+def _xlsx_sheet_text(path, max_rows=150):
+    """Dump every sheet of an .xlsx to readable text for the researcher."""
+    out = []
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    for ws in wb.worksheets:
+        out.append(f"\n--- Sheet: {ws.title} ---")
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            if i >= max_rows:
+                out.append("...[sheet truncated]")
+                break
+            cells = ["" if v is None else str(v).replace("\n", " ")
+                     for v in row]
+            if any(cells):
+                out.append(" | ".join(cells).rstrip(" |"))
+    wb.close()
+    return "\n".join(out)
+
+
+def _docx_text(path, max_lines=400):
+    """Extract readable text from a .docx (paragraphs + tables)."""
+    try:
+        from docx import Document
+        doc = Document(str(path))
+    except Exception as e:
+        return f"(could not read Word report: {e})"
+    lines = [p.text for p in doc.paragraphs if p.text.strip()]
+    for t in doc.tables[:10]:
+        for row in t.rows:
+            cells = [c.text.replace("\n", " ").strip() for c in row.cells]
+            if any(cells):
+                lines.append(" | ".join(cells))
+    return "\n".join(lines[:max_lines])
+
+
+def _docx_styles_text(path, max_items=30):
+    """Describe the fonts/sizes/colors actually used by a .docx so the agent
+    can tell how to restyle a report to match a template."""
+    try:
+        from docx import Document
+        doc = Document(str(path))
+    except Exception as e:
+        return f"(could not read Word styles: {e})"
+    out = []
+    for s in doc.styles:
+        if getattr(s, "builtin", None) is False:
+            continue
+        try:
+            name = s.name
+        except Exception:
+            continue
+        if name not in ("Normal", "Heading 1", "Heading 2", "Heading 3",
+                        "Title", "Subtitle", "Table Grid"):
+            continue
+        f = getattr(s, "font", None)
+        if f is None:
+            continue
+        size = f.size.pt if f.size else None
+        color = None
+        try:
+            if f.color and f.color.rgb:
+                color = str(f.color.rgb)
+        except Exception:
+            pass
+        out.append(f"{name}: font={f.name or 'default'}, size={size or 'default'}"
+                   f" pt, bold={bool(f.bold)}, color={color or 'default'}")
+        if len(out) >= max_items:
+            break
+    try:
+        sec = doc.sections[0]
+        mm = sec.left_margin.mm
+        out.append(f"margins(mm): L={sec.left_margin.mm:.0f} "
+                   f"R={sec.right_margin.mm:.0f} T={sec.top_margin.mm:.0f} "
+                   f"B={sec.bottom_margin.mm:.0f}")
+    except Exception:
+        pass
+    return "\n".join(out) or "(no styles detected)"
+
+
+def _build_research_context(job_dir, out_dir):
+    """Flatten a finished job's outputs into text files the agent can read."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    parts = []
+
+    man = job_dir / "manifest.json"
+    if man.exists():
+        m = json.loads(man.read_text(encoding="utf-8"))
+        parts.append("# JOB MANIFEST\n" + json.dumps(m, indent=2))
+
+    uploads = job_dir / "uploads"
+    if uploads.is_dir():
+        names = sorted(p.name for p in uploads.iterdir())
+        parts.append("# UPLOADED FILES\n" + "\n".join(names))
+
+    for xlsx in sorted(job_dir.glob("*.xlsx")):
+        parts.append(f"# {xlsx.name}\n" + _xlsx_sheet_text(xlsx))
+    tables_dir = job_dir / "tables"
+    if tables_dir.is_dir():
+        for xlsx in sorted(tables_dir.glob("*.xlsx")):
+            parts.append(f"# {xlsx.name}\n" + _xlsx_sheet_text(xlsx))
+    for docx in sorted(job_dir.glob("*.docx")):
+        parts.append(f"# {docx.name}\n" + _docx_text(docx))
+        parts.append(f"# {docx.name} (styles)\n" + _docx_styles_text(docx))
+
+    (out_dir / "job_data.txt").write_text(
+        "\n\n".join(parts) or "(no outputs found in job)",
+        encoding="utf-8")
+
+    logs = _read_job_log(job_dir)
+    (out_dir / "job_log.txt").write_text(
+        "\n".join(logs[-80:]), encoding="utf-8")
+    return out_dir
+
+
+def _build_template_context(template_path, out_dir):
+    """Flatten an uploaded sample/template .docx for the agent to read."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "template.txt").write_text(
+        "# TEMPLATE / SAMPLE DOCUMENT TEXT\n" + _docx_text(template_path) +
+        "\n\n# TEMPLATE / SAMPLE DOCUMENT STYLES\n" +
+        _docx_styles_text(template_path),
+        encoding="utf-8")
+    return out_dir
+
+
+def _cleanup_research_context(job_dir):
+    """Drop stale template.txt so a fresh template rebuilds its context."""
+    rc = job_dir / "research-context"
+    if rc.is_dir():
+        (rc / "template.txt").unlink(missing_ok=True)
+
+
+def _oc_session(job_key):
+    """Reuse the session for a job, else create one (keeps conversation)."""
+    with _OC_LOCK:
+        sid = _OC_SESSIONS.get(job_key)
+        if sid:
+            data, is_json, ok = _oc_request("GET", f"/session/{sid}")
+            if ok and is_json and data.get("id"):
+                return sid
+        data, _is_json, ok = _oc_request(
+            "POST", "/session", {"title": f"tradeflow:{job_key}"})
+        if ok and _is_json and data.get("id"):
+            sid = data["id"]
+            _OC_SESSIONS[job_key] = sid
+            return sid
+        raise RuntimeError("Could not create an opencode session")
+
+
+def _extract_json(text):
+    """Best-effort pull of the first JSON object from an agent reply."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"```(json)?", "", text).strip("` \n")
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        return json.loads(text[start:end + 1])
+    except Exception:
+        # maybe the object contains a stray trailing comma or omitted
+        # trailing brace inside a long reply -> try the last fenced block
+        for m in re.finditer(r"\{[^{}]*\}", text, re.S):
+            try:
+                cand = json.loads(m.group(0))
+                if isinstance(cand, dict):
+                    return cand
+            except Exception:
+                continue
+        return None
+
+
+def _research_system_prompt(job_key, kind, template_file=None):
+    ctx = (f"webapp/jobs/{job_key}/research-context/job_data.txt  "
+           "(job build log: .../job_log.txt)")
+    if template_file:
+        ctx += (f"\nUploaded template/sample document text + styles: "
+                f"webapp/jobs/{job_key}/research-context/template.txt")
+    base = (
+        "You are the document & research assistant for the Trade Flow Report "
+        f"Generator. A complete text snapshot of a finished job ('{job_key}') "
+        "has been prepared for you: the job manifest, uploaded file names, a "
+        "dump of every generated Excel table sheet, the text of the generated "
+        "Word report, and the styles used. "
+        f"Read the relevant files first.\nFiles: {ctx}\n")
+    if kind == "enhance":
+        return base + (
+            "TASK: research [QUESTION] and prepare a 'Research Briefing' "
+            "section to be appended to the Word report. Reply with ONLY a "
+            "JSON object (no prose, no markdown fences) in this exact shape: "
+            "{\"title\": <short title>, \"intro\": <1-3 sentence intro>, "
+            "\"findings\": [{\"heading\": <sub-heading>, \"body\": <2-4 "
+            "sentences grounded in job data where possible>, \"sources\": "
+            "[{\"name\": <publisher/source name>, \"url\": <https link>}]}]}. "
+            "Every finding MUST carry at least one credible, real source with "
+            "a working URL (UN Comtrade, ITC TradeMap, World Bank, FAO, IMF, "
+            "national statistics offices, reputable press); these become "
+            "footnotes in the report, so no placeholder ftp: or example.com "
+            "URLs. Quote figures with units (USD Thousand / USD Million) and "
+            "the period/year.")
+    if kind == "grammar":
+        return base + (
+            "TASK: proof-check the generated Word report: grammar, spelling, "
+            "punctuation, awkward phrasing, and formatting inconsistencies "
+            "(broken headings, inconsistent bullet indentation, spacing). "
+            "Reply with ONLY a JSON object (no prose, no markdown fences): "
+            "{\"summary\": <1-2 sentence overall>, \"issues\": "
+            "[{\"location\": <where, e.g. 'Table 2 heading' / 'Sentence after "
+            "para 3'>, \"original\": <exact problematic text>, \"corrected\": "
+            "<suggested replacement>, \"reason\": <brief>}]}. Only genuine "
+            "issues; do not invent them. If the text is clean, return "
+            "{\"summary\": ..., \"issues\": []}. Do not modify files.")
+    if kind == "format":
+        return base + (
+            "TASK: the analyst uploaded a template/sample document (its text "
+            "and extracted styles are in .../template.txt) and wants the "
+            "generated Word report restyled to match it. Compare the "
+            "template's fonts/sizes/colors/margins (from template.txt) with "
+            "the report's (job_data.txt '(styles)' blocks) and reply with "
+            "ONLY a JSON object (no prose, no markdown fences): "
+            "{\"comparison\": <1-3 sentence summary of the differences>, "
+            "\"plan\": {\"normal_font\": <font or null>, \"normal_size\": "
+            "<pt or null>, \"heading_font\": <font or null>, "
+            "\"heading_color\": <hex RGB no '#', or null>, "
+            "\"heading1_size\": <pt or null>, \"heading2_size\": <pt or null>, "
+            "\"heading3_size\": <pt or null>, \"line_spacing\": <1.0/1.15/1.5 "
+            "or null>, \"margins_inches\": [<L>, <R>, <T>, <B>] or null}}. "
+            "Base values on the template, not on taste.")
+    return base + (
+        "TASK: answer [QUESTION] in plain English. Quote the actual figures, "
+        "their units (USD Thousand / USD Million) and the period/year, and "
+        "cite which file/table the numbers came from. Be concise. If the "
+        "needed data is not present, say so plainly. Do NOT modify files.")
+
+
+def _ask_agent(job_key, kind, message, template_file=None, timeout=600):
+    """Post one message to the researcher agent; returns the reply text."""
+    sid = _oc_session(job_key)
+    system = _research_system_prompt(job_key, kind, template_file)
+    payload = {
+        "agent": "researcher",
+        "system": system,
+        "model": OC_MODEL or None,
+        "parts": [{"type": "text", "text": message}],
+    }
+    data, is_json, ok = _oc_request(
+        "POST", f"/session/{sid}/message", payload, timeout=timeout)
+    if not ok:
+        raise RuntimeError(
+            f"opencode request failed: "
+            f"{data if isinstance(data, str) else data}")
+    if not is_json or not isinstance(data, dict):
+        raise RuntimeError("Unexpected opencode response")
+    texts = []
+    for part in data.get("parts", []) or []:
+        if isinstance(part, dict) and part.get("type") in ("text", "reasoning"):
+            t = part.get("text")
+            if t:
+                texts.append(t)
+    answer = "\n".join(texts).strip() or "(no textual answer returned)"
+    return answer
+
+
+def _research_worker(task_dir, job_dir, question, logs, kind="qa",
+                     template_path=None):
+    job_key = job_dir.name
+    if not (job_dir / "research-context").exists():
+        _build_research_context(job_dir, job_dir / "research-context")
+    if template_path is not None and Path(template_path).exists() \
+            and not (job_dir / "research-context" / "template.txt").exists():
+        _build_template_context(template_path, job_dir / "research-context")
+
+    tpl = None
+    if template_path and Path(template_path).exists():
+        tpl = template_path
+    message = question.strip() or "Run the task described above."
+    answer = _ask_agent(job_key, kind, message, template_file=tpl)
+    (task_dir / "answer.txt").write_text(answer, encoding="utf-8")
+
+    result = {"kind": kind, "answer": answer}
+    manifest = {}
+    man = job_dir / "manifest.json"
+    if man.exists():
+        manifest = json.loads(man.read_text(encoding="utf-8"))
+    report = job_dir / manifest.get("report_name", "")
+
+    if kind == "enhance":
+        obj = _extract_json(answer) or {}
+        result["title"] = obj.get("title", "Research Briefing")
+        result["intro"] = obj.get("intro", "")
+        findings = obj.get("findings") or []
+        if not findings:
+            raise RuntimeError(
+                "The assistant did not return findings; raw reply saved as "
+                "answer.txt. Please rephrase your research question.")
+        safe = "Research Briefing - " + re.sub(r"[^A-Za-z0-9 _.-]", "",
+                                               str(question))[:60].strip()
+        out_path = task_dir / f"{safe}.docx"
+        docx_footnotes.add_research_section(
+            report, out_path, result["title"], result["intro"], findings)
+        result["findings"] = findings
+        result["produced"] = out_path.name
+        result["download_url"] = f"/api/research/file/{task_dir.name}/" \
+                                 f"{out_path.name}"
+        logs.append(f"Research briefing with {len(findings)} finding(s) and "
+                    f"footnoted sources appended: {out_path.name}")
+    elif kind == "grammar":
+        obj = _extract_json(answer) or {}
+        issues = obj.get("issues") or []
+        result["summary"] = obj.get("summary", "")
+        result["issues"] = issues
+        if issues:
+            rev = task_dir / "Grammar & Formatting Review.docx"
+            docx_footnotes.make_grammar_review(rev, obj.get("summary", ""),
+                                               issues)
+            result["review_name"] = rev.name
+            result["download_url"] = f"/api/research/file/{task_dir.name}/" \
+                                     f"{rev.name}"
+            logs.append(f"Grammar review: {len(issues)} issue(s) written to "
+                        f"Grammar & Formatting Review.docx")
+        else:
+            logs.append("Grammar review: no issues found.")
+    elif kind == "format":
+        if not (tpl and Path(tpl).exists()):
+            raise RuntimeError("FORMAT needs an uploaded template document.")
+        obj = _extract_json(answer) or {}
+        plan = obj.get("plan") or {}
+        result["comparison"] = obj.get("comparison", "")
+        result["plan"] = plan
+        out_path = task_dir / "Report - restyled to template.docx"
+        if not plan:
+            raise RuntimeError(
+                "The assistant did not return a formatting plan; raw reply "
+                "saved as answer.txt.")
+        docx_footnotes.apply_format_plan(report, out_path, plan)
+        result["produced"] = out_path.name
+        result["download_url"] = f"/api/research/file/{task_dir.name}/" \
+                                 f"{out_path.name}"
+        logs.append("Report restyled to match the template: "
+                    + out_path.name)
+
+    (task_dir / "result.json").write_text(json.dumps(result, indent=2),
+                                          encoding="utf-8")
+    logs.append("Research answer ready.")
+    return answer
+
+
 def _job_worker(job_dir, job_fn):
     logs = _JobLog(job_dir)
     try:
@@ -1372,6 +1913,164 @@ def api_status(job_id: str):
                 "detail": "The server restarted while this job was "
                           "running. Please upload the files again."}
     return {"state": "running", "log": log_lines}
+
+
+@app.get("/api/research/status")
+def api_research_status():
+    """Whether the opencode research assistant sidecar is available."""
+    ok, ver = _oc_health()
+    return {
+        "available": ok and "researcher" in _oc_find_agents(),
+        "ready": ok,
+        "version": ver,
+        "model": OC_MODEL or "default",
+    }
+
+
+@app.get("/api/research/jobs")
+def api_research_jobs():
+    """Finished jobs across every pipeline (goods/services/quarterly/product)."""
+    jobs = []
+    if JOBS_DIR.is_dir():
+        for d in JOBS_DIR.iterdir():
+            if not d.is_dir():
+                continue
+            man = d / "manifest.json"
+            if not man.exists():
+                continue
+            try:
+                m = json.loads(man.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            jobs.append({
+                "job_id": d.name,
+                "report_name": m.get("report_name", ""),
+                "mode": m.get("mode"),
+                "report_type": m.get("report_type"),
+                "config": m.get("config", ""),
+                "age": int(time.time() - d.stat().st_mtime),
+            })
+    jobs.sort(key=lambda j: j["age"])
+    return jobs[:50]
+
+
+@app.post("/api/research/{job_id}")
+def api_research(job_id: str, question: str = Form(""),
+                 kind: str = Form("qa"),
+                 template: UploadFile | None = File(default=None)):
+    """Ask the research/document assistant to work on a finished job.
+
+    kind = qa | enhance | grammar | format.
+    format requires the template file upload; enhance researches the topic
+    and appends a footnoted section to a copy of the report.
+    """
+    if kind not in ("qa", "enhance", "grammar", "format"):
+        raise HTTPException(400, "kind must be qa, enhance, grammar or format.")
+    job_dir = JOBS_DIR / job_id
+    if not re.fullmatch(r"[0-9a-f]{32}", job_id or "") or not job_dir.is_dir():
+        raise HTTPException(404, "Job not found (or expired).")
+    if not (job_dir / "manifest.json").exists():
+        raise HTTPException(400, "That job has not finished yet.")
+    question = (question or "").strip()
+    if kind == "enhance" and not question:
+        raise HTTPException(400, "Describe the research topic for the "
+                                "enhancement/footnoted briefing.")
+
+    ok, _ver = _oc_health()
+    if not ok:
+        raise HTTPException(503, "The research assistant is starting up or "
+                                 "unavailable. Try again in a moment.")
+    if "researcher" not in _oc_find_agents():
+        raise HTTPException(503, "The opencode 'researcher' agent is not "
+                                 "configured (check opencode.json).")
+
+    tpl_path = None
+    if template is not None:
+        if kind != "format":
+            raise HTTPException(400, "Template upload is only used with "
+                                    "kind=format.")
+        if not (template.filename or "").lower().endswith(".docx"):
+            raise HTTPException(400, "Template must be a .docx file.")
+        rc = job_dir / "research-context"
+        rc.mkdir(parents=True, exist_ok=True)
+        tpl_path = rc / "template.docx"
+        with tpl_path.open("wb") as f:
+            shutil.copyfileobj(template.file, f)
+        _cleanup_research_context(job_dir)
+
+    task_dir = JOBS_DIR / f"research-{job_id}"
+    if not task_dir.exists():
+        task_dir.mkdir(parents=True)
+    logs = _JobLog(task_dir)
+    (task_dir / "meta.json").write_text(
+        json.dumps({"started": time.time(), "job_id": job_id,
+                    "question": question, "kind": kind}), encoding="utf-8")
+    threading.Thread(target=_research_worker_thread,
+                     args=(task_dir, job_dir, question, logs,
+                           kind, tpl_path),
+                     daemon=True).start()
+    return {"task_id": task_dir.name,
+            "status_url": f"/api/research/task/{task_dir.name}"}
+
+
+def _research_worker_thread(task_dir, job_dir, question, logs, kind="qa",
+                            template_path=None):
+    try:
+        if kind == "format" and (template_path is None
+                                 or not Path(template_path).exists()):
+            raise RuntimeError("No template uploaded for kind=format.")
+        _research_worker(task_dir, job_dir, question, logs, kind=kind,
+                         template_path=template_path)
+        LOG.info("Research task %s finished (kind=%s)", task_dir.name, kind)
+    except Exception as e:
+        LOG.error("Research task %s failed: %s", task_dir.name, e)
+        LOG.error("%s", traceback.format_exc())
+        (task_dir / "error.txt").write_text(f"Research failed: {e}",
+                                            encoding="utf-8")
+
+
+@app.get("/api/research/task/{task_id}")
+def api_research_task(task_id: str):
+    task_dir = JOBS_DIR / task_id
+    if not re.fullmatch(r"research-[0-9a-f]{32}", task_id or "") \
+            or not task_dir.is_dir():
+        raise HTTPException(404, "Research task not found (or expired).")
+    log_lines = _read_job_log(task_dir)
+    ans_path = task_dir / "answer.txt"
+    err_path = task_dir / "error.txt"
+    res_path = task_dir / "result.json"
+    base = {"log": log_lines}
+    if err_path.exists():
+        return {"state": "error",
+                "detail": err_path.read_text(encoding="utf-8"), **base}
+    if ans_path.exists():
+        resp = {"state": "done",
+                "answer": ans_path.read_text(encoding="utf-8"), **base}
+        if res_path.exists():
+            try:
+                resp.update(json.loads(res_path.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+        return resp
+    return {"state": "running", **base}
+
+
+@app.get("/api/research/file/{task_id}/{filename}")
+def api_research_file(task_id: str, filename: str):
+    """Download a document the research assistant produced (enhance/grammar/
+    format tasks), e.g. the footnoted research briefing."""
+    task_dir = JOBS_DIR / task_id
+    if not re.fullmatch(r"research-[0-9a-f]{32}", task_id or "") \
+            or not task_dir.is_dir():
+        raise HTTPException(404, "Research task not found (or expired).")
+    name = os.path.basename(filename or "")
+    if not name.endswith(".docx") and not name.endswith(".pdf"):
+        raise HTTPException(400, "Invalid file name.")
+    fpath = task_dir / name
+    if not fpath.exists():
+        raise HTTPException(404, "File not found.")
+    return FileResponse(str(fpath), filename=name,
+                        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 
 @app.post("/api/run")
