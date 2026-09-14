@@ -134,6 +134,7 @@ def _find_advanced_service_tables(excel_dir, found):
         "table11": "table 11",
         "table12": "table 12",
         "table13": "table 13",
+        "table14": "table 14",
     }
     for fname in sorted(os.listdir(excel_dir)):
         low = fname.lower()
@@ -436,6 +437,7 @@ class ServicesAnalysis:
         self.diversification = parse_diversification_table(files["table11"]) if files.get("table11") else {"items": []}
         self.trajectory = parse_trajectory_table(files["table12"]) if files.get("table12") else {"shares": {}}
         self.peers = parse_peer_table(files["table13"]) if files.get("table13") else {"items": []}
+        self.table14 = parse_rank_table(files["table14"]) if files.get("table14") else {"items": [], "years": []}
         if self.table1["years"]:
             self.years = self.table1["years"]
         # Always use the latest year from the data, regardless of config
@@ -871,12 +873,12 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
 
     # Export share chart (editable doughnut)
     b.add_para("Share of Global Service Exports by Country", bold=True)
-    b.add_table_caption(f"Figure 1: Share of Global Service Exports in {Y}")
-    _sh1 = service_share_rows(a.table3.get("items") if a.table3 else None)
+    b.add_table_caption(f"Figure 1: Share of Global Service Exports by Country in {Y}")
+    _sh1 = service_share_rows(a.table1.get("items") if a.table1 else None)
     if _sh1:
         b.add_word_chart(
             "doughnut",
-            f"Share of Kenya's Service Exports by Category in {Y}",
+            f"Share of Global Service Exports by Country in {Y}",
             [l for l, _ in _sh1], [s for _, s in _sh1],
             width_in=6.0, height_in=4.6,
             name="Figure 1 - Service Export Shares",
@@ -913,19 +915,46 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     for line in narr.get("s3_kenya_exports", []):
         if line:
             b.add_bullet(line)
-    b.page_break()
 
-    # Import share chart (editable doughnut)
-    b.add_para("Share of Kenya's Service Imports by Category", bold=True)
-    b.add_table_caption(f"Figure 2: Share of Kenya's Service Imports in {Y}")
-    _sh2 = service_share_rows(a.table4.get("items") if a.table4 else None)
+    # Export share chart (editable doughnut)
+    b.add_para("Share of Kenya's Service Exports by Category", bold=True)
+    b.add_table_caption(f"Figure 2: Share of Kenya's Service Exports by Category in {Y}")
+    _sh2 = service_share_rows(a.table3.get("items") if a.table3 else None)
     if _sh2:
         b.add_word_chart(
             "doughnut",
-            f"Share of Kenya's Service Imports by Category in {Y}",
+            f"Share of Kenya's Service Exports by Category in {Y}",
             [l for l, _ in _sh2], [s for _, s in _sh2],
             width_in=6.0, height_in=4.6,
-            name="Figure 2 - Service Import Shares",
+            name="Figure 2 - Service Export Shares",
+            colors=[c.lstrip("#") for c in THEME_ACCENTS])
+    else:
+        b.add_para("[Share chart data not available]", italic=True,
+                   color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
+
+    # Table 4: Kenya service imports
+    b.add_table_caption(f"Table 4: Kenya's Service Imports by Category in {Y}")
+    b.add_product_table(a, a.table4,
+                        f"Kenya's Service Imports\nValue in USD Million",
+                        unit_row=True,
+                        widths=[685, 972, 3170, 731, 731, 731, 731, 733, 866])
+    b.add_source()
+    for line in narr.get("s4_kenya_imports", []):
+        if line:
+            b.add_bullet(line)
+
+    # Import share chart (editable doughnut)
+    b.add_para("Share of Kenya's Service Imports by Category", bold=True)
+    b.add_table_caption(f"Figure 3: Share of Kenya's Service Imports in {Y}")
+    _sh3 = service_share_rows(a.table4.get("items") if a.table4 else None)
+    if _sh3:
+        b.add_word_chart(
+            "doughnut",
+            f"Share of Kenya's Service Imports by Category in {Y}",
+            [l for l, _ in _sh3], [s for _, s in _sh3],
+            width_in=6.0, height_in=4.6,
+            name="Figure 3 - Service Import Shares",
             colors=[c.lstrip("#") for c in THEME_ACCENTS])
     else:
         b.add_para("[Share chart data not available]", italic=True,
@@ -967,23 +996,40 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     # ============================== SECTION 3.4 =============================
     b.add_heading("3.4 Structure of Global Service Exports")
 
-    # Pie chart of service exports structure
-    pie_path = os.path.join(excel_dir, "Figure 2 Service Exports Structure.png")
-    if os.path.exists(pie_path):
-        b.add_table_caption("Figure 4: Structure of Global Service Exports by Category")
-        b.add_figure(pie_path)
-        b.add_source()
+    # Global structure doughnut (editable, from Table 14)
+    b.add_para("Structure of Global Service Exports by Category", bold=True)
+    b.add_table_caption(f"Figure 4: Structure of Global Service Exports by Category in {Y}")
+    _sh4 = service_share_rows(a.table14.get("items") if a.table14 else None)
+    if _sh4:
+        b.add_word_chart(
+            "doughnut",
+            f"Structure of Global Service Exports by Category in {Y}",
+            [l for l, _ in _sh4], [s for _, s in _sh4],
+            width_in=6.0, height_in=4.6,
+            name="Figure 4 - Global Service Export Structure",
+            colors=[c.lstrip("#") for c in THEME_ACCENTS])
     else:
-        b.add_para("[Pie chart data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+        b.add_para("[Structure chart data not available]", italic=True,
+                   color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
 
-    # Stacked bar chart
-    bar_path = os.path.join(excel_dir, "Figure 3 Service Exports by Category.png")
-    if os.path.exists(bar_path):
-        b.add_table_caption("Figure 5: Global Service Exports by Category Over Time")
-        b.add_figure(bar_path)
-        b.add_source()
+    # Global structure over time (editable area/line, from Table 14)
+    b.add_para("Global Service Exports by Category Over Time", bold=True)
+    b.add_table_caption("Figure 5: Global Service Exports by Category Over Time")
+    _years5 = a.table14.get("years") if a.table14 else []
+    _it5 = (a.table14.get("items") or [])[:8]
+    if _years5 and any(d.get("years") for d in _it5):
+        b.add_word_chart(
+            "line", "Global Service Exports by Category (USD Billion)",
+            _years5,
+            [(short_product_name(d.get("label") or d.get("name"), maxlen=36), d["years"]) for d in _it5],
+            width_in=6.3, height_in=3.8,
+            name="Figure 5 - Global Service Exports by Category",
+            colors=[c.lstrip("#") for c in THEME_ACCENTS])
     else:
-        b.add_para("[Stacked bar chart data not available]", italic=True, color=RGBColor(0x9A, 0x1F, 0x1F))
+        b.add_para("[Category trends data not available]", italic=True,
+                   color=RGBColor(0x9A, 0x1F, 0x1F))
+    b.add_source()
     b.page_break()
 
     # ============================== SECTION 3.5 =============================
@@ -1249,8 +1295,8 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     # ============================== SECTION 5 ===============================
     b.add_heading("5. Kenya's Services Trade Balance")
 
-    # Figure 3: Balance chart (editable bar)
-    b.add_table_caption(f"Figure 3: Kenya's Services Balance of Trade")
+    # Figure 12: Balance chart (editable bar)
+    b.add_table_caption(f"Figure 12: Kenya's Services Balance of Trade")
     if a.balance and a.balance.get("years"):
         b.add_word_chart(
             "bar", "Kenya Services Balance of Trade (USD Million)",
@@ -1259,26 +1305,13 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
              ("Imports", a.balance["imports"]),
              ("Balance of Trade", a.balance["balance"])],
             width_in=6.3, height_in=3.6,
-            name="Figure 3 - Services Balance of Trade",
+            name="Figure 12 - Services Balance of Trade",
             colors=["#156082", "#E97132", "#196B24"])
     else:
         b.add_para("[Balance chart data not available]", italic=True,
                    color=RGBColor(0x9A, 0x1F, 0x1F))
     b.add_source()
     for line in narr.get("s5", []):
-        if line:
-            b.add_bullet(line)
-    b.page_break()
-
-    # Table 4: Kenya service imports
-    b.add_heading(f"5.1 Kenya's Service Imports", level=2)
-    b.add_table_caption(f"Table 4: Kenya's Service Imports by Category in {Y}")
-    b.add_product_table(a, a.table4,
-                        f"Kenya's Service Imports\nValue in USD Million",
-                        unit_row=True,
-                        widths=[685, 972, 3170, 731, 731, 731, 731, 733, 866])
-    b.add_source()
-    for line in narr.get("s4_imports", []):
         if line:
             b.add_bullet(line)
     b.page_break()

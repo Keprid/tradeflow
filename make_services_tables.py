@@ -259,7 +259,7 @@ ITC_REGIONS = {
         "lao people's democratic republic", "lebanon", "macao",
         "malaysia", "maldives", "mongolia", "myanmar", "nepal",
         "oman", "pakistan", "palestine", "philippines", "qatar",
-        "russia", "saudi arabia", "singapore", "sri lanka", "syria",
+        "russia", "saudi arabia", "singapore", "south korea", "sri lanka", "syria",
         "taiwan", "tajikistan", "thailand", "timor-leste", "turkey",
         "türkiye", "turkmenistan", "united arab emirates", "uzbekistan",
         "viet nam", "vietnam", "yemen",
@@ -281,7 +281,7 @@ ITC_REGIONS = {
         "samoa", "solomon islands", "tonga", "tuvalu", "vanuatu",
     },
     "Europe": {
-        "albania", "belarus", "belgium", "bosnia and herzegovina",
+        "albania", "austria", "belarus", "belgium", "bosnia and herzegovina",
         "bulgaria", "croatia", "czech republic", "czechia", "denmark",
         "estonia", "finland", "france", "germany", "greece", "hungary",
         "iceland", "ireland", "italy", "latvia", "lithuania",
@@ -2971,8 +2971,8 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
                 put_share(ws, r, 5, growth, fill=fill, use_row_fill=False)
             else:
                 put_share(ws, r, 5, None, fill=fill, use_row_fill=False)
-            put_share(ws, r, 7, it.get("cagr"), fill=fill, use_row_fill=False)
-            put_text(ws, r, 8, it.get("rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
+            put_share(ws, r, 6, it.get("cagr"), fill=fill, use_row_fill=False)
+            put_text(ws, r, 7, it.get("rank", ""), size=FONT_SIZE, fill=fill, use_row_fill=False)
             r += 1
 
     ke_it = items_by_name.get("kenya")
@@ -2990,8 +2990,8 @@ def write_peer_comparison_table(ws, items_exp, years_exp, row1_label=None, row1_
             put_share(ws, r, 5, growth, fill=fill, bold=True, use_row_fill=False)
         else:
             put_share(ws, r, 5, None, fill=fill, bold=True, use_row_fill=False)
-        put_share(ws, r, 7, ke_it.get("cagr"), fill=fill, bold=True, use_row_fill=False)
-        put_text(ws, r, 8, ke_it.get("rank", ""), size=FONT_SIZE, fill=fill, bold=True, use_row_fill=False)
+        put_share(ws, r, 6, ke_it.get("cagr"), fill=fill, bold=True, use_row_fill=False)
+        put_text(ws, r, 7, ke_it.get("rank", ""), size=FONT_SIZE, fill=fill, bold=True, use_row_fill=False)
         r += 1
 
     set_widths(ws, {"A": 20, "B": 28, "C": 20, "D": 14, "E": 14, "F": 14, "G": 12})
@@ -3311,6 +3311,19 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         if gexp_note:
             print(gexp_note)
 
+    # ---- Table 14: Global service exports by category ---------------------
+    n_years_g = len(years_gexp)
+    shown_gexp = rank_and_top(items_gexp, top_n)
+    ao_gexp = all_other_vals(total_gexp, shown_gexp, n_years_g)
+    t_latest_gexp = total_gexp["vals"][-1] if total_gexp else None
+    for it in shown_gexp:
+        it["share"] = share(it["vals"][-1], t_latest_gexp)
+    if total_gexp:
+        total_gexp["share"] = share(t_latest_gexp, t_latest_gexp)
+    ao_share_gexp = share(ao_gexp[-1], t_latest_gexp) if ao_gexp else None
+    d_gexp = {"years": years_gexp, "total": total_gexp, "shown": shown_gexp,
+              "all_other": {"vals": ao_gexp, "share": ao_share_gexp}}
+
     # ---- Table 3: Kenya service exports by category ----------------------
     total_kexp, items_kexp, years_kexp = _load_first(
         files, "kenya_exports", parse_kenya_services)
@@ -3621,6 +3634,19 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                                 row1_title="Kenya vs Peer Countries: Service Exports")
     out["t13_peer"] = os.path.join(out_dir, "Table 13 Kenya vs Peers Service Exports.xlsx")
     _finalize(ws, out["t13_peer"], cache)
+
+    # Table 14: Global service exports by category (feeds editable Figures 4/5)
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 14"
+    cache = []
+    write_product_table(ws, d_gexp,
+                        "Global Service Exports by Category\nValue in USD Billion",
+                        unit_row=True,
+                        row1_label="Table 14:",
+                        row1_title="Global Service Exports by Category")
+    set_widths(ws, widths_prd)
+    cache_all["Table 14"] = dict(cache)
+    out["t14_gexp"] = os.path.join(out_dir, "Table 14 Global Service Exports by Category.xlsx")
+    _finalize(ws, out["t14_gexp"], cache)
 
     # Figure 1: Kenya Services Balance
     bal_path = os.path.join(out_dir, "Figure 1 Services Balance.xlsx")
