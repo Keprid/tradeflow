@@ -395,11 +395,11 @@ def _classic_to_matrix(key, records):
     return out
 
 
-def _load_any(path):
+def _load_any(path, key=None):
     """Load an ITC matrix workbook, falling back to the HTML-table parser for
     Trade Map's classic ``.xls`` downloads (BIFF/HTML saved under ``.xls``)."""
     try:
-        return load_matrix(path)
+        return load_matrix(path, key)
     except Exception:
         return load_html_matrix(path)
 
@@ -460,16 +460,60 @@ def _header_year(cell):
     return int(m.group(1)) if m else None
 
 
-def load_matrix(path):
+def _matrix_roles(header, key):
+    """Map column positions from the header names of current Trade Map exports.
+
+    ``List of exporters ...`` workbooks name their columns (``Reporter ISO``,
+    ``Reporter``, ``Partner``, ``Product code``, ``Product label``, ...) while
+    the classic layout is exactly ``[reporter, reporter_label, partner,
+    partner_label, product, product_label]``.  ISO / code columns are skipped
+    and the economy / market / product label columns are detected per loader
+    key.  Returns ``{}`` when the header carries no useful names."""
+    if not header:
+        return {}
+    words = [" ".join(x for x in re.split(r"[^a-z0-9]+",
+                                           str(h or "").lower()) if x)
+             for h in header]
+    roles = {}
+    name_cols = []
+    for i, low in enumerate(words):
+        if not low:
+            continue
+        if "iso" in low or ("code" in low and "product" not in low
+                            and "hs" not in low and "ntl" not in low):
+            continue  # identifier column (Reporter ISO, Partner ISO, ...)
+        if "product" in low or "hs" in low or "ntl" in low:
+            if "label" in low or "descrip" in low:
+                roles.setdefault("product_label", i)
+            elif "code" in low:
+                roles.setdefault("product_code", i)
+            continue
+        if any(w in low for w in ("report", "export", "import", "econom",
+                                  "countr", "market", "partner",
+                                  "destination", "source")):
+            name_cols.append(i)
+    # Name columns appear in the same order as the table reads them: for the
+    # by-market (Kenya) files the first is the reporter, the second the
+    # partner; economy lists carry a single name column.
+    if key in _BY_PARTNER_KEYS and name_cols:
+        roles["partner_label"] = (name_cols[1] if len(name_cols) >= 2
+                                  else name_cols[0])
+    elif key in _BY_ECONOMY_KEYS and name_cols:
+        roles["reporter_label"] = name_cols[0]
+    return roles
+
+
+def load_matrix(path, key=None):
     """Parse an ITC all-countries / all-products matrix workbook.
 
     Accepts both the classic ``.xls`` exports (whose first table row is the
     header) and the current Trade Map ``.xlsx`` downloads, which start with a
-    few metadata lines above the actual column header.  Returns
-    ``(years, records)`` where ``years`` is the ordered list of review years
-    picked up from the year columns and each record is:
-    ``{"reporter", "reporter_label", "partner", "partner_label",
-        "product", "product_label", "years": {year: value}}``.
+    few metadata lines above the actual column header.  Column roles are taken
+    from the header names (``key`` tells which label - reporter, partner or
+    product - drives the table).  Returns ``(years, records)`` where
+    ``years`` is the ordered list of review years picked up from the year
+    columns and each record is ``{"reporter", "reporter_label", "partner",
+    "partner_label", "product", "product_label", "years": {year: value}}``.
     """
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     ws = wb.worksheets[0]
@@ -492,20 +536,66 @@ def load_matrix(path):
     years = sorted(set(year_cols.values()))
     year_ix = {y: next(c for c, yy in year_cols.items() if yy == y)
                for y in years}
+
+    header = rows[header_idx] if header_idx < len(rows) else ()
+    roles = _matrix_roles(header, key)
+    pos = {"reporter": 0, "reporter_label": 1, "partner": 2,
+           "partner_label": 3, "product": 4, "product_label": 5}
+    if "reporter_label" in roles:
+        pos["reporter_label"] = roles["reporter_label"]
+    if "partner_label" in roles:
+        pos["partner_label"] = roles["partner_label"]
+    if "product_code" in roles:
+        pos["product"] = roles["product_code"]
+    if "product_label" in roles:
+        pos["product_label"] = roles["product_label"]
+    non_year = [c for c in range(len(header)) if c not in year_cols]
+
+    def cell(r, col):
+        return r[col] if 0 <= col < len(r) else None
+
+    def name_of(r, pref, default):
+        """The label value at ``pref``, or the first text-bearing cell before
+        the year columns when ``pref`` holds a bare code / nothing."""
+        if pref is not None:
+            v = cell(r, pref)
+            if v is not None and str(v).strip() and \
+                    re.search(r"[A-Za-z]", str(v)):
+                return v
+        for c in ([pref] if pref is not None else []) + non_year:
+            v = cell(r, c)
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s and re.search(r"[A-Za-z]", s):
+                return v
+        v = cell(r, pref) if pref is not None else cell(r, default)
+        return v if v is not None else ""
+
     records = []
     for r in rows[header_idx + 1:]:
         if not r or r[0] is None or str(r[0]).strip() == "":
             continue
         if isinstance(r[0], str) and r[0].strip().lower().startswith("source"):
             continue
+        if key in (_BY_ECONOMY_KEYS | _BY_PRODUCT_KEYS):
+            # World-partnered matrices (economy or product view) never carry a
+            # partner column of their own: narrow modern downloads would even
+            # put a year figure in r[2], so force the world partner here.
+            partner, partner_label = "000", "World"
+        else:
+            partner = str(cell(r, 2) or "")
+            partner_label = str(name_of(r, pos["partner_label"], 3) or "")
         records.append({
-            "reporter": str(r[0]),
-            "reporter_label": str(r[1] or ""),
-            "partner": str(r[2]),
-            "partner_label": str(r[3] or ""),
-            "product": str(r[4]),
-            "product_label": clean_label(str(r[5] or "")),
-            "years": {y: to_float(r[c]) for y, c in year_ix.items()},
+            "reporter": str(cell(r, 0) or ""),
+            "reporter_label": str(
+                name_of(r, pos["reporter_label"], 1) or ""),
+            "partner": partner,
+            "partner_label": partner_label,
+            "product": str(cell(r, pos["product"]) or ""),
+            "product_label": clean_label(str(
+                name_of(r, pos["product_label"], 5) or "")),
+            "years": {y: to_float(cell(r, c)) for y, c in year_ix.items()},
         })
     return years, records
 
@@ -631,7 +721,7 @@ class ProfileData:
 
             def _store(path, store_self):
                 try:
-                    years, records = _load_any(path)
+                    years, records = _load_any(path, key)
                 except Exception:
                     return False
                 if records is None:
