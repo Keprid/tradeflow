@@ -128,6 +128,16 @@ CLASSIC_RAW_KEYWORDS = ("list_of_supplying_markets_for_a_product_imported",
                         "list_of_importing_markets_for_a_product_exported",
                         "list_of_products_exported",
                         "bilateral_trade_between_kenya_and")
+# Classic query-level product-profile downloads carry a family in the filename
+# ("List of exported products for the selected product (Meat and edible meat
+# offal)").  These map to the product-profile loaders; a bare economy/partner
+# matrix (e.g. a lone "List of products exported by Kenya") is NOT a family
+# signal on its own.
+CLASSIC_PRODUCT_KEYWORDS = (
+    "list_of_exported_products_for_the_selected_product",
+    "list_of_imported_products_for_the_selected_product",
+    "list_of_exporters_for_the_selected_product",
+    "list_of_importers_for_the_selected_product")
 SERVICE_RAW_KEYWORDS = ("exported_services_for", "imported_services_for",
                         "services_exported_by", "services_imported_by",
                         "services_commercialized", "list_of_exporters_for",
@@ -147,8 +157,7 @@ PRODUCT_RAW_KEYWORDS = (
 CRAFTS_RAW_KEYWORDS = (
     "list_of_exported_products_for_the_selected_product_group",
     "list_of_exporters_for_the_selected_product_group",
-    "list_of_importing_markets_for_a_product_group_exported_by_kenya",
-    "list_of_products_exported_by_kenya")
+    "list_of_importing_markets_for_a_product_group_exported_by_kenya")
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -774,11 +783,15 @@ def _detect_mode(uploads_dir, report_type="goods"):
     if any(any(k in n for k in CRAFTS_RAW_KEYWORDS) for n in names):
         return "crafts", ""
     if report_type == "product":
-        # Explicitly selected: require at least one recognisable matrix file.
+        # Explicitly selected: require at least one recognisable matrix file,
+        # or a classic query-level download (e.g. "List of exported products
+        # for the selected product (...)").
         if any(any(k in n for k in PRODUCT_RAW_KEYWORDS) for n in names):
             return "product", ""
+        if any(any(k in n for k in CLASSIC_PRODUCT_KEYWORDS) for n in names):
+            return "product", ""
         uploaded = ", ".join(sorted(names))
-        kw_list = ", ".join(PRODUCT_RAW_KEYWORDS)
+        kw_list = ", ".join(PRODUCT_RAW_KEYWORDS + CLASSIC_PRODUCT_KEYWORDS)
         return None, (
             f"Could not recognise the product-profile upload set.\n"
             f"Uploaded files: {uploaded}\n"
