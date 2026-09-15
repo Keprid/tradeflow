@@ -441,11 +441,33 @@ def _supplier_market_label(path):
     return display_name(fix_label(name))
 
 
-def load_matrix(path):
-    """Parse an ITC all-countries / all-products matrix.
+def _header_year(cell):
+    """Extract a review year from a Trade Map column header.
 
-    Returns ``(years, records)`` where ``years`` is the ordered list of
-    review years picked up from the column headers and each record is:
+    Classic headers look like ``2024 (USD thousand)``; the current workbook
+    downloads use ``Export value in 2024 (USD thousand)`` or a bare ``2024``.
+    Indicator columns (shares, growth, indices, totals, unit values) are
+    ignored so only genuine annual trade columns are treated as years.
+    """
+    low = str(cell or "").lower().strip()
+    if not low:
+        return None
+    if any(m in low for m in ("share", "growth", "index", "trend",
+                              "concentration", "tariff", "unit value",
+                              "total")):
+        return None
+    m = re.search(r"(20\d\d)", low)
+    return int(m.group(1)) if m else None
+
+
+def load_matrix(path):
+    """Parse an ITC all-countries / all-products matrix workbook.
+
+    Accepts both the classic ``.xls`` exports (whose first table row is the
+    header) and the current Trade Map ``.xlsx`` downloads, which start with a
+    few metadata lines above the actual column header.  Returns
+    ``(years, records)`` where ``years`` is the ordered list of review years
+    picked up from the year columns and each record is:
     ``{"reporter", "reporter_label", "partner", "partner_label",
         "product", "product_label", "years": {year: value}}``.
     """
@@ -453,16 +475,28 @@ def load_matrix(path):
     ws = wb.worksheets[0]
     rows = list(ws.iter_rows(values_only=True))
     wb.close()
-    header = rows[0] if rows else []
-    years, year_cols = [], []
-    for i, h in enumerate(header or []):
-        m = re.match(r"\s*(20\d\d)\s*\(", str(h or ""))
-        if m:
-            years.append(int(m.group(1)))
-            year_cols.append(i)
+
+    # Locate the true header row: modern Downloads carry a metadata preamble
+    # (source note, unit, reporting period) before the column names.
+    header_idx = 0
+    year_cols = {}
+    for i, r in enumerate(rows):
+        cols = {c: y for c, y in
+                ((c, _header_year(v)) for c, v in enumerate(r))
+                if y is not None}
+        if len(cols) >= 2:
+            header_idx, year_cols = i, cols
+            break
+    if not year_cols:
+        return [], []
+    years = sorted(set(year_cols.values()))
+    year_ix = {y: next(c for c, yy in year_cols.items() if yy == y)
+               for y in years}
     records = []
-    for r in rows[1:]:
-        if not r or r[0] is None:
+    for r in rows[header_idx + 1:]:
+        if not r or r[0] is None or str(r[0]).strip() == "":
+            continue
+        if isinstance(r[0], str) and r[0].strip().lower().startswith("source"):
             continue
         records.append({
             "reporter": str(r[0]),
@@ -471,7 +505,7 @@ def load_matrix(path):
             "partner_label": str(r[3] or ""),
             "product": str(r[4]),
             "product_label": clean_label(str(r[5] or "")),
-            "years": {y: to_float(r[c]) for y, c in zip(years, year_cols)},
+            "years": {y: to_float(r[c]) for y, c in year_ix.items()},
         })
     return years, records
 
@@ -704,6 +738,15 @@ class ProfileData:
         if self.max_years and len(self.all_years) > self.max_years:
             self.all_years = self.all_years[-self.max_years:]
         self._full_years = full_years
+
+        if not self.all_years:
+            loaded = ", ".join(sorted(self.files)) or "none"
+            raise ValueError(
+                "No yearly columns could be read from the uploaded matrices "
+                "under %s (parsed: %s). Trade Map downloads must be Excel "
+                "workbooks whose header row contains year columns such as "
+                "'2024 (USD thousand)' - re-download the files from Trade Map "
+                "and try again." % (self.data_dir, loaded))
 
         # Anchor product (the product of the by-importer download).  A missing
         # by-importer download must not abort the profile: it falls back to
