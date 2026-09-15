@@ -460,6 +460,17 @@ def _header_year(cell):
     return int(m.group(1)) if m else None
 
 
+_WORLD_LABELS = {"world", "total", "all", "all countries", "all economies",
+                 "all markets", "all products"}
+
+
+def _is_world_aggregate(*values):
+    """True when any value is Trade Map's 'World'/'Total' aggregation marker -
+    the sum row that is a total, not a rankable economy or market."""
+    return any(str(v).strip().lower() in _WORLD_LABELS
+               for v in values if v is not None)
+
+
 def _matrix_roles(header, key):
     """Map column positions from the header names of current Trade Map exports.
 
@@ -1077,7 +1088,9 @@ class ProfileData:
 
     def destinations(self):
         rows = sorted((r for r in self._rows("kenya_exports_by_partner")
-                       if r["partner"] != "000"),
+                       if r["partner"] != "000"
+                       and not _is_world_aggregate(r["partner"],
+                                                   r["partner_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["partner_label"]), "years": r["years"]}
@@ -1085,7 +1098,9 @@ class ProfileData:
 
     def exporters(self):
         rows = sorted((r for r in self._rows("world_exports_by_economy")
-                       if r["reporter"] != "000"),
+                       if r["reporter"] != "000"
+                       and not _is_world_aggregate(r["reporter"],
+                                                   r["reporter_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
@@ -1093,7 +1108,9 @@ class ProfileData:
 
     def importers(self):
         rows = sorted((r for r in self._rows("world_imports_by_economy")
-                       if r["reporter"] != "000"),
+                       if r["reporter"] != "000"
+                       and not _is_world_aggregate(r["reporter"],
+                                                   r["reporter_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
@@ -1101,7 +1118,9 @@ class ProfileData:
 
     def kenya_import_sources(self):
         rows = sorted((r for r in self._rows("kenya_imports_by_partner")
-                       if r["partner"] != "000"),
+                       if r["partner"] != "000"
+                       and not _is_world_aggregate(r["partner"],
+                                                   r["partner_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["partner_label"]), "years": r["years"]}

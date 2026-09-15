@@ -1483,8 +1483,7 @@ class ReportBuilder:
             '<w:lvlText w:val="\u2022"/>'
             '<w:lvlJc w:val="left"/>'
             '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>'
-            '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" '
-            'w:hint="default"/></w:rPr></w:lvl></w:abstractNum>'
+            '</w:lvl></w:abstractNum>'
             % (nsdecls("w"), abs_id))
         cleanup = el.find(qn("w:numIdMacAtCleanup"))
         if cleanup is not None:
@@ -1502,20 +1501,25 @@ class ReportBuilder:
         return num_id
 
     def _ensure_bullet_support(self):
+        # Reuse an existing 'List Bullet' style (the starter template ships
+        # one with Symbol-font box numbering that is overridden below) or
+        # create it; either way the style's numbering is pointed at our
+        # round-bullet level so bullets render as "•", not "▪".
         try:
-            self.doc.styles["List Bullet"]
-            return
+            st = self.doc.styles["List Bullet"]
         except KeyError:
-            pass
-        st = self.doc.styles.add_style("List Bullet", WD_STYLE_TYPE.PARAGRAPH)
+            st = self.doc.styles.add_style("List Bullet", WD_STYLE_TYPE.PARAGRAPH)
+            if not self._template_mode:
+                st.font.name = "Century Gothic"
         st.base_style = self.doc.styles["Normal"]
-        if not self._template_mode:
-            st.font.name = "Century Gothic"
         st.paragraph_format.space_after = Pt(8)
         st.paragraph_format.left_indent = Inches(0.5)
         st.paragraph_format.first_line_indent = Inches(-0.25)
         num_id = self._bullet_numid()
         pPr = st.element.get_or_add_pPr()
+        old = pPr.find(qn("w:numPr"))
+        if old is not None:
+            pPr.remove(old)
         numPr = parse_xml(
             '<w:numPr %s><w:ilvl w:val="0"/>'
             '<w:numId w:val="%d"/></w:numPr>' % (nsdecls("w"), num_id))
