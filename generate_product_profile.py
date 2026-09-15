@@ -308,7 +308,8 @@ _CLASSIC_STEMS = {
         ("list_of_importing_markets_for_a_product_exported_by_kenya",
          "list_of_destination_countries_for_a_product_exported_by_kenya"),
     "kenya_imports_by_partner":
-        ("list_of_exporting_markets_for_a_product_imported_by_kenya",),
+        ("list_of_exporting_markets_for_a_product_imported_by_kenya",
+         "list_of_supplying_markets_for_a_product_imported_by_kenya"),
     "export_potential": ("export_potential",),
 }
 _BY_ECONOMY_KEYS = {"world_exports_by_economy", "world_imports_by_economy"}
@@ -1693,17 +1694,44 @@ class ProfileBuilder(ReportBuilder):
     def __init__(self, cfg, narratives=None):
         cfg = dict(cfg)
         cfg.setdefault("country", {"name": cfg.get("family_title", "")})
-        super().__init__(cfg, narratives or {})
+        super().__init__(cfg, narratives or {}, cfg.get("template_doc"))
         self.cfg = cfg
         self.tcap = 0
         self.fcap = 0
+        self.done_tables = set()
 
     # The source line must sit *below* the table / figure body.  These
     # methods therefore emit the caption only; every table / figure builder
-    # calls ``add_source`` last, after the body has been written.
-    def _next_table(self, title, source):
-        self.tcap += 1
+    # calls ``add_source`` last, after the body has been written.  A mirror
+    # table may supply an explicit ``num`` so its number never shifts when
+    # another table's source download is missing.
+    def _next_table(self, title, source, num=None):
+        if num is not None:
+            self.tcap = max(self.tcap, num)
+        else:
+            self.tcap += 1
+        self.done_tables.add(self.tcap)
         self.add_table_caption("Table %d: %s" % (self.tcap, title))
+
+    def _missing_required_table(self, num, title, source):
+        # Keeps the mirror-table contract: every required table number
+        # always appears in the report even when its source download was
+        # not among the uploaded files.
+        if num in self.done_tables:
+            return
+        self.done_tables.add(num)
+        self.tcap = max(self.tcap, num)
+        self.add_table_caption("Table %d: %s" % (num, title))
+        p = self.doc.add_paragraph()
+        r = p.add_run(
+            "Table data not available for the uploaded files. "
+            "Please supply the matching Trade Map download "
+            "and re-run the report."
+        )
+        self._style_run(r, italic=True)
+        p.paragraph_format.space_before = Pt(6)
+        p.paragraph_format.space_after = Pt(6)
+        self.add_source(source)
 
     def _next_figure(self, title, source):
         self.fcap += 1
@@ -3104,6 +3132,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     """2.0 GLOBAL <FAMILY> SECTOR: tables 1-6 plus the Africa sub-section
     (tables 7-10) and Figures 1-2."""
     family = cfg.get("family_title", "the product family")
+    prod = (family.lower() + " products")
     top = cfg.get("global_top_n", 25)
     years = data.years
     rev = data.review_year
@@ -3116,8 +3145,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     exporters = _ranked_rows(data.exporters(), top, years,
                              ensure_label="Kenya")
     if exporters:
-        b._next_table("Top %d Exporting Economies of %s" % (top, family),
-                      source)
+        b._next_table("Global exports of %s by top %d countries"
+                      % (prod, top), source, num=1)
         b.add_value_table("Exporting economy", exporters, years,
                           "Share in %d" % rev,
                           "Exports of %s by Economy" % family, source,
@@ -3134,7 +3163,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     g_exp = top_rows(data.global_export_products(), top, years,
                      "All other products")
     if g_exp:
-        b._next_table("Exports of %s by Product" % family, source)
+        b._next_table("Global exports of %s by values" % prod, source, num=2)
         b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
                           "Exports of %s by Product" % family, source,
                           total_label="World")
@@ -3144,8 +3173,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     g_exp_q = top_rows(data.global_export_products_qty(), top, years,
                        "All other products")
     if g_exp_q:
-        b._next_table("Quantity of %s Exports by Product (Tonnes)" % family,
-                      source)
+        b._next_table("Global exports of %s by quantity (tonnes)" % prod,
+                      source, num=3)
         b.add_value_table("Product", g_exp_q, years, "Share in %d" % rev,
                           "Exports of %s by Product (Tonnes)" % family, source,
                           total_label="World", quantity=True)
@@ -3155,8 +3184,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     importers = _ranked_rows(data.importers(), top, years,
                              ensure_label="Kenya")
     if importers:
-        b._next_table("Top %d Importing Economies of %s" % (top, family),
-                      source)
+        b._next_table("Global imports of %s by top %d countries"
+                      % (prod, top), source, num=4)
         b.add_value_table("Importing economy", importers, years,
                           "Share in %d" % rev,
                           "Imports of %s by Economy" % family, source,
@@ -3173,7 +3202,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     g_imp = top_rows(data.global_import_products(), top, years,
                      "All other products")
     if g_imp:
-        b._next_table("Imports of %s by Product" % family, source)
+        b._next_table("Global imports of %s by values" % prod, source, num=5)
         b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
                           "Imports of %s by Product" % family, source,
                           total_label="World")
@@ -3183,8 +3212,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     g_imp_q = top_rows(data.global_import_products_qty(), top, years,
                        "All other products")
     if g_imp_q:
-        b._next_table("Quantity of %s Imports by Product (Tonnes)" % family,
-                      source)
+        b._next_table("Global imports of %s by quantity (tonnes)" % prod,
+                      source, num=6)
         b.add_value_table("Product", g_imp_q, years, "Share in %d" % rev,
                           "Imports of %s by Product (Tonnes)" % family, source,
                           total_label="World", quantity=True)
@@ -3199,8 +3228,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     africa_exp = _ranked_rows(data.africa_exporters(), top, years,
                               ensure_label="Kenya")
     if africa_exp:  # Table 7
-        b._next_table("Top %d African Exporting Economies of %s"
-                      % (top, family), source)
+        b._next_table("Global exports of %s by top %d African countries"
+                      % (prod, top), source, num=7)
         b.add_value_table("African exporting economy", africa_exp, years,
                           "Share in %d" % rev,
                           "Exports of %s from Africa" % family, source,
@@ -3211,7 +3240,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     africa_exp_p = top_rows(data.africa_export_products(), top, years,
                             "All other products")
     if africa_exp_p:  # Table 8
-        b._next_table("Exports of %s from Africa by Product" % family, source)
+        b._next_table("Africa exports of %s by values" % prod, source, num=8)
         b.add_value_table("Product", africa_exp_p, years, "Share in %d" % rev,
                           "Exports of %s from Africa by Product" % family,
                           source, total_label="Total")
@@ -3222,8 +3251,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     africa_imp = _ranked_rows(data.africa_importers(), top, years,
                               ensure_label="Kenya")
     if africa_imp:  # Table 9
-        b._next_table("Top %d African Importing Economies of %s"
-                      % (top, family), source)
+        b._next_table("Africa's top %d importers of %s" % (top, prod),
+                      source, num=9)
         b.add_value_table("African importing economy", africa_imp, years,
                           "Share in %d" % rev,
                           "Imports of %s into Africa" % family, source,
@@ -3234,7 +3263,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
     africa_imp_p = top_rows(data.africa_import_products(), top, years,
                             "All other products")
     if africa_imp_p:  # Table 10
-        b._next_table("Imports of %s into Africa by Product" % family, source)
+        b._next_table("Africa imports of %s by values" % prod, source, num=10)
         b.add_value_table("Product", africa_imp_p, years, "Share in %d" % rev,
                           "Imports of %s into Africa by Product" % family,
                           source, total_label="Total")
@@ -3246,11 +3275,30 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_bullet("Africa-level download(s) not available; the Africa "
                      "sub-section is limited to the by-economy tables above.")
 
+    # Keep the mirror contract: every required table number must appear (with
+    # an explicit notice) even if its source download was not uploaded.
+    required = {
+        1: "Global exports of %s by top %d countries" % (prod, top),
+        2: "Global exports of %s by values" % prod,
+        3: "Global exports of %s by quantity (tonnes)" % prod,
+        4: "Global imports of %s by top %d countries" % (prod, top),
+        5: "Global imports of %s by values" % prod,
+        6: "Global imports of %s by quantity (tonnes)" % prod,
+        7: "Global exports of %s by top %d African countries" % (prod, top),
+        8: "Africa exports of %s by values" % prod,
+        9: "Africa's top %d importers of %s" % (top, prod),
+        10: "Africa imports of %s by values" % prod,
+    }
+    for _n, _t in sorted(required.items()):
+        if _n not in b.done_tables:
+            b._missing_required_table(_n, _t, source)
+
 
 def section_mirror_kenya(b, cfg, data, source):
     """3.0 KENYA'S EXPORTS AND IMPORTS MARKET TRENDS: tables 11-17 plus the
     sub-family table 13."""
     family = cfg.get("family_title", "the product family")
+    prod = (family.lower() + " products")
     top = cfg.get("top_n", 10)
     years = data.years
     rev = data.review_year
@@ -3264,8 +3312,7 @@ def section_mirror_kenya(b, cfg, data, source):
     dests = _ranked_rows(data.destinations(), cfg.get("global_top_n", 25),
                          years)
     if dests:
-        b._next_table("Top %d Destination Markets of Kenya's %s Exports"
-                      % (cfg.get("global_top_n", 25), family), source)
+        b._next_table("Kenya's exports of %s by country" % prod, source, num=11)
         b.add_value_table("Destination market", dests, years,
                           "Share in %d" % rev,
                           "Kenya's %s Exports by Destination" % family,
@@ -3288,7 +3335,7 @@ def section_mirror_kenya(b, cfg, data, source):
     # Table 12 - Kenya's exports by product
     members = top_rows(data.members, top, years, "All other products")
     if members:
-        b._next_table("Kenya's %s Exports by Product" % family, source)
+        b._next_table("Kenya's exports of %s by values" % prod, source, num=12)
         b.add_value_table("Product", members, years, "Share in %d" % rev,
                           "Kenya's %s Exports by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -3303,7 +3350,7 @@ def section_mirror_kenya(b, cfg, data, source):
         rows = top_rows(rows, top, years, "All other products")
         if not rows:
             continue
-        b._next_table("Kenya's Exports of %s by Product" % title, source)
+        b._next_table("Kenya's Exports of %s by Product" % title, source, num=13)
         b.add_value_table("Product", rows, years, "Share in %d" % rev,
                           "Kenya's Exports of %s by Product" % title, source,
                           total_label="Total", adaptive_unit=True)
@@ -3322,8 +3369,8 @@ def section_mirror_kenya(b, cfg, data, source):
     ken_q = top_rows(data.kenya_export_products_qty(), top, years,
                      "All other products")
     if ken_q:
-        b._next_table("Quantity of Kenya's %s Exports by Product (Tonnes)"
-                      % family, source)
+        b._next_table("Kenya's exports of %s by quantities (tonnes)" % prod,
+                      source, num=14)
         b.add_value_table("Product", ken_q, years, "Share in %d" % rev,
                           "Quantity of Kenya's %s Exports by Product (Tonnes)"
                           % family, source, total_label="Total",
@@ -3336,8 +3383,7 @@ def section_mirror_kenya(b, cfg, data, source):
     sources = _ranked_rows(data.kenya_import_sources(),
                            cfg.get("global_top_n", 25), years)
     if sources:
-        b._next_table("Top %d Supplying Markets of Kenya's %s Imports"
-                      % (cfg.get("global_top_n", 25), family), source)
+        b._next_table("Kenya's imports of %s by country" % prod, source, num=15)
         b.add_value_table("Supplying market", sources, years,
                           "Share in %d" % rev,
                           "Kenya's %s Imports by Source" % family, source,
@@ -3348,7 +3394,7 @@ def section_mirror_kenya(b, cfg, data, source):
     imports = top_rows(data.kenya_import_products(), top, years,
                        "All other products")
     if imports:
-        b._next_table("Kenya's %s Imports by Product" % family, source)
+        b._next_table("Kenya's imports of %s by values" % prod, source, num=16)
         b.add_value_table("Product", imports, years, "Share in %d" % rev,
                           "Kenya's %s Imports by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
@@ -3360,8 +3406,8 @@ def section_mirror_kenya(b, cfg, data, source):
     imp_q = top_rows(data.kenya_import_products_qty(), top, years,
                      "All other products")
     if imp_q:
-        b._next_table("Quantity of Kenya's %s Imports by Product (Tonnes)"
-                      % family, source)
+        b._next_table("Kenya's imports of %s by quantities (tonnes)" % prod,
+                      source, num=17)
         b.add_value_table("Product", imp_q, years, "Share in %d" % rev,
                           "Quantity of Kenya's %s Imports by Product (Tonnes)"
                           % family, source, total_label="Total",
@@ -3369,6 +3415,23 @@ def section_mirror_kenya(b, cfg, data, source):
         trend_bullets(b, imp_q, years, family, "imports",
                       scope="Kenya's", residual="All other products",
                       denom="Kenya's total")
+
+    # Keep the mirror contract: every required table number must appear (with
+    # an explicit notice) even if its source download was not uploaded.
+    required = {
+        11: "Kenya's exports of %s by country" % prod,
+        12: "Kenya's exports of %s by values" % prod,
+        14: "Kenya's exports of %s by quantities (tonnes)" % prod,
+        15: "Kenya's imports of %s by country" % prod,
+        16: "Kenya's imports of %s by values" % prod,
+        17: "Kenya's imports of %s by quantities (tonnes)" % prod,
+    }
+    if cfg.get("sub_families"):
+        required[13] = "Kenya's Exports of %s by Product" % (
+            cfg["sub_families"][0].get("title") or family)
+    for _n, _t in sorted(required.items()):
+        if _n not in b.done_tables:
+            b._missing_required_table(_n, _t, source)
 
 
 def section_mirror_potential(b, cfg, data, source, tmp_dir):
@@ -3763,53 +3826,53 @@ def write_excel_deliverable(cfg, data, out_path):
     t1 = _ranked_rows(data.exporters(), top, years, ensure_label="Kenya",
                       residual="All other economies")
     if t1:
-        value_sheet("Table 1 - Exports by Economy", "Exporting economy", t1,
+        value_sheet("Table 1 - Top 25 Global Exporters", "Exporting economy", t1,
                     doughnut=("Share of world exports",
                               [(d["label"], _share01(d, rev, t1))
                                for d in t1]))
     t2 = top_rows(data.global_export_products(), top, years,
                   "All other products")
     if t2:
-        value_sheet("Table 2 - Exports by Product", "Product", t2)
+        value_sheet("Table 2 - Global Exports by Value", "Product", t2)
     t3 = top_rows(data.global_export_products_qty(), top, years,
                   "All other products")
     if t3:
-        value_sheet("Table 3 - Exports by Product (Tonnes)", "Product", t3,
+        value_sheet("Table 3 - Global Exports by Quantity (Tonnes)", "Product", t3,
                     quantity=True)
     t4 = _ranked_rows(data.importers(), top, years, ensure_label="Kenya",
                       residual="All other economies")
     if t4:
-        value_sheet("Table 4 - Imports by Economy", "Importing economy", t4,
+        value_sheet("Table 4 - Top 25 Global Importers", "Importing economy", t4,
                     doughnut=("Share of world imports",
                               [(d["label"], _share01(d, rev, t4))
                                for d in t4]))
     t5 = top_rows(data.global_import_products(), top, years,
                   "All other products")
     if t5:
-        value_sheet("Table 5 - Imports by Product", "Product", t5)
+        value_sheet("Table 5 - Global Imports by Value", "Product", t5)
     t6 = top_rows(data.global_import_products_qty(), top, years,
                   "All other products")
     if t6:
-        value_sheet("Table 6 - Imports by Product (Tonnes)", "Product", t6,
+        value_sheet("Table 6 - Global Imports by Quantity (Tonnes)", "Product", t6,
                     quantity=True)
     t7 = _ranked_rows(data.africa_exporters(), top, years,
                       ensure_label="Kenya", residual="All other economies")
     if t7:
-        value_sheet("Table 7 - Africa Exports by Economy",
+        value_sheet("Table 7 - Top 25 African Exporters",
                     "African exporting economy", t7)
     t8 = top_rows(data.africa_export_products(), top, years,
                   "All other products")
     if t8:
-        value_sheet("Table 8 - Africa Exports by Product", "Product", t8)
+        value_sheet("Table 8 - Africa Exports by Value", "Product", t8)
     t9 = _ranked_rows(data.africa_importers(), top, years,
                       ensure_label="Kenya", residual="All other economies")
     if t9:
-        value_sheet("Table 9 - Africa Imports by Economy",
+        value_sheet("Table 9 - Top 25 African Importers",
                     "African importing economy", t9)
     t10 = top_rows(data.africa_import_products(), top, years,
                    "All other products")
     if t10:
-        value_sheet("Table 10 - Africa Imports by Product", "Product", t10)
+        value_sheet("Table 10 - Africa Imports by Value", "Product", t10)
     t11 = _ranked_rows(data.destinations(), top, years,
                        residual="All other markets")
     if t11:
@@ -3820,7 +3883,7 @@ def write_excel_deliverable(cfg, data, out_path):
     t12 = top_rows(data.members, cfg.get("top_n", 10), years,
                    "All other products")
     if t12:
-        value_sheet("Table 12 - Kenya Exports by Product", "Product", t12)
+        value_sheet("Table 12 - Kenya Exports by Value", "Product", t12)
     t13 = None
     for sf in cfg.get("sub_families") or []:
         rows = data.sub_family_members(sf.get("codes") or [])
@@ -3834,7 +3897,7 @@ def write_excel_deliverable(cfg, data, out_path):
     t14 = top_rows(data.kenya_export_products_qty(), cfg.get("top_n", 10),
                    years, "All other products")
     if t14:
-        value_sheet("Table 14 - Kenya Exports by Product (Tonnes)",
+        value_sheet("Table 14 - Kenya Exports by Quantity (Tonnes)",
                     "Product", t14, quantity=True)
     t15 = _ranked_rows(data.kenya_import_sources(), top, years,
                        residual="All other markets")
@@ -3843,11 +3906,11 @@ def write_excel_deliverable(cfg, data, out_path):
     t16 = top_rows(data.kenya_import_products(), cfg.get("top_n", 10), years,
                    "All other products")
     if t16:
-        value_sheet("Table 16 - Kenya Imports by Product", "Product", t16)
+        value_sheet("Table 16 - Kenya Imports by Value", "Product", t16)
     t17 = top_rows(data.kenya_import_products_qty(), cfg.get("top_n", 10),
                    years, "All other products")
     if t17:
-        value_sheet("Table 17 - Kenya Imports by Product (Tonnes)",
+        value_sheet("Table 17 - Kenya Imports by Quantity (Tonnes)",
                     "Product", t17, quantity=True)
     comp = _competitor_rows(data, cfg.get("competitor_top", 5))
     if comp:
@@ -3874,6 +3937,39 @@ def write_excel_deliverable(cfg, data, out_path):
                 align=lm)
         ws.column_dimensions["A"].width = 32
         ws.column_dimensions["E"].width = 45
+
+    # Keep the mirror contract in the workbook too: a placeholder sheet is
+    # added for every required Table 1..17 whose source download was missing.
+    required_xl = {
+        "Table 1 - Top 25 Global Exporters",
+        "Table 2 - Global Exports by Value",
+        "Table 3 - Global Exports by Quantity (Tonnes)",
+        "Table 4 - Top 25 Global Importers",
+        "Table 5 - Global Imports by Value",
+        "Table 6 - Global Imports by Quantity (Tonnes)",
+        "Table 7 - Top 25 African Exporters",
+        "Table 8 - Africa Exports by Value",
+        "Table 9 - Top 25 African Importers",
+        "Table 10 - Africa Imports by Value",
+        "Table 11 - Kenya Exports by Country",
+        "Table 12 - Kenya Exports by Value",
+        "Table 14 - Kenya Exports by Quantity (Tonnes)",
+        "Table 15 - Kenya Imports by Country",
+        "Table 16 - Kenya Imports by Value",
+        "Table 17 - Kenya Imports by Quantity (Tonnes)",
+    }
+    if cfg.get("sub_families"):
+        required_xl.add(("Table 13 - Kenya %s Exports"
+                         % (cfg["sub_families"][0].get("title") or "Sub"))[:31])
+    for _name in sorted(required_xl):
+        if _name in wb.sheetnames:
+            continue
+        ws = wb.create_sheet(_name)
+        _xc(ws, 1, 1,
+            "Table data not available for the uploaded files. Please supply "
+            "the matching Trade Map download and re-run the report.",
+            bold=True)
+        ws.column_dimensions["A"].width = 120
 
     # Existing deliverable sheets (analysis extras kept below the mirror;
     # the simple value tables above are the mirror's Table 1..18 and are no

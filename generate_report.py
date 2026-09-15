@@ -56,8 +56,9 @@ from docx.enum.section import WD_SECTION_START
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import nsdecls, qn
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.shared import Emu, Inches, Pt, RGBColor
 
 from charts import draw_share_pie, series_shares, slice_callouts, new_fig, finish
@@ -1424,19 +1425,101 @@ def pie_share_rows(items, n=10):
 # Word document building
 # ---------------------------------------------------------------------------
 class ReportBuilder:
-    def __init__(self, cfg, narratives):
+    def __init__(self, cfg, narratives, template_path=None):
         self.cfg = cfg
         self.n = narratives
         self.c = cfg["country"]
         self.a = None
-        self.doc = Document()
+        self._template_mode = False
+        if template_path and os.path.exists(template_path):
+            self.doc = Document(template_path)
+            self._clear_template_body()
+            self._template_mode = True
+        else:
+            self.doc = Document()
         section = self.doc.sections[0]
-        section.top_margin = Inches(1)
-        section.bottom_margin = Inches(1)
-        section.left_margin = Inches(1)
-        section.right_margin = Inches(1)
-        self._add_page_border(section)
+        if not self._template_mode:
+            section.top_margin = Inches(1)
+            section.bottom_margin = Inches(1)
+            section.left_margin = Inches(1)
+            section.right_margin = Inches(1)
+            self._add_page_border(section)
         self._setup_styles()
+        if self._template_mode:
+            self._ensure_bullet_support()
+
+    def _clear_template_body(self):
+        """Drop the starter template's own content, keeping its page setup and
+        (letterhead / page-number) header and footer intact."""
+        body = self.doc.element.body
+        for child in list(body):
+            if child.tag != qn("w:sectPr"):
+                body.remove(child)
+
+    def _bullet_numid(self):
+        """Return a ``w:numId`` for a simple bullet level, creating the
+        numbering definition (and part, if the template lacks one) as needed.
+        A starter template may not ship Word's built-in 'List Bullet' style or
+        its numbering."""
+        try:
+            numbering = self.doc.part.numbering_part
+        except Exception:
+            numbering = None
+        if numbering is None:
+            from docx.parts.numbering import NumberingPart
+            numbering = NumberingPart.new()
+            self.doc.part.relate_to(numbering, RT.NUMBERING)
+        el = numbering.element
+        abs_ids = [int(a.get(qn("w:abstractNumId"))) for a in
+                   el.findall(qn("w:abstractNum"))]
+        num_ids = [int(n.get(qn("w:numId"))) for n in el.findall(qn("w:num"))]
+        abs_id = (max(abs_ids) + 1) if abs_ids else 0
+        num_id = (max(num_ids) + 1) if num_ids else 1
+        abstract = parse_xml(
+            '<w:abstractNum %s w:abstractNumId="%d">'
+            '<w:multiLevelType w:val="hybridMultilevel"/>'
+            '<w:lvl w:ilvl="0">'
+            '<w:start w:val="1"/><w:numFmt w:val="bullet"/>'
+            '<w:lvlText w:val="\u2022"/>'
+            '<w:lvlJc w:val="left"/>'
+            '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>'
+            '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" '
+            'w:hint="default"/></w:rPr></w:lvl></w:abstractNum>'
+            % (nsdecls("w"), abs_id))
+        cleanup = el.find(qn("w:numIdMacAtCleanup"))
+        if cleanup is not None:
+            cleanup.addprevious(abstract)
+        else:
+            el.insert(0, abstract)
+        num = parse_xml(
+            '<w:num %s w:numId="%d">'
+            '<w:abstractNumId w:val="%d"/></w:num>'
+            % (nsdecls("w"), num_id, abs_id))
+        if cleanup is not None:
+            cleanup.addprevious(num)
+        else:
+            el.append(num)
+        return num_id
+
+    def _ensure_bullet_support(self):
+        try:
+            self.doc.styles["List Bullet"]
+            return
+        except KeyError:
+            pass
+        st = self.doc.styles.add_style("List Bullet", WD_STYLE_TYPE.PARAGRAPH)
+        st.base_style = self.doc.styles["Normal"]
+        if not self._template_mode:
+            st.font.name = "Century Gothic"
+        st.paragraph_format.space_after = Pt(8)
+        st.paragraph_format.left_indent = Inches(0.5)
+        st.paragraph_format.first_line_indent = Inches(-0.25)
+        num_id = self._bullet_numid()
+        pPr = st.element.get_or_add_pPr()
+        numPr = parse_xml(
+            '<w:numPr %s><w:ilvl w:val="0"/>'
+            '<w:numId w:val="%d"/></w:numPr>' % (nsdecls("w"), num_id))
+        pPr.get_or_add_ind().addnext(numPr)
 
     def _add_page_border(self, section):
         """Black outside border frame ('wall') around every page.
@@ -1470,6 +1553,12 @@ class ReportBuilder:
 
     # -- styling ------------------------------------------------------------
     def _setup_styles(self):
+        if self._template_mode:
+            # Base the report on the starter template's own typography (body
+            # font like Times New Roman, its heading styles); only the caption
+            # styles are still added so List of Tables / Figures work.
+            self._add_caption_styles()
+            return
         normal = self.doc.styles["Normal"]
         normal.font.name = "Century Gothic"
         normal.font.size = Pt(12)
@@ -1505,18 +1594,26 @@ class ReportBuilder:
 
         # Caption styles feed the automated List of Tables / List of Figures
         # (TOC \t fields match paragraphs by style name).
+        self._add_caption_styles()
+
+    def _add_caption_styles(self):
         for style_name in ("Caption Table", "Caption Figure"):
             st = self.doc.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
             st.base_style = self.doc.styles["Normal"]
-            st.font.name = "Century Gothic"
+            if not self._template_mode:
+                st.font.name = "Century Gothic"
             st.font.size = Pt(12)
             st.font.italic = True
             st.paragraph_format.space_before = Pt(10)
             st.quick_style = True
 
     def _style_run(self, run, size=None, bold=None, italic=None, color=None, name="Century Gothic"):
-        run.font.name = name
-        run._element.rPr.rFonts.set(qn("w:eastAsia"), name)
+        # In template mode the starter document's own fonts are kept (this is
+        # what makes the report mirror the goods-flow / template look); the
+        # Century Gothic KEPROBA face is applied only to fresh documents.
+        if name and not getattr(self, "_template_mode", False):
+            run.font.name = name
+            run._element.rPr.rFonts.set(qn("w:eastAsia"), name)
         if size is not None:
             run.font.size = Pt(size)
         if bold is not None:
@@ -1565,8 +1662,11 @@ class ReportBuilder:
 
         Replicates the template report: the letterhead image inline in the
         default page header, 2.76in x 0.72in, left-aligned. Skipped silently
-        when the asset is not present.
+        when the asset is not present, and when report generation is based on
+        a starter template that already carries the letterhead header.
         """
+        if getattr(self, "_template_mode", False):
+            return
         letterhead = os.path.join(BASE_DIR, "keproba_letterhead.png")
         if not os.path.exists(letterhead):
             return
@@ -1749,11 +1849,18 @@ class ReportBuilder:
             anchor.addprevious(pg_num)
         else:
             sect_pr.append(pg_num)
-        self._add_page_border(sec)
+        if not self._template_mode:
+            self._add_page_border(sec)
         return sec
 
     def add_footer(self):
-        """Footer of the last (body) section: directorate + page number."""
+        """Footer of the last (body) section: directorate + page number.
+
+        No-op when based on a starter template whose footer already carries
+        the page number.
+        """
+        if getattr(self, "_template_mode", False):
+            return
         section = self.doc.sections[-1]
         footer = section.footer
         footer.is_linked_to_previous = False
