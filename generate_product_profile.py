@@ -2292,8 +2292,10 @@ RESIDUE = {"exporter": "All other economies",
            "source": "All other sources"}
 
 
-def geo_bullets(b, rows, years, anchor_short, role):
-    """'Brazil was the world's leading exporter of X in 2023...' bullets."""
+def geo_bullets(b, rows, years, anchor_short, role, region=None):
+    """'Brazil was the world's leading exporter of X in 2023...' bullets.
+    ``region`` ("Africa") re-frames the leader phrase and denominator to the
+    region instead of the world."""
     last = years[-1]
     pairs = _shares(rows, years)
     pairs.sort(key=lambda p: p[1], reverse=True)
@@ -2313,6 +2315,8 @@ def geo_bullets(b, rows, years, anchor_short, role):
     real = [p for p in pairs if p[0] != residue]
     if not real:
         return
+    subject = "%s in Africa" % anchor_short.lower() if region else \
+        anchor_short.lower()
     if role == "source":
         b.add_bullet("The leading source of Kenya's imports of %s in %d was "
                      "%s (**%s**; **%.1f%%** of Kenya's imports)."
@@ -2321,6 +2325,14 @@ def geo_bullets(b, rows, years, anchor_short, role):
                                          if r["label"] == real[0][0]), None)),
                         real[0][1] * 100))
         denom = "Kenya's imports in %d" % last
+    elif region:
+        b.add_bullet("%s was the leading %s of %s in %d, with %s "
+                     "(**%.1f%%** of Africa's total)."
+                     % (real[0][0], word, subject, last,
+                        usd_phrase(next((r["years"].get(last) for r in rows
+                                         if r["label"] == real[0][0]), None)),
+                        real[0][1] * 100))
+        denom = "Africa's total in %d" % last
     else:
         b.add_bullet("%s was the world's leading %s of %s in %d, with %s "
                      "(**%.1f%%** of the world total)."
@@ -2342,7 +2354,7 @@ def geo_bullets(b, rows, years, anchor_short, role):
 
 
 def trend_bullets(b, rows, years, family, noun, scope="World",
-                  residual="All other products"):
+                  residual="All other products", denom=None):
     last = years[-1]
     pairs = _shares(rows, years)
     pairs.sort(key=lambda p: p[1], reverse=True)
@@ -2352,7 +2364,9 @@ def trend_bullets(b, rows, years, family, noun, scope="World",
     if not real:
         return
     subj = ("%s %s" % (scope, noun)).strip()
-    denom = "Kenya's imports" if scope == "Kenya's" else "the world total"
+    if denom is None:
+        denom = ("%s total" % scope if scope.endswith("'s")
+                 else "the world total")
     lead, share = real[0]
     txt = ("%s of %s in %d were led by %s (**%.1f%%** of %s)"
            % (subj, family.lower(), last, short_label(lead, 100), share * 100,
@@ -3086,32 +3100,6 @@ def section_background(b, cfg, data, source):
                           else "Info", a["message"]))
 
 
-def _mirror_geo_table(b, cfg, data, source, side, economy_rows,
-                      product_rows, scope_title, residual):
-    """Emit the value-then-quantity pair of product tables plus the economy
-    table for one side (export/import) of the global coverage."""
-    family = cfg.get("family_title", "the product family")
-    top = cfg.get("global_top_n", 25)
-    years = data.years
-    rev = data.review_year
-    noun = "Exports" if side == "export" else "Imports"
-    noun_l = "exports" if side == "export" else "imports"
-
-    if economy_rows:
-        b._next_table("Top %d %s Markets by %s of %s"
-                      % (top, scope_title, noun, family), source)
-        b.add_value_table("Economy", economy_rows, years, "Share in %d" % rev,
-                          "%s of %s by Economy" % (noun, family), source,
-                          total_label="Total", rank=True)
-
-    if product_rows:
-        b._next_table("%s of %s by Product" % (noun, family), source)
-        b.add_value_table("Product", product_rows, years, "Share in %d" % rev,
-                          "%s of %s by Product" % (noun, family), source,
-                          total_label="Total")
-        trend_bullets(b, product_rows, years, family, noun_l, scope=scope_title)
-
-
 def _mirror_global(b, cfg, data, source, tmp_dir):
     """2.0 GLOBAL <FAMILY> SECTOR: tables 1-6 plus the Africa sub-section
     (tables 7-10) and Figures 1-2."""
@@ -3134,6 +3122,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
                           "Share in %d" % rev,
                           "Exports of %s by Economy" % family, source,
                           total_label="World", rank=True)
+        geo_bullets(b, exporters, years, family, "exporter")
         img = make_donut(_shares(exporters, years), tmp_dir, "g1_share.png",
                          "Share of world exports")
         if img:
@@ -3149,6 +3138,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
                           "Exports of %s by Product" % family, source,
                           total_label="World")
+        trend_bullets(b, g_exp, years, family, "exports")
 
     # Table 3 - world exports by product (quantity)
     g_exp_q = top_rows(data.global_export_products_qty(), top, years,
@@ -3159,6 +3149,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_value_table("Product", g_exp_q, years, "Share in %d" % rev,
                           "Exports of %s by Product (Tonnes)" % family, source,
                           total_label="World", quantity=True)
+        trend_bullets(b, g_exp_q, years, family, "exports")
 
     # Table 4 / Figure 2 - world imports
     importers = _ranked_rows(data.importers(), top, years,
@@ -3170,6 +3161,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
                           "Share in %d" % rev,
                           "Imports of %s by Economy" % family, source,
                           total_label="World", rank=True)
+        geo_bullets(b, importers, years, family, "importer")
         img = make_donut(_shares(importers, years), tmp_dir, "g2_share.png",
                          "Share of world imports")
         if img:
@@ -3185,6 +3177,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
                           "Imports of %s by Product" % family, source,
                           total_label="World")
+        trend_bullets(b, g_imp, years, family, "imports")
 
     # Table 6 - world imports by product (quantity)
     g_imp_q = top_rows(data.global_import_products_qty(), top, years,
@@ -3195,6 +3188,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_value_table("Product", g_imp_q, years, "Share in %d" % rev,
                           "Imports of %s by Product (Tonnes)" % family, source,
                           total_label="World", quantity=True)
+        trend_bullets(b, g_imp_q, years, family, "imports")
 
     # ---- Global exports from Africa ---------------------------------------
     b.page_break()
@@ -3211,6 +3205,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
                           "Share in %d" % rev,
                           "Exports of %s from Africa" % family, source,
                           total_label="Total", rank=True)
+        geo_bullets(b, africa_exp, years, family.lower(), "exporter",
+                    region="Africa")
 
     africa_exp_p = top_rows(data.africa_export_products(), top, years,
                             "All other products")
@@ -3219,6 +3215,9 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_value_table("Product", africa_exp_p, years, "Share in %d" % rev,
                           "Exports of %s from Africa by Product" % family,
                           source, total_label="Total")
+        trend_bullets(b, africa_exp_p, years, family, "exports",
+                      scope="Africa's", residual="All other products",
+                      denom="Africa's total")
 
     africa_imp = _ranked_rows(data.africa_importers(), top, years,
                               ensure_label="Kenya")
@@ -3229,6 +3228,8 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
                           "Share in %d" % rev,
                           "Imports of %s into Africa" % family, source,
                           total_label="Total", rank=True)
+        geo_bullets(b, africa_imp, years, family.lower(), "importer",
+                    region="Africa")
 
     africa_imp_p = top_rows(data.africa_import_products(), top, years,
                             "All other products")
@@ -3237,6 +3238,9 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_value_table("Product", africa_imp_p, years, "Share in %d" % rev,
                           "Imports of %s into Africa by Product" % family,
                           source, total_label="Total")
+        trend_bullets(b, africa_imp_p, years, family, "imports",
+                      scope="Africa's", residual="All other products",
+                      denom="Africa's total")
 
     if not (africa_exp or africa_imp or africa_exp_p or africa_imp_p):
         b.add_bullet("Africa-level download(s) not available; the Africa "
@@ -3277,6 +3281,9 @@ def section_mirror_kenya(b, cfg, data, source):
                          % (family.lower(), rev, lead["label"],
                             usd_phrase(lead["years"].get(rev)),
                             top_share * 100.0))
+        for p_ in _growth_paragraphs(years, _year_totals(dests),
+                                     "Kenya's exports of", family.lower()):
+            b.add_bullet(p_)
 
     # Table 12 - Kenya's exports by product
     members = top_rows(data.members, top, years, "All other products")
@@ -3285,6 +3292,9 @@ def section_mirror_kenya(b, cfg, data, source):
         b.add_value_table("Product", members, years, "Share in %d" % rev,
                           "Kenya's %s Exports by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
+        trend_bullets(b, members, years, family, "exports",
+                      scope="Kenya's", residual="All other products",
+                      denom="Kenya's total")
 
     # Table 13 - Kenya's exports of the sub-family (e.g. processed meat)
     for i, sf in enumerate(cfg.get("sub_families") or []):
@@ -3318,6 +3328,9 @@ def section_mirror_kenya(b, cfg, data, source):
                           "Quantity of Kenya's %s Exports by Product (Tonnes)"
                           % family, source, total_label="Total",
                           quantity=True)
+        trend_bullets(b, ken_q, years, family, "exports",
+                      scope="Kenya's", residual="All other products",
+                      denom="Kenya's total")
 
     # Table 15 - Kenya's imports by source
     sources = _ranked_rows(data.kenya_import_sources(),
@@ -3339,6 +3352,9 @@ def section_mirror_kenya(b, cfg, data, source):
         b.add_value_table("Product", imports, years, "Share in %d" % rev,
                           "Kenya's %s Imports by Product" % family, source,
                           total_label="Total", adaptive_unit=True)
+        trend_bullets(b, imports, years, family, "imports",
+                      scope="Kenya's", residual="All other products",
+                      denom="Kenya's total")
 
     # Table 17 - Kenya's imports by product (quantity)
     imp_q = top_rows(data.kenya_import_products_qty(), top, years,
@@ -3350,6 +3366,9 @@ def section_mirror_kenya(b, cfg, data, source):
                           "Quantity of Kenya's %s Imports by Product (Tonnes)"
                           % family, source, total_label="Total",
                           quantity=True)
+        trend_bullets(b, imp_q, years, family, "imports",
+                      scope="Kenya's", residual="All other products",
+                      denom="Kenya's total")
 
 
 def section_mirror_potential(b, cfg, data, source, tmp_dir):
