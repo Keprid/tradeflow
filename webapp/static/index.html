@@ -981,6 +981,45 @@ input[type=file]::file-selector-button:hover {
       </div>
     </div>
   </div>
+
+  <div class="card log-card" id="research-card">
+    <div class="card-title"><i class="fas fa-microscope"></i> Research &amp; Document Assistant</div>
+    <div class="hint" style="margin-top:0;" id="research-hint">
+      <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i> &nbsp;
+      Pick a finished job and a task. <b>Ask</b> gets a plain answer from the data;
+      <b>Enhance</b> researches a topic and appends a footnoted &ldquo;Research Briefing&rdquo;
+      section to a copy of the Word report (sources as clickable footnotes);
+      <b>Grammar</b> proof-checks the report; <b>Format</b> restyles the report to match
+      an uploaded template (.docx).
+    </div>
+    <label for="research-job">Job to research</label>
+    <select id="research-job"><option value="">(loading&hellip;)</option></select>
+    <label for="research-kind">Task</label>
+    <select id="research-kind">
+      <option value="qa">Ask a question (plain answer)</option>
+      <option value="enhance">Enhance report (research topic + footnoted section)</option>
+      <option value="grammar">Grammar &amp; formatting check</option>
+      <option value="format">Restyle report to match a template</option>
+    </select>
+    <div id="template-row" style="display:none;">
+      <label for="research-template">Template / sample document (.docx)</label>
+      <input type="file" id="research-template" accept=".docx"
+             style="font:inherit;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);width:100%;"/>
+    </div>
+    <label for="research-question">Question / topic</label>
+    <textarea id="research-question" rows="3" style="width:100%;resize:vertical;font:inherit;padding:12px 16px;border:1.5px solid var(--border);border-radius:var(--radius-sm);" placeholder="e.g. Research the outlook for coffee exports and append a briefed section, with credible sources, as footnotes."></textarea>
+    <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+      <button id="research-ask" class="btn btn-primary" type="button">
+        <i class="fas fa-paper-plane"></i> Run
+      </button>
+      <span class="hint" style="margin:0;" id="research-status-chip"></span>
+    </div>
+    <div class="result" id="research-result" style="display:none;margin-top:16px;">
+      <div class="result-meta" id="research-result-meta"></div>
+      <div id="research-answer" style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:var(--text);"></div>
+      <div id="research-download" style="margin-top:12px;"></div>
+    </div>
+  </div>
 </main>
 
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
@@ -1025,6 +1064,7 @@ input[type=file]::file-selector-button:hover {
   ];
   let stageTimer = null;
   let elapsedTimer = null;
+  let lastFinishedJobId = null;
 
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const shortenName = n => n.length > 26 ? n.slice(0, 15) + '\u2026' + n.slice(-8) : n;
@@ -1143,6 +1183,155 @@ input[type=file]::file-selector-button:hover {
     fileSummary.classList.add('show');
     runCta.classList.add('show');
     runBtn.classList.add('btn-attention');
+  });
+
+  async function populateResearchJobs() {
+    const sel = $('research-job');
+    sel.innerHTML = '';
+    try {
+      const r = await fetch('/api/research/jobs');
+      const jobs = await r.json();
+      if (!jobs.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = '(no finished jobs yet)';
+        sel.appendChild(o);
+        return;
+      }
+      for (const j of jobs) {
+        const o = document.createElement('option');
+        o.value = j.job_id;
+        const tag = (j.report_type || j.mode || '') + (j.config ? ' \u00b7 ' + j.config : '');
+        const title = (j.report_name || j.job_id);
+        o.textContent = (j.job_id === lastFinishedJobId ? '\u2605 ' : '') + title + (tag ? '  [' + tag + ']' : '');
+        sel.appendChild(o);
+        if (j.job_id === lastFinishedJobId) sel.value = j.job_id;
+      }
+    } catch (e) {
+      const o = document.createElement('option');
+      o.value = lastFinishedJobId || '';
+      o.textContent = lastFinishedJobId ? lastFinishedJobId + ' (last generated)' : '(could not load jobs)';
+      sel.appendChild(o);
+      if (lastFinishedJobId) sel.value = lastFinishedJobId;
+    }
+  }
+
+  async function loadResearchStatus() {
+    try {
+      const r = await fetch('/api/research/status');
+      const s = await r.json();
+      if (s.available) {
+        chip.innerHTML = '<i class="fas fa-circle-check" style="color:var(--green);"></i> ready &middot; model ' + esc(s.model || 'default');
+      } else if (s.ready) {
+        chip.innerHTML = '<i class="fas fa-circle-exclamation" style="color:var(--orange);"></i> sidecar up, researcher agent missing';
+      } else {
+        chip.innerHTML = '<i class="fas fa-circle-info" style="color:var(--text-muted);"></i> starting up / unavailable';
+      }
+    } catch (e) {
+      chip.innerHTML = '<i class="fas fa-circle-info" style="color:var(--text-muted);"></i> unavailable';
+    }
+  }
+
+  $('research-ask').addEventListener('click', async () => {
+    const q = $('research-question').value.trim();
+    const jid = $('research-job').value;
+    const kind = $('research-kind').value;
+    clearError();
+    if (!jid) { appendLog('No job selected to research.', 'err'); return; }
+    if (!q && kind !== 'grammar') { appendLog('Describe the question or topic first.', 'err'); return; }
+    const tpl = $('research-template');
+    const templateFile = tpl && tpl.files.length ? tpl.files[0] : null;
+    if (kind === 'format' && !templateFile) { appendLog('Upload a template (.docx) for the format task.', 'err'); return; }
+    const card = $('research-result');
+    card.style.display = 'block';
+    card.classList.add('showing');
+    $('research-result-meta').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running ' + kind + ' on job ' + jid + '&hellip;';
+    $('research-answer').textContent = '';
+    $('research-download').innerHTML = '';
+    const btn = $('research-ask');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running&hellip;';
+    try {
+      const form = new FormData();
+      form.append('question', q);
+      form.append('kind', kind);
+      if (templateFile) form.append('template', templateFile);
+      const r = await fetch('/api/research/' + jid, { method: 'POST', body: form });
+      const data = await r.json();
+      if (!r.ok) { throw new Error(data.detail || 'Request failed (' + r.status + ')'); }
+      const final = await new Promise(resolve => {
+        const timer = setInterval(async () => {
+          let s = null;
+          try { s = await (await fetch(data.status_url)).json(); }
+          catch (e) { return; }
+          if (s.state === 'done' || s.state === 'error') {
+            clearInterval(timer);
+            resolve(s);
+          }
+        }, 2000);
+      });
+      if (final.state === 'error') throw new Error(final.detail || 'Research failed.');
+      const label = { qa: 'Answered', enhance: 'Report enhanced',
+                      grammar: 'Grammar check done', format: 'Report restyled' }[kind];
+      $('research-result-meta').innerHTML = '<i class="fas fa-circle-check"></i> ' + label;
+      let out = '';
+      if (final.findings && final.findings.length) {
+        out += '**' + (final.title || 'Research Briefing') + '**' + (final.intro ? '\n' + final.intro : '') + '\n\n';
+        final.findings.forEach((f, i) => {
+          out += (i + 1) + '. **' + (f.heading || '') + '**\n' + (f.body || '') + '\n';
+          if (f.sources && f.sources.length) {
+            out += '   Footnotes sources:\n';
+            f.sources.forEach(s => out += '   - ' + (s.name || s.url || '') + (s.url && s.name ? ': ' + s.url : '') + '\n');
+          }
+          out += '\n';
+        });
+      } else if (final.issues) {
+        if (!final.issues.length) out = 'No grammar or formatting issues found.' + (final.summary ? '\n\n' + final.summary : '');
+        else {
+          out = (final.summary || '') + '\n';
+          final.issues.forEach((f, i) => {
+            out += '\n' + (i + 1) + '. **' + (f.location || 'issue') + '**\n'
+                 + (f.original ? '   - Original: ' + f.original + '\n' : '')
+                 + (f.corrected ? '   - Corrected: ' + f.corrected + '\n' : '')
+                 + (f.reason ? '   - Why: ' + f.reason + '\n' : '');
+          });
+        }
+      } else {
+        out = final.answer || '(no answer)';
+        if (final.comparison) out += '\n\n' + final.comparison;
+      }
+      $('research-answer').textContent = out;
+      if (final.download_url) {
+        const dl = document.createElement('a');
+        dl.href = final.download_url;
+        dl.className = 'btn btn-secondary';
+        dl.style.marginTop = '12px';
+        dl.innerHTML = '<i class="fas fa-download"></i> Download ' + ((final.produced || final.review_name || 'result')) + '</a>';
+        $('research-download').appendChild(dl);
+      }
+      appendLog('Research ' + kind + ' finished for ' + jid, 'ok');
+    } catch (e) {
+      appendLog('Research failed: ' + e, 'err');
+      $('research-result-meta').innerHTML = '<i class="fas fa-circle-exclamation" style="color:var(--red);"></i> Failed';
+      $('research-answer').textContent = String(e);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Run';
+    }
+  });
+
+  $('research-kind').addEventListener('change', () => {
+    const kind = $('research-kind').value;
+    $('template-row').style.display = kind === 'format' ? 'block' : 'none';
+    if (kind === 'format') {
+      $('research-question').placeholder = 'Optional extra instructions for restyling (e.g. "Use the template\u2019s heading style throughout").';
+    } else if (kind === 'enhance') {
+      $('research-question').placeholder = 'e.g. Research the outlook for coffee exports and append a briefed section, with credible sources, as footnotes.';
+    } else if (kind === 'grammar') {
+      $('research-question').placeholder = 'Optional: specific concerns to check (e.g. report title, headings, Table 2 wording).';
+    } else {
+      $('research-question').placeholder = 'e.g. Which market grew fastest for coffee last year?';
+    }
   });
 
   async function loadConfigs() {
@@ -1456,6 +1645,8 @@ input[type=file]::file-selector-button:hover {
         return;
       }
       appendLog('Done.', 'ok');
+      lastFinishedJobId = final.job_id;
+      populateResearchJobs();
       const isProduct = final.mode === 'product' || final.mode === 'crafts';
       $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
         `${isProduct ? 'Product profile' : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables')}` +
@@ -1495,6 +1686,8 @@ input[type=file]::file-selector-button:hover {
   loadConfigs();
   loadProductProfiles();
   loadSamples();
+  loadResearchStatus();
+  populateResearchJobs();
 </script>
 </body>
 </html>
