@@ -3,7 +3,7 @@ services:
     name: tradeflow
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt && npm install -g opencode-ai
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn webapp.main:app --host 0.0.0.0 --port ${PORT:-10000}
     healthCheckPath: /
     autoDeploy: true
@@ -12,32 +12,3 @@ services:
         value: "1"
       - key: PORT
         value: "10000"
-      # ---- opencode research/document assistant (remote) --------------
-      # The assistant is a headless `opencode serve` child process started by
-      # the app. On Render it needs an LLM provider key. opencode reads the
-      # provider key straight from the environment at startup, so set ONE of:
-      #   ANTHROPIC_API_KEY  (recommended; matches most accounts)
-      #   OPENAI_API_KEY
-      #   GEMINI_API_KEY
-      #   OPENCODE_API_KEY
-      # ================================================================
-      - key: ANTHROPIC_API_KEY
-        sync: false
-        # Fill this value in the Render dashboard after first deploy.
-      - key: RESEARCH_MODEL
-        sync: false
-        # Optional: pin the model id used for research, e.g.
-        #   anthropic/claude-sonnet-4-6
-        # Leave empty to use the provider's default.
-      - key: OPENCODE_SERVER_PASSWORD
-        sync: false
-        # Optional: protect the sidecar's HTTP API. No network exposure by
-        # default (binds 127.0.0.1); set only if the sidecar port will be
-        # reachable from outside the container.
-      - key: RESEARCH_OPENCODE_PORT
-        value: "4096"
-      # - key: RESEARCH_OPENCODE_BIN
-      #   value: opencode
-      #   Optional override: path or name of the opencode binary. Defaults to
-      #   `opencode` found on PATH (Render python images bundle node + npm, and
-      #   `npm install -g` puts the CLI on PATH during the build).
