@@ -1445,8 +1445,7 @@ class ReportBuilder:
             section.right_margin = Inches(1)
             self._add_page_border(section)
         self._setup_styles()
-        if self._template_mode:
-            self._ensure_bullet_support()
+        self._ensure_bullet_support()
 
     def _clear_template_body(self):
         """Drop the starter template's own content, keeping its page setup and

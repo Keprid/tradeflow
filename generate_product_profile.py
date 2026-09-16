@@ -261,6 +261,24 @@ def _matrix_unit(path):
             if ("ton" in unit or "kg" in unit or "quantity" in unit):
                 return "quantity"
             return "value"
+    # Modern xlsx downloads name the measure in a sub-header row or beside
+    # the year data ("exported quantity" / "Unit" / "No quantity" / "Tons")
+    # rather than in a parenthetical on the year header.  Scan the head.
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        ws = wb.worksheets[0]
+        head_rows = list(ws.iter_rows(min_row=1, max_row=4, values_only=True))
+        wb.close()
+    except Exception:
+        head_rows = []
+    if head_rows:
+        sub = [str(x or "").strip().lower() for x in head_rows[1]]
+        body = " ".join(
+            str(x or "").lower()
+            for r in head_rows[1:] for x in r)
+        if ("quantity" in sub and "unit" in sub) or \
+                re.search(r"\b(no quantity|tonnes?|tons?|kg)\b", body):
+            return "quantity"
     unit = _classic_unit(path)
     if unit is not None:
         return unit
@@ -390,7 +408,8 @@ def _classic_to_matrix(key, records):
         elif key in _BY_PRODUCT_KEYS:
             out.append({"reporter": "000", "reporter_label": "World",
                         "partner": "000", "partner_label": "World",
-                        "product": code, "product_label": str(label or ""),
+                        "product": code.strip("'\" "),
+                        "product_label": str(label or ""),
                         "years": years})
     return out
 
@@ -490,25 +509,35 @@ def _matrix_roles(header, key):
     for i, low in enumerate(words):
         if not low:
             continue
-        if "iso" in low or ("code" in low and "product" not in low
-                            and "hs" not in low and "ntl" not in low):
-            continue  # identifier column (Reporter ISO, Partner ISO, ...)
         if "product" in low or "hs" in low or "ntl" in low:
             if "label" in low or "descrip" in low:
                 roles.setdefault("product_label", i)
-            elif "code" in low:
+            else:  # 'Product code', 'productCd', 'HS ...'
                 roles.setdefault("product_code", i)
             continue
+        if any(tok in {"cd", "code", "iso", "hs", "ntl"}
+               for tok in low.split()):
+            continue  # identifier column (Reporter ISO, reporterCd, ...)
         if any(w in low for w in ("report", "export", "import", "econom",
                                   "countr", "market", "partner",
                                   "destination", "source")):
             name_cols.append(i)
-    # Name columns appear in the same order as the table reads them: for the
-    # by-market (Kenya) files the first is the reporter, the second the
-    # partner; economy lists carry a single name column.
+    # Pick the reporter / partner label columns by their explicit keywords
+    # where the modern Downloads name them ('reporterLabel', 'partnerLabel');
+    # fall back to the column order for the classic header, where identifier
+    # columns sit between the labels and must be skipped.
     if key in _BY_PARTNER_KEYS and name_cols:
-        roles["partner_label"] = (name_cols[1] if len(name_cols) >= 2
-                                  else name_cols[0])
+        partner_c = [i for i in name_cols if "partner" in words[i]]
+        reporter_c = [i for i in name_cols if "report" in words[i]
+                      and i not in partner_c]
+        if partner_c:
+            roles["partner_label"] = partner_c[-1]
+        elif len(name_cols) >= 2:
+            roles["partner_label"] = name_cols[1]
+        else:
+            roles["partner_label"] = name_cols[0]
+        if reporter_c:
+            roles["reporter_label"] = reporter_c[0]
     elif key in _BY_ECONOMY_KEYS and name_cols:
         roles["reporter_label"] = name_cols[0]
     return roles
@@ -544,6 +573,19 @@ def load_matrix(path, key=None):
             break
     if not year_cols:
         return [], []
+    # Any candidate year column holding no numeric value anywhere is an
+    # annotation / unit-marker column ("Unit", "No quantity") that the header
+    # scan also picked up: drop it and re-map the years onto the surviving
+    # value columns in order.
+    numeric_cols = []
+    for c in year_cols:
+        if any(to_float(r[c]) is not None
+               if c < len(r) else False
+               for r in rows[header_idx + 1:]):
+            numeric_cols.append(c)
+    if len(numeric_cols) >= 2 and len(numeric_cols) != len(year_cols):
+        year_cols = dict(zip(sorted(numeric_cols),
+                             sorted(set(year_cols.values()))))
     years = sorted(set(year_cols.values()))
     year_ix = {y: next(c for c, yy in year_cols.items() if yy == y)
                for y in years}
@@ -603,7 +645,7 @@ def load_matrix(path, key=None):
                 name_of(r, pos["reporter_label"], 1) or ""),
             "partner": partner,
             "partner_label": partner_label,
-            "product": str(cell(r, pos["product"]) or ""),
+            "product": str(cell(r, pos["product"]) or "").lstrip("'\" "),
             "product_label": clean_label(str(
                 name_of(r, pos["product_label"], 5) or "")),
             "years": {y: to_float(cell(r, c)) for y, c in year_ix.items()},
@@ -1911,42 +1953,46 @@ class ProfileBuilder(ReportBuilder):
         label_cols = (1 if rank else 0) + code_cols + 1
         cols = label_cols + n + 1
         c_label = (1 if rank else 0) + code_cols
-        nrows = 2 + len(rows) + (1 if total_label else 0)
+        share_col = cols - 1
+        nrows = 3 + len(rows) + (1 if total_label else 0)
         unit = unit_label
         if quantity:
             unit = _qty_unit([v for r in rows for y in years
                               if (v := r["years"].get(y)) is not None])
-        elif adaptive_unit:
-            unit = _series_unit([v for r in rows for y in years
-                                 if (v := r["years"].get(y)) is not None])
         fmt = (lambda v: fmt_qty(v, unit)) if quantity else \
             (lambda v: fmt_for_unit(v, unit))
         table = self.doc.add_table(rows=nrows, cols=cols, style="Table Grid")
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        rev = years[-1]
+        h0, h1, h2 = table.rows[0], table.rows[1], table.rows[2]
 
-        hdr = table.rows[0]
+        # Template-style 3-band header (Templates/table template.xlsx):
+        # row 1 carries the rank / label / title / share labels, row 2 the
+        # years and row 3 the unit band spanning the year columns.
         if rank:
-            hdr.cells[0].text = "#"
+            h0.cells[0].text = "Rank in %d" % rev
+            h0.cells[0].merge(h2.cells[0])
         if code_cols:
-            hdr.cells[1 if rank else 0].text = "Code"
-        hdr.cells[c_label].text = first_col_header
-        if n > 1:
-            hdr.cells[label_cols].merge(hdr.cells[label_cols + n - 1])
-        hdr.cells[label_cols].text = "Value in %s" % unit
-        hdr.cells[label_cols + n].text = share_header
-
-        r2 = table.rows[1]
-        for c in range(cols):
-            r2.cells[c].text = ""
-        if rank:
-            r2.cells[c_label].text = first_col_header
+            ci = c_label - code_cols
+            h0.cells[ci].text = "Code"
+            h0.cells[ci].merge(h2.cells[ci])
+        h0.cells[c_label].text = first_col_header
+        h0.cells[c_label].merge(h2.cells[c_label])
+        h0.cells[share_col].text = share_header
+        h0.cells[share_col].merge(h2.cells[share_col])
+        tc = h0.cells[c_label + 1].merge(h0.cells[c_label + n]) if n > 1 \
+            else h0.cells[c_label + 1]
+        tc.text = title
         for i, y in enumerate(years):
-            r2.cells[label_cols + i].text = str(y)
+            h1.cells[c_label + 1 + i].text = str(y)
+        uc = h2.cells[c_label + 1].merge(h2.cells[c_label + n]) if n > 1 \
+            else h2.cells[c_label + 1]
+        uc.text = "Value in %s" % unit
 
         # shares are relative to the total of the review year across rows
         rev = years[-1]
         rev_total = sum((r["years"].get(rev) or 0.0) for r in rows)
-        for ri, row in enumerate(rows, start=2):
+        for ri, row in enumerate(rows, start=3):
             c = 0
             if rank:
                 rk = row.get("rank")
@@ -1968,7 +2014,7 @@ class ProfileBuilder(ReportBuilder):
                 "" if share is None else "%.1f%%" % share
 
         if total_label:
-            t = table.rows[2 + len(rows)]
+            t = table.rows[3 + len(rows)]
             t.cells[c_label].text = total_label
             for i, y in enumerate(years):
                 tot = sum((r["years"].get(y) or 0.0) for r in rows)
@@ -1999,7 +2045,7 @@ class ProfileBuilder(ReportBuilder):
                     else WD_ALIGN_PARAGRAPH.LEFT
                 for p in cell.paragraphs:
                     p.alignment = align
-                    if ri < 2:
+                    if ri < 3:
                         continue
                     for r in p.runs:
                         if ci == share_col or ri == last_row:
@@ -2007,7 +2053,7 @@ class ProfileBuilder(ReportBuilder):
         self._fill_header(table)
 
     def _fill_header(self, table):
-        for ri in range(2):
+        for ri in range(3):
             for cell in table.rows[ri].cells:
                 tcPr = cell._tc.get_or_add_tcPr()
                 for el in tcPr.findall(qn("w:shd")):
@@ -3859,69 +3905,103 @@ def write_excel_deliverable(cfg, data, out_path):
         return name[:31]
 
     def value_sheet(name, first_col, rows, doughnut=None, unit=None,
-                    quantity=False):
+                    quantity=False, title=None):
         ws = wb.create_sheet(name)
         if unit is None:
             if quantity:
                 unit = _qty_unit([v for r in rows for y in years
                                   if (v := r["years"].get(y)) is not None])
             else:
-                unit = _series_unit([v for r in rows for y in years
-                                     if (v := r["years"].get(y)) is not None])
+                unit = "USD Million"
+        if title is None:
+            title = re.sub(r"^Table\s+\d+\s*-\s*", "", name).strip()
         has_code = any(r.get("code") for r in rows)
-        first = 1 + (1 if has_code else 0)
-        if has_code:
-            _xc(ws, 1, 1, "Code", bold=True, fill=hdr_fill, align=cm)
-        hdr_col = "%s (%s)" % (first_col, unit)
-        _xc(ws, 1, first, hdr_col, bold=True, fill=hdr_fill, align=cm)
-        for i, y in enumerate(years):
-            _xc(ws, 1, first + 1 + i, y, bold=True, fill=hdr_fill, align=cm)
-        share_col = first + 1 + len(years)
+        is_ranked = any("rank" in r for r in rows)
+        n = len(years)
+        code_col = 1 if has_code else 0
+        rank_col = code_col + (1 if is_ranked else 0)
+        label_col = rank_col + 1
+        first_year = label_col + 1
+        share_col = first_year + n
         share_letter = get_column_letter(share_col)
+
+        # 3-band header per Templates/table template.xlsx: row 1 = the
+        # rank/label/title/share labels, row 2 = the years, row 3 = the unit
+        # band spanning the year columns; the rank/label/share labels are
+        # merged down across all three bands.
+        if has_code:
+            _xc(ws, 1, code_col, "Code", bold=True, fill=hdr_fill, align=cm)
+        if is_ranked:
+            _xc(ws, 1, rank_col, "Rank in %d" % rev,
+                bold=True, fill=hdr_fill, align=cm)
+        _xc(ws, 1, label_col, first_col, bold=True, fill=hdr_fill, align=cm)
         _xc(ws, 1, share_col, "Share in %d" % rev,
             bold=True, fill=hdr_fill, align=cm)
-        first_data, last_data = 2, 1 + len(rows)
-        for ri, row in enumerate(rows, start=first_data):
+        if title:
+            _xc(ws, 1, first_year, title, bold=True, fill=hdr_fill,
+                align=cm)
+            if n > 1:
+                ws.merge_cells(start_row=1, start_column=first_year,
+                               end_row=1, end_column=first_year + n - 1)
+        for i, y in enumerate(years):
+            _xc(ws, 2, first_year + i, y, bold=True, fill=hdr_fill,
+                align=cm)
+        _xc(ws, 3, first_year, "Value in %s" % unit, bold=True,
+            fill=hdr_fill, align=cm)
+        if n > 1:
+            ws.merge_cells(start_row=3, start_column=first_year,
+                           end_row=3, end_column=first_year + n - 1)
+        for c in (x for x in (code_col, rank_col, label_col, share_col)
+                  if x >= 1 and x <= share_col):
+            ws.merge_cells(start_row=1, start_column=c,
+                           end_row=3, end_column=c)
+
+        first_data, last_data = 4, 3 + len(rows)
+        for di, row in enumerate(rows):
+            ri = first_data + di
             if has_code:
-                _xc(ws, ri, 1, str(row.get("code") or ""), align=lm)
-            _xc(ws, ri, first, row["label"], align=lm)
+                _xc(ws, ri, code_col, str(row.get("code") or ""), align=lm)
+            if is_ranked:
+                _xc(ws, ri, rank_col, row.get("rank") or di + 1, align=cm)
+            _xc(ws, ri, label_col, row["label"], align=lm)
             for i, y in enumerate(years):
                 raw = row["years"].get(y)
-                if quantity:
-                    v_out = None if raw is None else round(raw, 1)
-                elif unit == "USD Thousand":
-                    v_out = None if raw is None else round(raw, 1)
-                else:
-                    v_out = None if raw is None else round(display(raw), 1)
-                _xc(ws, ri, first + 1 + i, v_out,
+                v_out = None if raw is None else (
+                    round(raw, 1) if quantity else round(display(raw), 1))
+                _xc(ws, ri, first_year + i, v_out,
                     number_format=val_fmt, align=cm)
             # Share: live formula against the Total row below, so editing a
             # year cell recalculates the whole workbook.
-            rev_letter = get_column_letter(first + len(years))
+            rev_letter = get_column_letter(first_year + n)
             _xc(ws, ri, share_col, "=%s%d/$%s%d"
                 % (rev_letter, ri, rev_letter, last_data + 1),
                 bold=True, number_format="0.0%", align=cm)
         # Total row: SUM formulas per year, "100.0%" as the share total.
         trow = last_data + 1
-        _xc(ws, trow, first, "Total", bold=True, align=lm)
+        _xc(ws, trow, label_col, "World" if is_ranked else "Total",
+            bold=True, align=lm)
         for i, y in enumerate(years):
-            c_letter = get_column_letter(first + 1 + i)
-            _xc(ws, trow, first + 1 + i,
+            c_letter = get_column_letter(first_year + i)
+            _xc(ws, trow, first_year + i,
                 "=SUM(%s%d:%s%d)" % (c_letter, first_data, c_letter,
                                      last_data),
                 bold=True, number_format=val_fmt, align=cm)
         _xc(ws, trow, share_col, 1.0, bold=True, number_format="0.0%",
             align=cm)
-        width = max([30] + [len(str(r["label"])) for r in rows])
+        width = max([26] + [len(str(r["label"])) for r in rows])
         if has_code:
-            ws.column_dimensions["A"].width = 12
-            ws.column_dimensions["B"].width = min(width, 60)
-        else:
-            ws.column_dimensions["A"].width = min(width, 60)
-        for i in range(len(years)):
-            ws.column_dimensions[chr(ord("A") + first + i)].width = 11
+            ws.column_dimensions[get_column_letter(code_col)].width = 12
+        if is_ranked:
+            ws.column_dimensions[get_column_letter(rank_col)].width = 9.3
+        ws.column_dimensions[get_column_letter(label_col)].width = \
+            min(width, 60)
+        for i in range(n):
+            ws.column_dimensions[get_column_letter(first_year + i)].width = 11
+        ws.column_dimensions[get_column_letter(share_col)].width = 11
+        for ri in range(1, trow + 1):
+            ws.row_dimensions[ri].height = 17.25
         if doughnut and len(doughnut[1]) >= 2:
-            anchor = ws.cell(2 + len(rows), 1).row + 2
+            anchor = trow + 3
             _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1],
                                share_letter, first_data)
         return ws
