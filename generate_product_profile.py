@@ -58,7 +58,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION_START
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Cm, Inches, Pt, RGBColor
 
 from generate_report import (ReportBuilder, num, pct, clean_label, short_label,
                              to_float)
@@ -577,15 +577,48 @@ def load_matrix(path, key=None):
     # annotation / unit-marker column ("Unit", "No quantity") that the header
     # scan also picked up: drop it and re-map the years onto the surviving
     # value columns in order.
-    numeric_cols = []
-    for c in year_cols:
-        if any(to_float(r[c]) is not None
-               if c < len(r) else False
-               for r in rows[header_idx + 1:]):
-            numeric_cols.append(c)
-    if len(numeric_cols) >= 2 and len(numeric_cols) != len(year_cols):
-        year_cols = dict(zip(sorted(numeric_cols),
-                             sorted(set(year_cols.values()))))
+    # Modern quantity downloads repeat a measure sub-header over the year
+    # columns ('exported quantity' / 'Unit' / 'exported quantity' / 'Unit'...)
+    # with the figure in the first cell of each pair; detect that layout and
+    # pair every header year with its real value column instead.
+    def _unit_tok(v):
+        s = str(v or "").strip().lower()
+        return bool(re.search(r"\b(unit|tonnes?|tons?|no quantity|quantity|kg)\b", s))
+
+    def _qty_tok(v):
+        s = str(v or "").strip().lower()
+        return "quantity" in s and "unit" not in s
+
+    sub = rows[header_idx + 1] if header_idx + 1 < len(rows) else ()
+    sub_anno = sub and sum(
+        1 for c in year_cols if c < len(sub) and _unit_tok(sub[c])) >= 2
+    data_start = header_idx + (2 if sub_anno else 1)
+    year_cols_orig = year_cols
+    if sub_anno:
+        # The value columns are the numeric ones in the data rows from the
+        # first year column onward (label columns stay text, so they never
+        # qualify); pair them with the header years in order.
+        tally = {}
+        sample = [r for r in rows[data_start:data_start + 12] if r]
+        for r in sample:
+            for c, v in enumerate(r):
+                if to_float(v) is not None:
+                    tally[c] = tally.get(c, 0) + 1
+        vote = (max(1, len(sample)) + 1) // 2
+        valcols = sorted(c for c, cnt in tally.items()
+                         if cnt >= vote and c >= min(year_cols))
+        if valcols and len(valcols) == len(year_cols):
+            year_cols = dict(zip(valcols, sorted(year_cols.values())))
+    if not sub_anno:
+        numeric_cols = []
+        for c in year_cols:
+            if any(to_float(r[c]) is not None
+                   if c < len(r) else False
+                   for r in rows[header_idx + 1:]):
+                numeric_cols.append(c)
+        if len(numeric_cols) >= 2 and len(numeric_cols) != len(year_cols):
+            year_cols = dict(zip(sorted(numeric_cols),
+                                 sorted(set(year_cols.values()))))
     years = sorted(set(year_cols.values()))
     year_ix = {y: next(c for c, yy in year_cols.items() if yy == y)
                for y in years}
@@ -626,7 +659,7 @@ def load_matrix(path, key=None):
         return v if v is not None else ""
 
     records = []
-    for r in rows[header_idx + 1:]:
+    for r in rows[data_start:]:
         if not r or r[0] is None or str(r[0]).strip() == "":
             continue
         if isinstance(r[0], str) and r[0].strip().lower().startswith("source"):
@@ -795,7 +828,7 @@ class ProfileData:
                 if not value_hits:
                     _store(qty_hits[0], False)
                 else:
-                    qy, qr = _load_any(qty_hits[0])
+                    qy, qr = _load_any(qty_hits[0], key)
                     if qr:
                         self.qty_files[key] = {"path": qty_hits[0],
                                                "years": qy, "records": qr}
@@ -1485,16 +1518,65 @@ def fmt(v, decimals=1):
 def _series_unit(values):
     """Display unit for a series of raw (USD-thousand) values.
 
-    Returns ``"USD Million"`` or ``"USD Thousand"``.  Thousands is chosen
-    whenever any nonzero value would otherwise round to 0.0 in millions
-    (i.e. sit below about USD 50,000), so small sub-category values never
-    "disappear" in a table."""
+    Returns ``"USD Billion"`` when the series tops out at 100,000 million
+    (USD 100 billion) or more, ``"USD Thousand"`` when any value would
+    otherwise round to 0.0 in millions (i.e. sit below about USD 50,000),
+    else ``"USD Million"``.
+    """
     vs = [v for v in values if v]
     if not vs:
         return "USD Million"
+    if max(abs(v) for v in vs) >= 100_000_000.0:
+        return "USD Billion"
     if max(abs(v) for v in vs) < 100.0 or min(abs(v) for v in vs) < 50.0:
         return "USD Thousand"
     return "USD Million"
+
+
+def _display_unit(values, default="USD Million"):
+    """Scale raw USD-thousand values up to USD Billion when the smallest
+    nonzero figure already reads at 100,000 million or more."""
+    vs = [abs(v) for v in values if v]
+    if vs and max(vs) >= 100_000_000.0:
+        return "USD Billion"
+    return default
+
+
+def _val_cell(raw, unit):
+    """Rounded display number for a raw (USD-thousand) value in ``unit``."""
+    if raw is None:
+        return None
+    if unit == "USD Thousand":
+        return round(raw, 1)
+    if unit == "USD Billion":
+        return round(display(raw, 1e9), 1)
+    return round(display(raw), 1)
+
+
+def _short_table_title(title):
+    """Compact title for the header band, dropping the long product segment,
+    e.g. 'Global Exports of Coffee Products by Top 25 Countries' ->
+    'Global Exports by Top 25 Countries'."""
+    text = re.sub(r"^Table\s+\d+\s*[-:]\s*", "", title or "").strip()
+    short = re.sub(r"\sof\s+[^,;by]+?\s+Products?\b", "", text)
+    if len(short) <= 48:
+        return short
+    words = short.split()
+    return " ".join(words[:8]) + "..." if len(words) > 8 else short
+
+
+def _shade_row(table, ri, fill="FFC7CE"):
+    """Shade a whole Word table row (``ri``) with the given hex fill."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    for cell in table.rows[ri].cells:
+        tcPr = cell._tc.get_or_add_tcPr()
+        for el in tcPr.findall(qn("w:shd")):
+            tcPr.remove(el)
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:fill"), fill)
+        tcPr.append(shd)
 
 
 def fmt_for_unit(v, unit, decimals=1):
@@ -1503,6 +1585,8 @@ def fmt_for_unit(v, unit, decimals=1):
         return ""
     if unit == "USD Thousand":
         return num(v, decimals)
+    if unit == "USD Billion":
+        return num(display(v, 1e9), decimals)
     return num(display(v), decimals)
 
 
@@ -1955,7 +2039,9 @@ class ProfileBuilder(ReportBuilder):
         c_label = (1 if rank else 0) + code_cols
         share_col = cols - 1
         nrows = 3 + len(rows) + (1 if total_label else 0)
-        unit = unit_label
+        unit = _display_unit([v for r in rows for y in years
+                              if (v := r["years"].get(y)) is not None]) \
+            if not quantity else unit_label
         if quantity:
             unit = _qty_unit([v for r in rows for y in years
                               if (v := r["years"].get(y)) is not None])
@@ -1982,12 +2068,15 @@ class ProfileBuilder(ReportBuilder):
         h0.cells[share_col].merge(h2.cells[share_col])
         tc = h0.cells[c_label + 1].merge(h0.cells[c_label + n]) if n > 1 \
             else h0.cells[c_label + 1]
-        tc.text = title
+        tc.text = _short_table_title(title)
         for i, y in enumerate(years):
             h1.cells[c_label + 1 + i].text = str(y)
         uc = h2.cells[c_label + 1].merge(h2.cells[c_label + n]) if n > 1 \
             else h2.cells[c_label + 1]
         uc.text = "Value in %s" % unit
+        # keep the 3-band header compact like Templates/table template.xlsx
+        for tr in table.rows[:3]:
+            tr.height = Cm(0.55)
 
         # shares are relative to the total of the review year across rows
         rev = years[-1]
@@ -2051,6 +2140,11 @@ class ProfileBuilder(ReportBuilder):
                         if ci == share_col or ri == last_row:
                             r.font.bold = True
         self._fill_header(table)
+        for ri, row in enumerate(table.rows):
+            if any(cell.text.strip() == "Kenya"
+                   for cell in row.cells[:cols]):
+                _shade_row(table, ri)
+                break
 
     def _fill_header(self, table):
         for ri in range(3):
@@ -2730,7 +2824,11 @@ def product_ref(label, code=None, maxlen=100):
 
 def _unit_mult(unit):
     """Display multiplier for an ITC raw (USD-thousand) value in ``unit``."""
-    return 0.001 if unit == "USD Million" else 1.0
+    if unit == "USD Million":
+        return 0.001
+    if unit == "USD Billion":
+        return 1e-6
+    return 1.0
 
 
 def _share_suffix(share_cf):
@@ -3912,7 +4010,9 @@ def write_excel_deliverable(cfg, data, out_path):
                 unit = _qty_unit([v for r in rows for y in years
                                   if (v := r["years"].get(y)) is not None])
             else:
-                unit = "USD Million"
+                unit = _display_unit([v for r in rows for y in years
+                                      if (v := r["years"].get(y))
+                                      is not None])
         if title is None:
             title = re.sub(r"^Table\s+\d+\s*-\s*", "", name).strip()
         has_code = any(r.get("code") for r in rows)
@@ -3967,7 +4067,7 @@ def write_excel_deliverable(cfg, data, out_path):
             for i, y in enumerate(years):
                 raw = row["years"].get(y)
                 v_out = None if raw is None else (
-                    round(raw, 1) if quantity else round(display(raw), 1))
+                    round(raw, 1) if quantity else _val_cell(raw, unit))
                 _xc(ws, ri, first_year + i, v_out,
                     number_format=val_fmt, align=cm)
             # Share: live formula against the Total row below, so editing a
@@ -4000,6 +4100,12 @@ def write_excel_deliverable(cfg, data, out_path):
         ws.column_dimensions[get_column_letter(share_col)].width = 11
         for ri in range(1, trow + 1):
             ws.row_dimensions[ri].height = 17.25
+        for ri, row in enumerate(rows, start=first_data):
+            if str(row["label"]).strip() == "Kenya":
+                for c in range(1, share_col + 1):
+                    ws.cell(ri, c).fill = PatternFill("solid",
+                                                      fgColor="FFC7CE")
+                break
         if doughnut and len(doughnut[1]) >= 2:
             anchor = trow + 3
             _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1],
@@ -4158,9 +4264,7 @@ def write_excel_deliverable(cfg, data, out_path):
             _xc(ws, i, 1, r["market"], align=lm)
             for j, k in ((2, "kenya_exports"), (3, "market_imports")):
                 raw = r[k]
-                v = None if raw is None else (
-                    round(raw, 1) if cu == "USD Thousand"
-                    else round(display(raw), 1))
+                v = _val_cell(raw, cu)
                 _xc(ws, i, j, v, number_format=val_fmt, align=cm)
             _xc(ws, i, 4, r["share"] if r["share"] is not None else None,
                 number_format="0.0%", bold=True, align=cm)
@@ -4232,13 +4336,13 @@ def write_excel_deliverable(cfg, data, out_path):
                 _xc(ws, ri, 3, round(k_raw, 1), number_format=val_fmt,
                     align=cm)
             else:
-                _xc(ws, ri, 3, round(display(k_raw), 1),
+                _xc(ws, ri, 3, _val_cell(k_raw, k_unit),
                     number_format=val_fmt, align=cm)
             if w_unit == "USD Thousand":
                 _xc(ws, ri, 4, round(w_raw, 1), number_format=val_fmt,
                     align=cm)
             else:
-                _xc(ws, ri, 4, round(display(w_raw), 1),
+                _xc(ws, ri, 4, _val_cell(w_raw, w_unit),
                     number_format=val_fmt, align=cm)
             _xc(ws, ri, 5,
                 "=C%d/D%d%s" % (ri, ri, _share_suffix(share_cf)),
@@ -4283,9 +4387,9 @@ def write_excel_deliverable(cfg, data, out_path):
             if share_series:
                 m = next((t for t in share_series if t[0] == y), None)
                 if m:
-                    _xc(ws, ri, 2, round(display(m[1]), 1),
+                    _xc(ws, ri, 2, _val_cell(m[1], ss_unit),
                         number_format=val_fmt, align=cm)
-                    _xc(ws, ri, 3, round(display(m[2]), 1),
+                    _xc(ws, ri, 3, _val_cell(m[2], ss_unit),
                         number_format=val_fmt, align=cm)
                     _xc(ws, ri, 4, "=B%d/C%d" % (ri, ri), bold=True,
                         number_format="0.0%", align=cm)
@@ -4335,9 +4439,7 @@ def write_excel_deliverable(cfg, data, out_path):
                 _xc(ws, i, 1, r["label"], align=lm)
                 for j, key in ((2, "actual"), (3, "potential")):
                     raw = r[key]
-                    v = None if raw is None else (
-                        round(raw, 1) if unit == "USD Thousand"
-                        else round(display(raw), 1))
+                    v = _val_cell(raw, unit)
                     _xc(ws, i, j, v, number_format=val_fmt, align=cm)
                 _xc(ws, i, 4, "=C%d-B%d" % (i, i)
                     if r["actual"] is not None else None,
