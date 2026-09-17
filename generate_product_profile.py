@@ -534,6 +534,8 @@ def _matrix_roles(header, key):
     for i, low in enumerate(words):
         if not low:
             continue
+        if re.search(r"20\d\d", low):
+            continue  # year column, never an economy / product label
         if "product" in low or "hs" in low or "ntl" in low:
             if "label" in low or "descrip" in low:
                 roles.setdefault("product_label", i)
@@ -682,9 +684,17 @@ def load_matrix(path, key=None):
         # partner code/ISO column), so the default position would read a year
         # figure as the partner identifier.  Use the label column instead.
         pos["partner"] = pos["partner_label"]
+    if key in _BY_PARTNER_KEYS and "product_code" not in roles and \
+            "product_label" not in roles and pos["product"] in year_cols:
+        # Classic by-partner downloads carry no product column at all; the
+        # default position would read a year figure into the product field.
+        pos["product"] = None
+        pos["product_label"] = None
     non_year = [c for c in range(len(header)) if c not in year_cols]
 
     def cell(r, col):
+        if col is None:
+            return None
         return r[col] if 0 <= col < len(r) else None
 
     def name_of(r, pref, default):
@@ -4353,8 +4363,8 @@ def write_excel_deliverable(cfg, data, out_path):
         if not rows:
             continue
         t13 = rows
-        value_sheet("Table 13 - Kenya %s Exports" % (sf.get("title") or "Sub")
-                    [:31], "Product", rows,
+        value_sheet(("Table 13 - Kenya %s Exports"
+                     % (sf.get("title") or "Sub"))[:31], "Product", rows,
                     world_total=_sum_years(t11) if t11 else None)
     t14 = top_rows(data.kenya_export_products_qty(), cfg.get("top_n", 10),
                    years, "All other products")
