@@ -490,6 +490,31 @@ def _is_world_aggregate(*values):
                for v in values if v is not None)
 
 
+# Continent / regional aggregates that Trade Map inserts into an
+# "all countries" download (Africa, Eastern Africa, European Union, ...).
+# They are sums of the member economies, so ranking one alongside the
+# countries would double-count the tally; they must never rank as rows.
+_ITC_REGIONS = {
+    "africa", "sub-saharan africa", "eastern africa", "middle africa",
+    "northern africa", "southern africa", "western africa",
+    "asia", "eastern asia", "central asia", "south-central asia",
+    "south-eastern asia", "southern asia", "western asia",
+    "caribbean", "central america", "south america", "north america",
+    "central america", "latin america and the caribbean", "middle east",
+    "europe", "european union", "european union (27)", "european union(27)",
+    "eu-27", "eu 27", "eurasia", "europe (total)",
+    "oceania", "australia/new zealand", "melanesia", "micronesia",
+    "polynesia", "antarctica", "c.i.s.", "cis", "pacific",
+}
+
+
+def _is_region_aggregate(*values):
+    """True when any value is one of Trade Map's continent / regional
+    aggregate labels (a sum of countries, not a rankable economy)."""
+    return any(str(v).strip().lower() in _ITC_REGIONS
+               for v in values if v is not None)
+
+
 def _matrix_roles(header, key):
     """Map column positions from the header names of current Trade Map exports.
 
@@ -1165,7 +1190,9 @@ class ProfileData:
         rows = sorted((r for r in self._rows("kenya_exports_by_partner")
                        if r["partner"] != "000"
                        and not _is_world_aggregate(r["partner"],
-                                                   r["partner_label"])),
+                                                   r["partner_label"])
+                       and not _is_region_aggregate(r["partner"],
+                                                    r["partner_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["partner_label"]), "years": r["years"]}
@@ -1175,7 +1202,9 @@ class ProfileData:
         rows = sorted((r for r in self._rows("world_exports_by_economy")
                        if r["reporter"] != "000"
                        and not _is_world_aggregate(r["reporter"],
-                                                   r["reporter_label"])),
+                                                   r["reporter_label"])
+                       and not _is_region_aggregate(r["reporter"],
+                                                    r["reporter_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
@@ -1185,7 +1214,9 @@ class ProfileData:
         rows = sorted((r for r in self._rows("world_imports_by_economy")
                        if r["reporter"] != "000"
                        and not _is_world_aggregate(r["reporter"],
-                                                   r["reporter_label"])),
+                                                   r["reporter_label"])
+                       and not _is_region_aggregate(r["reporter"],
+                                                    r["reporter_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["reporter_label"]), "years": r["years"]}
@@ -1195,7 +1226,9 @@ class ProfileData:
         rows = sorted((r for r in self._rows("kenya_imports_by_partner")
                        if r["partner"] != "000"
                        and not _is_world_aggregate(r["partner"],
-                                                   r["partner_label"])),
+                                                   r["partner_label"])
+                       and not _is_region_aggregate(r["partner"],
+                                                    r["partner_label"])),
                       key=lambda r: r["years"].get(self.review_year) or 0.0,
                       reverse=True)
         return [{"label": fix_label(r["partner_label"]), "years": r["years"]}
@@ -1518,15 +1551,15 @@ def fmt(v, decimals=1):
 def _series_unit(values):
     """Display unit for a series of raw (USD-thousand) values.
 
-    Returns ``"USD Billion"`` when the series tops out at 100,000 million
-    (USD 100 billion) or more, ``"USD Thousand"`` when any value would
+    Returns ``"USD Billion"`` when the series tops out at 10,000 million
+    (USD 10 billion) or more, ``"USD Thousand"`` when any value would
     otherwise round to 0.0 in millions (i.e. sit below about USD 50,000),
     else ``"USD Million"``.
     """
     vs = [v for v in values if v]
     if not vs:
         return "USD Million"
-    if max(abs(v) for v in vs) >= 100_000_000.0:
+    if max(abs(v) for v in vs) >= 10_000_000.0:
         return "USD Billion"
     if max(abs(v) for v in vs) < 100.0 or min(abs(v) for v in vs) < 50.0:
         return "USD Thousand"
@@ -1534,10 +1567,11 @@ def _series_unit(values):
 
 
 def _display_unit(values, default="USD Million"):
-    """Scale raw USD-thousand values up to USD Billion when the smallest
-    nonzero figure already reads at 100,000 million or more."""
+    """Scale raw USD-thousand values up to USD Billion when the largest
+    nonzero figure already reads at 10,000 million (USD 10 billion) or
+    more, so big world totals print compactly."""
     vs = [abs(v) for v in values if v]
-    if vs and max(vs) >= 100_000_000.0:
+    if vs and max(vs) >= 10_000_000.0:
         return "USD Billion"
     return default
 
@@ -1743,6 +1777,13 @@ def _ranked_rows(rows, n, years, ensure_label=None,
         total = sum((r["years"].get(y) or 0.0) for r in rows)
         residual_years[y] = max(0.0, total - shown)
     return top + [{"label": residual, "years": residual_years}]
+
+
+def _sum_years(rows):
+    """Per-year totals across a row list (world/regional/Kenya total)."""
+    ys = sorted({y for r in rows for y in r["years"]})
+    return {y: sum((r["years"].get(y) or 0.0) for r in rows)
+            for y in ys}
 
 
 def _africa_rank(rows, ensure_label):
@@ -2018,13 +2059,16 @@ class ProfileBuilder(ReportBuilder):
     def add_value_table(self, first_col_header, rows, years, share_header,
                         title, source, total_label=None, rank=False,
                         unit_label="USD Million", widths=None,
-                        adaptive_unit=True, quantity=False):
+                        adaptive_unit=True, quantity=False, world_total=None):
         """Structure a value matrix table.
 
         ``rows`` = list of ``{"label", "years": {y: v}}`` already truncated
         and consolidated. The share column shows each row's share of the
         total in the review year (bold); a ``total_label`` row (optional)
-        sums the displayed rows.
+        sums the displayed rows.  ``world_total`` optionally pins the total
+        row (and the share denominator) to a canonical figure - e.g. the
+        by-country download's World row - so every table measuring the same
+        family reports the same World/Total.
 
         When *adaptive_unit* is ``True`` (default) the whole table is shown in
         USD Thousand (instead of Millions) if any nonzero value would
@@ -2047,6 +2091,8 @@ class ProfileBuilder(ReportBuilder):
                               if (v := r["years"].get(y)) is not None])
         fmt = (lambda v: fmt_qty(v, unit)) if quantity else \
             (lambda v: fmt_for_unit(v, unit))
+        if world_total and not quantity:
+            unit = _display_unit(list(world_total.values()), unit)
         table = self.doc.add_table(rows=nrows, cols=cols, style="Table Grid")
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         rev = years[-1]
@@ -2081,6 +2127,8 @@ class ProfileBuilder(ReportBuilder):
         # shares are relative to the total of the review year across rows
         rev = years[-1]
         rev_total = sum((r["years"].get(rev) or 0.0) for r in rows)
+        if world_total:
+            rev_total = world_total.get(rev, rev_total)
         for ri, row in enumerate(rows, start=3):
             c = 0
             if rank:
@@ -2106,7 +2154,10 @@ class ProfileBuilder(ReportBuilder):
             t = table.rows[3 + len(rows)]
             t.cells[c_label].text = total_label
             for i, y in enumerate(years):
-                tot = sum((r["years"].get(y) or 0.0) for r in rows)
+                if world_total:
+                    tot = world_total.get(y)
+                else:
+                    tot = sum((r["years"].get(y) or 0.0) for r in rows)
                 t.cells[label_cols + i].text = fmt(tot)
             t.cells[label_cols + n].text = "100.0%"
 
@@ -3462,7 +3513,9 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b._next_table("Global exports of %s by values" % prod, source, num=2)
         b.add_value_table("Product", g_exp, years, "Share in %d" % rev,
                           "Exports of %s by Product" % family, source,
-                          total_label="World")
+                          total_label="World",
+                          world_total=_sum_years(exporters)
+                          if exporters else None)
         trend_bullets(b, g_exp, years, family, "exports")
 
     # Table 3 - world exports by product (quantity)
@@ -3501,7 +3554,9 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b._next_table("Global imports of %s by values" % prod, source, num=5)
         b.add_value_table("Product", g_imp, years, "Share in %d" % rev,
                           "Imports of %s by Product" % family, source,
-                          total_label="World")
+                          total_label="World",
+                          world_total=_sum_years(importers)
+                          if importers else None)
         trend_bullets(b, g_imp, years, family, "imports")
 
     # Table 6 - world imports by product (quantity)
@@ -3539,7 +3594,9 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b._next_table("Africa exports of %s by values" % prod, source, num=8)
         b.add_value_table("Product", africa_exp_p, years, "Share in %d" % rev,
                           "Exports of %s from Africa by Product" % family,
-                          source, total_label="Total")
+                          source, total_label="Total",
+                          world_total=_sum_years(africa_exp)
+                          if africa_exp else None)
         trend_bullets(b, africa_exp_p, years, family, "exports",
                       scope="Africa's", residual="All other products",
                       denom="Africa's total")
@@ -3562,7 +3619,9 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b._next_table("Africa imports of %s by values" % prod, source, num=10)
         b.add_value_table("Product", africa_imp_p, years, "Share in %d" % rev,
                           "Imports of %s into Africa by Product" % family,
-                          source, total_label="Total")
+                          source, total_label="Total",
+                          world_total=_sum_years(africa_imp)
+                          if africa_imp else None)
         trend_bullets(b, africa_imp_p, years, family, "imports",
                       scope="Africa's", residual="All other products",
                       denom="Africa's total")
@@ -3634,7 +3693,8 @@ def section_mirror_kenya(b, cfg, data, source):
         b._next_table("Kenya's exports of %s by values" % prod, source, num=12)
         b.add_value_table("Product", members, years, "Share in %d" % rev,
                           "Kenya's %s Exports by Product" % family, source,
-                          total_label="Total", adaptive_unit=True)
+                          total_label="Total", adaptive_unit=True,
+                          world_total=_sum_years(dests) if dests else None)
         trend_bullets(b, members, years, family, "exports",
                       scope="Kenya's", residual="All other products",
                       denom="Kenya's total")
@@ -3649,7 +3709,8 @@ def section_mirror_kenya(b, cfg, data, source):
         b._next_table("Kenya's Exports of %s by Product" % title, source, num=13)
         b.add_value_table("Product", rows, years, "Share in %d" % rev,
                           "Kenya's Exports of %s by Product" % title, source,
-                          total_label="Total", adaptive_unit=True)
+                          total_label="Total", adaptive_unit=True,
+                          world_total=_sum_years(dests) if dests else None)
         lead = next((r for r in rows if r["label"] != "All other products"),
                     None)
         if lead and i == 0:
@@ -3693,7 +3754,9 @@ def section_mirror_kenya(b, cfg, data, source):
         b._next_table("Kenya's imports of %s by values" % prod, source, num=16)
         b.add_value_table("Product", imports, years, "Share in %d" % rev,
                           "Kenya's %s Imports by Product" % family, source,
-                          total_label="Total", adaptive_unit=True)
+                          total_label="Total", adaptive_unit=True,
+                          world_total=_sum_years(sources)
+                          if sources else None)
         trend_bullets(b, imports, years, family, "imports",
                       scope="Kenya's", residual="All other products",
                       denom="Kenya's total")
@@ -4003,16 +4066,18 @@ def write_excel_deliverable(cfg, data, out_path):
         return name[:31]
 
     def value_sheet(name, first_col, rows, doughnut=None, unit=None,
-                    quantity=False, title=None):
+                    quantity=False, title=None, world_total=None):
         ws = wb.create_sheet(name)
         if unit is None:
             if quantity:
                 unit = _qty_unit([v for r in rows for y in years
                                   if (v := r["years"].get(y)) is not None])
             else:
-                unit = _display_unit([v for r in rows for y in years
-                                      if (v := r["years"].get(y))
-                                      is not None])
+                vals = [v for r in rows for y in years
+                        if (v := r["years"].get(y)) is not None]
+                if world_total:
+                    vals = vals + list(world_total.values())
+                unit = _display_unit(vals)
         if title is None:
             title = re.sub(r"^Table\s+\d+\s*-\s*", "", name).strip()
         has_code = any(r.get("code") for r in rows)
@@ -4076,16 +4141,21 @@ def write_excel_deliverable(cfg, data, out_path):
             _xc(ws, ri, share_col, "=%s%d/$%s%d"
                 % (rev_letter, ri, rev_letter, last_data + 1),
                 bold=True, number_format="0.0%", align=cm)
-        # Total row: SUM formulas per year, "100.0%" as the share total.
+        # Total row: per-year figures (canonical ``world_total`` when given,
+        # else SUM formulas), "100.0%" as the share total.
         trow = last_data + 1
         _xc(ws, trow, label_col, "World" if is_ranked else "Total",
             bold=True, align=lm)
         for i, y in enumerate(years):
             c_letter = get_column_letter(first_year + i)
-            _xc(ws, trow, first_year + i,
-                "=SUM(%s%d:%s%d)" % (c_letter, first_data, c_letter,
-                                     last_data),
-                bold=True, number_format=val_fmt, align=cm)
+            if world_total and not quantity:
+                _xc(ws, trow, first_year + i, world_total.get(y),
+                    bold=True, number_format=val_fmt, align=cm)
+            else:
+                _xc(ws, trow, first_year + i,
+                    "=SUM(%s%d:%s%d)" % (c_letter, first_data, c_letter,
+                                         last_data),
+                    bold=True, number_format=val_fmt, align=cm)
         _xc(ws, trow, share_col, 1.0, bold=True, number_format="0.0%",
             align=cm)
         width = max([26] + [len(str(r["label"])) for r in rows])
@@ -4171,7 +4241,8 @@ def write_excel_deliverable(cfg, data, out_path):
     t2 = top_rows(data.global_export_products(), top, years,
                   "All other products")
     if t2:
-        value_sheet("Table 2 - Global Exports by Value", "Product", t2)
+        value_sheet("Table 2 - Global Exports by Value", "Product", t2,
+                    world_total=_sum_years(t1) if t1 else None)
     t3 = top_rows(data.global_export_products_qty(), top, years,
                   "All other products")
     if t3:
@@ -4187,7 +4258,8 @@ def write_excel_deliverable(cfg, data, out_path):
     t5 = top_rows(data.global_import_products(), top, years,
                   "All other products")
     if t5:
-        value_sheet("Table 5 - Global Imports by Value", "Product", t5)
+        value_sheet("Table 5 - Global Imports by Value", "Product", t5,
+                    world_total=_sum_years(t4) if t4 else None)
     t6 = top_rows(data.global_import_products_qty(), top, years,
                   "All other products")
     if t6:
@@ -4201,7 +4273,8 @@ def write_excel_deliverable(cfg, data, out_path):
     t8 = top_rows(data.africa_export_products(), top, years,
                   "All other products")
     if t8:
-        value_sheet("Table 8 - Africa Exports by Value", "Product", t8)
+        value_sheet("Table 8 - Africa Exports by Value", "Product", t8,
+                    world_total=_sum_years(t7) if t7 else None)
     t9 = _ranked_rows(data.africa_importers(), top, years,
                       ensure_label="Kenya", residual="All other economies")
     if t9:
@@ -4210,7 +4283,8 @@ def write_excel_deliverable(cfg, data, out_path):
     t10 = top_rows(data.africa_import_products(), top, years,
                    "All other products")
     if t10:
-        value_sheet("Table 10 - Africa Imports by Value", "Product", t10)
+        value_sheet("Table 10 - Africa Imports by Value", "Product", t10,
+                    world_total=_sum_years(t9) if t9 else None)
     t11 = _ranked_rows(data.destinations(), top, years,
                        residual="All other markets")
     if t11:
@@ -4221,7 +4295,8 @@ def write_excel_deliverable(cfg, data, out_path):
     t12 = top_rows(data.members, cfg.get("top_n", 10), years,
                    "All other products")
     if t12:
-        value_sheet("Table 12 - Kenya Exports by Value", "Product", t12)
+        value_sheet("Table 12 - Kenya Exports by Value", "Product", t12,
+                    world_total=_sum_years(t11) if t11 else None)
     t13 = None
     for sf in cfg.get("sub_families") or []:
         rows = data.sub_family_members(sf.get("codes") or [])
@@ -4231,7 +4306,8 @@ def write_excel_deliverable(cfg, data, out_path):
             continue
         t13 = rows
         value_sheet("Table 13 - Kenya %s Exports" % (sf.get("title") or "Sub")
-                    [:31], "Product", rows)
+                    [:31], "Product", rows,
+                    world_total=_sum_years(t11) if t11 else None)
     t14 = top_rows(data.kenya_export_products_qty(), cfg.get("top_n", 10),
                    years, "All other products")
     if t14:
@@ -4244,7 +4320,8 @@ def write_excel_deliverable(cfg, data, out_path):
     t16 = top_rows(data.kenya_import_products(), cfg.get("top_n", 10), years,
                    "All other products")
     if t16:
-        value_sheet("Table 16 - Kenya Imports by Value", "Product", t16)
+        value_sheet("Table 16 - Kenya Imports by Value", "Product", t16,
+                    world_total=_sum_years(t15) if t15 else None)
     t17 = top_rows(data.kenya_import_products_qty(), cfg.get("top_n", 10),
                    years, "All other products")
     if t17:
@@ -4464,16 +4541,18 @@ def write_excel_deliverable(cfg, data, out_path):
                     s1 += rv
             margins.append({"label": label, "start": s0, "rev": s1})
         if any(r["rev"] or r["start"] for r in margins):
+            gd_unit = _series_unit([r["start"] or 0.0 for r in margins]
+                                   + [r["rev"] or 0.0 for r in margins])
             ws = wb.create_sheet("Growth Decomposition")
-            headers = ["Margin", "Exports %d (USD Million)" % start_year,
-                       "Exports %d (USD Million)" % rev, "Change",
+            headers = ["Margin", "Exports %d (%s)" % (start_year, gd_unit),
+                       "Exports %d (%s)" % (rev, gd_unit), "Change",
                        "Share of net change"]
             for c, h in enumerate(headers, 1):
                 _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
             for i, r in enumerate(margins, start=2):
                 _xc(ws, i, 1, r["label"], align=lm)
                 for j, key in ((2, "start"), (3, "rev")):
-                    _xc(ws, i, j, round(display(r[key]), 1),
+                    _xc(ws, i, j, _val_cell(r[key], gd_unit),
                         number_format=val_fmt, align=cm)
                 _xc(ws, i, 4, "=C%d-B%d" % (i, i),
                     number_format=val_fmt, align=cm)
@@ -4562,11 +4641,13 @@ def write_excel_deliverable(cfg, data, out_path):
                           reverse=True)[:10]
                    if data.members else [])
     if members_top:
+        sc_unit = _series_unit([m["years"].get(rev) or 0.0
+                                for m in data.members])
         ws = wb.create_sheet("Scenario")
-        headers = ["Product", "Exports %d (USD Million)" % rev,
+        headers = ["Product", "Exports %d (%s)" % (rev, sc_unit),
                    "Current share",
                    "Target share (editable)",
-                   "Target exports %d (USD Million)" % rev,
+                   "Target exports %d (%s)" % (rev, sc_unit),
                    "Implied export growth"]
         for c, h in enumerate(headers, 1):
             _xc(ws, 1, c, h, bold=True, fill=hdr_fill, align=cm)
@@ -4574,7 +4655,7 @@ def write_excel_deliverable(cfg, data, out_path):
         for i, m in enumerate(members_top, start=2):
             _xc(ws, i, 1, m["label"], align=lm)
             cur = (m["years"].get(rev) or 0.0) / total if total else 0.0
-            _xc(ws, i, 2, round(display(m["years"].get(rev) or 0.0), 1),
+            _xc(ws, i, 2, _val_cell(m["years"].get(rev) or 0.0, sc_unit),
                 number_format=val_fmt, align=cm)
             _xc(ws, i, 3, cur, number_format="0.0%", align=cm)
             _xc(ws, i, 4, cur, number_format="0.0%", align=cm,
