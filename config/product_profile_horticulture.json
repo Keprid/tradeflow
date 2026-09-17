@@ -2,6 +2,12 @@
   "title": "Product Profile: Horticulture",
   "subtitle": "2025 Edition",
   "family_title": "Horticulture",
+  "detect_names": [
+    "Horticulture Group",
+    "Edible vegetables and certain roots and tubers",
+    "Edible fruit and nuts",
+    "Live trees and other plants; bulbs, roots and the like; cut flowers and ornamental foliage"
+  ],
   "unit": "USD",
   "value_scale": 1e6,
   "unit_label": "USD Million",

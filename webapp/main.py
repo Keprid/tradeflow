@@ -159,6 +159,78 @@ CRAFTS_RAW_KEYWORDS = (
     "list_of_exporters_for_the_selected_product_group",
     "list_of_importing_markets_for_a_product_group_exported_by_kenya")
 
+# Classic Trade Map downloads ("... for the selected product (Family)") carry
+# the product family in the filename itself - that is the leading, and most
+# reliable, auto-detection signal for query-level uploads.
+_CLASSIC_FAMILY_STEMS = (
+    "list_of_exported_products_for_the_selected_product",
+    "list_of_imported_products_for_the_selected_product",
+    "list_of_exporters_for_the_selected_product",
+    "list_of_importers_for_the_selected_product",
+)
+# Modern slugged names <-> classic stems for each by-product source the
+# value-based scorer reads (the modern names are ITC's beta-product slugs).
+_BY_PRODUCT_PROBES = {
+    "world exports": ("products-exported-globally",
+                      "list_of_exported_products_for_the_selected_product"),
+    "world imports": ("products-imported-globally",
+                      "list_of_imported_products_for_the_selected_product"),
+    "kenya exports": ("kenyas-exports-to-world-by-product",
+                      "list_of_products_exported_by_kenya"),
+    "kenya imports": ("kenyas-imports-from-world-by-product",
+                      "list_of_products_imported_by_kenya"),
+}
+_ANCHOR_PROBES = ("kenyas-exports-to-world-by-importer",
+                  "list_of_importing_markets_for_a_product_exported_by_kenya")
+
+
+def _norm_tokens(s):
+    """Lower-cased word tokens of a family phrase."""
+    return set(re.sub(r"[^a-z0-9 ]+", " ", (s or "").lower()).split())
+
+
+def _family_from_filenames(uploads):
+    """The product family named in classic Trade Map download filenames, or
+    ``""``.  ``..._List_of_exported_products_for_the_selected_product_
+    (Meat_and_edible_meat_offal).xlsx`` -> ``"Meat and edible meat offal"``."""
+    counts = {}
+    for p in gpp._walk_files(str(uploads)):
+        base = os.path.basename(p).lower()
+        if not any(stem in base for stem in _CLASSIC_FAMILY_STEMS):
+            continue
+        groups = re.findall(r"\(([^()]+)\)", os.path.splitext(base)[0])
+        if not groups:
+            continue
+        phrase = " ".join(
+            re.sub(r"[-_]+", " ", groups[-1]).lower().split())
+        if phrase:
+            counts[phrase] = counts.get(phrase, 0) + 1
+    if not counts:
+        return ""
+    return max(counts.items(), key=lambda kv: (kv[1], len(kv[0])))[0]
+
+
+def _family_candidates(cfg):
+    """Phrases a config knows as its product family (detect_names first)."""
+    out = [n for n in (cfg.get("detect_names") or []) if n]
+    if cfg.get("family_title"):
+        out.append(cfg["family_title"])
+    if cfg.get("title"):
+        out.append(cfg["title"])
+    out += [sf.get("title") for sf in cfg.get("sub_families") or []
+            if sf.get("title")]
+    return out
+
+
+def _family_overlap(fam_tokens, name):
+    """Share of tokens the config name carries within the filename family
+    phrase; a single-word family inside a long Trade Map name scores 1.0."""
+    nt = _norm_tokens(name)
+    if not fam_tokens or not nt:
+        return 0.0
+    inter = len(fam_tokens & nt)
+    return inter / min(len(fam_tokens), len(nt))
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     _cleanup_old_jobs()
@@ -850,28 +922,58 @@ def _product_profile_configs():
 
 
 def _autodetect_product_profile(uploads, configs):
-    """Pick the product-profile config whose ``include_codes`` match the
-    family actually present in the uploaded ITC matrices.
+    """Pick the product-profile config whose family matches what was uploaded.
 
-    Collects the value of every product code appearing in the by-product
-    matrix files (kenya/world x export/import) and scores each config by the
-    *share of trade value* it covers (the same HS 2022 hierarchical matching
-    used by the generator).  Value, rather than code count, keeps a download
-    that mixes in a few unrelated headings (e.g. rubber rows inside a dairy
-    group) from hiding the real family.  Selection-total rows (whose value
-    equals the sum of the other codes) are excluded, and a config that claims
-    far more HS chapters than the upload actually contains is penalised, so a
-    catch-all config cannot shadow a specific one.  Returns
-    ``(config_path, cfg)`` for the best match, or None when nothing covers a
-    meaningful share of the uploaded value.
+    Two independent signals are used, in order:
+
+    1. *Filename family.*  Classic Trade Map downloads name the family in the
+       file itself ("... for the selected product (Meat and edible meat
+       offal).xlsx").  Matching that phrase against each config's family
+       titles is authoritative - the family is literally in the download
+       names - and it is what makes a "product" upload build without any
+       manual profile selection.
+
+    2. *Value coverage.*  When the filenames carry no family (modern slugged
+       matrix names), the value of every product code in the by-product
+       matrices is collected and each config is scored by the *share of trade
+       value* it covers (the same HS 2022 hierarchical matching used by the
+       generator).  Value, rather than code count, keeps a download that
+       mixes in a few unrelated headings (e.g. rubber rows inside a dairy
+       group) from hiding the real family.  Selection-total rows (whose value
+       equals the sum of the other codes) are excluded, and a config that
+       claims far more HS chapters than the upload actually contains is
+       penalised, so a catch-all config cannot shadow a specific one.
+
+    Returns ``(config_path, cfg)`` for the best match, or None when neither
+    signal resolves to a config covering the uploaded family.
     """
+    # ---- 1) family named in classic Trade Map filenames --------------------
+    fam = _family_from_filenames(uploads)
+    if fam:
+        fam_tokens = _norm_tokens(fam)
+        best = None
+        for path, cfg in configs:
+            ov = max((_family_overlap(fam_tokens, n)
+                      for n in _family_candidates(cfg) or [""]), default=0.0)
+            if ov >= float(cfg.get("detect_min_frac", 0.5)) and (
+                    best is None or ov > best[0]):
+                best = (ov, path, cfg)
+        if best is not None:
+            return best[1], best[2]
+        return None
+
+    # ---- 2) value coverage across the by-product matrices ------------------
     codes = set()
     # The selection anchor (e.g. "Horticulture Group") is the product code
     # that appears in the by-importer matrix; its row is the family aggregate,
     # not a real product, so it must not count toward the value covered by a
     # config.  Detect it the same way ProfileData does.
     anchor_codes = set()
-    anchor_path = gpp._find_file(str(uploads), "kenyas-exports-to-world-by-importer")
+    anchor_path = None
+    for probe in _ANCHOR_PROBES:
+        anchor_path = gpp._find_file(str(uploads), probe)
+        if anchor_path is not None:
+            break
     if anchor_path is not None:
         _, anchor_rows = gpp.load_matrix(anchor_path)
         counts = {}
@@ -880,11 +982,12 @@ def _autodetect_product_profile(uploads, configs):
             counts[c] = counts.get(c, 0) + 1
         if counts:
             anchor_codes.add(max(counts, key=counts.get))
-    for prefix in ("kenyas-exports-to-world-by-product",
-                   "products-exported-globally",
-                   "kenyas-imports-from-world-by-product",
-                   "products-imported-globally"):
-        path = gpp._find_file(str(uploads), prefix)
+    for _label, probes in _BY_PRODUCT_PROBES.items():
+        path = next((gpp._find_file(str(uploads), probe)
+                     for probe in probes),
+                    None)
+        if path is None and probes:
+            path = gpp._find_file(str(uploads), probes[0])
         if path is None:
             continue
         _, records = gpp.load_matrix(path)

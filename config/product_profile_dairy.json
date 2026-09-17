@@ -2,6 +2,10 @@
   "title": "Product Profile: Dairy",
   "subtitle": "2021 Edition",
   "family_title": "Dairy",
+  "detect_names": [
+    "Dairy produce",
+    "Dairy produce; birds' eggs; natural honey; edible products of animal origin"
+  ],
   "unit": "USD",
   "value_scale": 1e6,
   "unit_label": "USD Million",

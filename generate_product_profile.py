@@ -540,6 +540,9 @@ def _matrix_roles(header, key):
             else:  # 'Product code', 'productCd', 'HS ...'
                 roles.setdefault("product_code", i)
             continue
+        if low == "code" and key in _BY_PRODUCT_KEYS:
+            roles.setdefault("product_code", i)
+            continue
         if any(tok in {"cd", "code", "iso", "hs", "ntl"}
                for tok in low.split()):
             continue  # identifier column (Reporter ISO, reporterCd, ...)
@@ -649,7 +652,20 @@ def load_matrix(path, key=None):
                for y in years}
 
     header = rows[header_idx] if header_idx < len(rows) else ()
-    roles = _matrix_roles(header, key)
+    role_header = header
+    if header_idx > 0:
+        above = rows[header_idx - 1]
+        # Classic Trade Map downloads split the header across two rows: the
+        # table labels ('Code', 'Product label', 'Exporters', 'Importers',
+        # ...) sit one row above the year row that names the value columns.
+        # The year columns occupy the same indices in both rows, so when the
+        # cell above a detected year column carries non-year text the labels
+        # row above is the real header for role detection.
+        if any(c < len(above) and str(above[c] or "").strip() and
+               not re.search(r"20\d\d", str(above[c]))
+               for c in year_cols):
+            role_header = above
+    roles = _matrix_roles(role_header, key)
     pos = {"reporter": 0, "reporter_label": 1, "partner": 2,
            "partner_label": 3, "product": 4, "product_label": 5}
     if "reporter_label" in roles:
@@ -660,6 +676,12 @@ def load_matrix(path, key=None):
         pos["product"] = roles["product_code"]
     if "product_label" in roles:
         pos["product_label"] = roles["product_label"]
+    if key in _BY_PARTNER_KEYS and "partner_label" in roles and \
+            pos["partner"] in year_cols:
+        # Classic by-partner downloads name a single label column (no separate
+        # partner code/ISO column), so the default position would read a year
+        # figure as the partner identifier.  Use the label column instead.
+        pos["partner"] = pos["partner_label"]
     non_year = [c for c in range(len(header)) if c not in year_cols]
 
     def cell(r, col):
@@ -872,11 +894,9 @@ class ProfileData:
             path = _find_region_product_file(self.data_dir, flow)
             if path is None:
                 continue
-            years, records = _load_any(path)
+            years, records = _load_any(path, key)
             if records is None:
                 continue
-            if records and "product" not in records[0]:
-                records = _classic_to_matrix(key, records)
             self.files[key] = {"path": path, "years": years,
                                "records": records}
 
@@ -1727,6 +1747,30 @@ def _shares(rows, years):
     return out
 
 
+# Scoped "all other ..." residual labels.  Each table names the population it
+# ranks - the Africa tables say "African economies", the world tables
+# "exporting/importing economies", the Kenya market tables "markets/sources" -
+# so the residual row can never be mistaken for a mislabelled economy.
+_RESID_ECON = "All other economies"
+_RESID_EXPORTERS = "All other exporting economies"
+_RESID_IMPORTERS = "All other importing economies"
+_RESID_AFRICA = "All other African economies"
+_RESID_MARKETS = "All other markets"
+_RESID_EXPORT_MRKTS = "All other export markets"
+_RESID_SOURCES = "All other source markets"
+
+_RESIDUAL_LABELS = (frozenset({
+    _RESID_ECON, _RESID_EXPORTERS, _RESID_IMPORTERS, _RESID_AFRICA,
+    _RESID_MARKETS, _RESID_EXPORT_MRKTS, _RESID_SOURCES,
+    "All other products", "All other sources",
+}))
+
+
+def _is_residual(label):
+    """True when ``label`` is any residual ("all other ...") row label."""
+    return isinstance(label, str) and label.strip() in _RESIDUAL_LABELS
+
+
 def top_rows(rows, n, years, residual="All other markets"):
     """Keep ``n`` rows, consolidating the rest into a residual row."""
     rows = list(rows)
@@ -2563,7 +2607,8 @@ def section_global(b, cfg, data, source, tmp_dir):
 
     all_exporters = data.exporters()
     exporters = _ranked_rows(all_exporters, cfg.get("top_n", 10), years,
-                             ensure_label="Kenya", residual="All other economies")
+                             ensure_label="Kenya",
+                             residual=_RESID_EXPORTERS)
     if exporters:
         b._next_table("World Exports of %s by Economy" % anchor, source)
         b.add_value_table("Exporting economy", exporters, years,
@@ -2583,7 +2628,8 @@ def section_global(b, cfg, data, source, tmp_dir):
 
     all_importers = data.importers()
     importers = _ranked_rows(all_importers, cfg.get("top_n", 10), years,
-                             ensure_label="Kenya", residual="All other economies")
+                             ensure_label="Kenya",
+                             residual=_RESID_IMPORTERS)
     if importers:
         b._next_table("World Imports of %s by Economy" % anchor, source)
         b.add_value_table("Importing economy", importers, years,
@@ -2658,9 +2704,9 @@ def _kenya_standing_bullets(b, rows, years, anchor_short, role):
                      "**%s**." % (anchor, rev, action, usd_phrase(value)))
 
 
-RESIDUE = {"exporter": "All other economies",
-           "importer": "All other economies",
-           "source": "All other sources"}
+RESIDUE = {"exporter": "All other exporting economies",
+           "importer": "All other importing economies",
+           "source": "All other source markets"}
 
 
 def geo_bullets(b, rows, years, anchor_short, role, region=None):
@@ -2678,12 +2724,14 @@ def geo_bullets(b, rows, years, anchor_short, role, region=None):
             "source": "source"}[role]
     residue = RESIDUE.get(role)
     residual_share = 0.0
-    if residue:
-        for l, s in pairs:
-            if l == residue:
-                residual_share = s
-                break
-    real = [p for p in pairs if p[0] != residue]
+    residue_label = None
+    real = []
+    for l, s in pairs:
+        if _is_residual(l):
+            residual_share += s
+            residue_label = l
+        else:
+            real.append((l, s))
     if not real:
         return
     subject = "%s in Africa" % anchor_short.lower() if region else \
@@ -2721,7 +2769,7 @@ def geo_bullets(b, rows, years, anchor_short, role, region=None):
                  % (group, top5, denom))
     if residual_share > 0:
         b.add_bullet("%s together accounted for **%.1f%%** of %s."
-                     % (residue, residual_share * 100, denom))
+                     % (residue_label or residue, residual_share * 100, denom))
 
 
 def trend_bullets(b, rows, years, family, noun, scope="World",
@@ -3490,7 +3538,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
 
     # Table 1 / Figure 1 - world exports
     exporters = _ranked_rows(data.exporters(), top, years,
-                             ensure_label="Kenya")
+                             ensure_label="Kenya", residual=_RESID_EXPORTERS)
     if exporters:
         b._next_table("Global exports of %s by top %d countries"
                       % (prod, top), source, num=1)
@@ -3531,7 +3579,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
 
     # Table 4 / Figure 2 - world imports
     importers = _ranked_rows(data.importers(), top, years,
-                             ensure_label="Kenya")
+                             ensure_label="Kenya", residual=_RESID_IMPORTERS)
     if importers:
         b._next_table("Global imports of %s by top %d countries"
                       % (prod, top), source, num=4)
@@ -3577,7 +3625,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
         b.add_para(par)
 
     africa_exp = _ranked_rows(data.africa_exporters(), top, years,
-                              ensure_label="Kenya")
+                              ensure_label="Kenya", residual=_RESID_AFRICA)
     if africa_exp:  # Table 7
         b._next_table("Global exports of %s by top %d African countries"
                       % (prod, top), source, num=7)
@@ -3602,7 +3650,7 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
                       denom="Africa's total")
 
     africa_imp = _ranked_rows(data.africa_importers(), top, years,
-                              ensure_label="Kenya")
+                              ensure_label="Kenya", residual=_RESID_AFRICA)
     if africa_imp:  # Table 9
         b._next_table("Africa's top %d importers of %s" % (top, prod),
                       source, num=9)
@@ -3665,15 +3713,14 @@ def section_mirror_kenya(b, cfg, data, source):
 
     # Table 11 - Kenya's exports by destination
     dests = _ranked_rows(data.destinations(), cfg.get("global_top_n", 25),
-                         years)
+                         years, residual=_RESID_EXPORT_MRKTS)
     if dests:
         b._next_table("Kenya's exports of %s by country" % prod, source, num=11)
         b.add_value_table("Destination market", dests, years,
                           "Share in %d" % rev,
                           "Kenya's %s Exports by Destination" % family,
                           source, total_label="Total", rank=True)
-        lead = next((d for d in dests if d["label"] != "All other markets"),
-                    None)
+        lead = next((d for d in dests if not _is_residual(d["label"])), None)
         if lead:
             lead_share = _shares(dests, years)
             top_share = next((s for l, s in lead_share
@@ -3738,7 +3785,8 @@ def section_mirror_kenya(b, cfg, data, source):
 
     # Table 15 - Kenya's imports by source
     sources = _ranked_rows(data.kenya_import_sources(),
-                           cfg.get("global_top_n", 25), years)
+                           cfg.get("global_top_n", 25), years,
+                           residual=_RESID_SOURCES)
     if sources:
         b._next_table("Kenya's imports of %s by country" % prod, source, num=15)
         b.add_value_table("Supplying market", sources, years,
@@ -4232,7 +4280,7 @@ def write_excel_deliverable(cfg, data, out_path):
     top = cfg.get("global_top_n", 25)
     # Template mirror: Table 1..18 sheets in the template's exact order.
     t1 = _ranked_rows(data.exporters(), top, years, ensure_label="Kenya",
-                      residual="All other economies")
+                      residual=_RESID_EXPORTERS)
     if t1:
         value_sheet("Table 1 - Top 25 Global Exporters", "Exporting economy", t1,
                     doughnut=("Share of world exports",
@@ -4249,7 +4297,7 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet("Table 3 - Global Exports by Quantity (Tonnes)", "Product", t3,
                     quantity=True)
     t4 = _ranked_rows(data.importers(), top, years, ensure_label="Kenya",
-                      residual="All other economies")
+                      residual=_RESID_IMPORTERS)
     if t4:
         value_sheet("Table 4 - Top 25 Global Importers", "Importing economy", t4,
                     doughnut=("Share of world imports",
@@ -4266,7 +4314,7 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet("Table 6 - Global Imports by Quantity (Tonnes)", "Product", t6,
                     quantity=True)
     t7 = _ranked_rows(data.africa_exporters(), top, years,
-                      ensure_label="Kenya", residual="All other economies")
+                      ensure_label="Kenya", residual=_RESID_AFRICA)
     if t7:
         value_sheet("Table 7 - Top 25 African Exporters",
                     "African exporting economy", t7)
@@ -4276,7 +4324,7 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet("Table 8 - Africa Exports by Value", "Product", t8,
                     world_total=_sum_years(t7) if t7 else None)
     t9 = _ranked_rows(data.africa_importers(), top, years,
-                      ensure_label="Kenya", residual="All other economies")
+                      ensure_label="Kenya", residual=_RESID_AFRICA)
     if t9:
         value_sheet("Table 9 - Top 25 African Importers",
                     "African importing economy", t9)
@@ -4286,7 +4334,7 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet("Table 10 - Africa Imports by Value", "Product", t10,
                     world_total=_sum_years(t9) if t9 else None)
     t11 = _ranked_rows(data.destinations(), top, years,
-                       residual="All other markets")
+                       residual=_RESID_EXPORT_MRKTS)
     if t11:
         value_sheet("Table 11 - Kenya Exports by Country", "Country", t11,
                     doughnut=("Kenya's exports by destination",
@@ -4314,7 +4362,7 @@ def write_excel_deliverable(cfg, data, out_path):
         value_sheet("Table 14 - Kenya Exports by Quantity (Tonnes)",
                     "Product", t14, quantity=True)
     t15 = _ranked_rows(data.kenya_import_sources(), top, years,
-                       residual="All other markets")
+                       residual=_RESID_SOURCES)
     if t15:
         value_sheet("Table 15 - Kenya Imports by Country", "Country", t15)
     t16 = top_rows(data.kenya_import_products(), cfg.get("top_n", 10), years,

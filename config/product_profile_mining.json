@@ -2,6 +2,11 @@
   "title": "Product Profile: Mining",
   "subtitle": "2025 Edition",
   "family_title": "Mining",
+  "detect_names": [
+    "Mineral fuels, mineral oils and products of their distillation",
+    "Ores, slag and ash",
+    "Salt; sulphur; earths and stone; plastering materials, lime and cement"
+  ],
   "unit": "USD",
   "value_scale": 1e6,
   "unit_label": "USD Million",

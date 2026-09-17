@@ -2,6 +2,10 @@
   "title": "Product Profile: Coffee",
   "subtitle": "2025 Edition",
   "family_title": "Coffee",
+  "detect_names": [
+    "Coffee",
+    "Coffee, whether or not roasted or decaffeinated; coffee husks and skins; coffee substitutes containing coffee"
+  ],
   "unit": "USD",
   "value_scale": 1000000.0,
   "unit_label": "USD Million",

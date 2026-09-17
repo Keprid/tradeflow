@@ -2,6 +2,10 @@
   "title": "Product Profile: Meat",
   "subtitle": "2025 Edition",
   "family_title": "Meat",
+  "detect_names": [
+    "Meat and edible meat offal",
+    "Preparations of meat, of fish or of crustaceans, molluscs or other aquatic invertebrates"
+  ],
   "unit": "USD",
   "value_scale": 1000000.0,
   "unit_label": "USD Million",
