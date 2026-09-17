@@ -4125,7 +4125,8 @@ def write_excel_deliverable(cfg, data, out_path):
 
     def value_sheet(name, first_col, rows, doughnut=None, unit=None,
                     quantity=False, title=None, world_total=None):
-        ws = wb.create_sheet(name)
+        caption = name
+        ws = wb.create_sheet(sheet_name(name))
         if unit is None:
             if quantity:
                 unit = _qty_unit([v for r in rows for y in years
@@ -4137,7 +4138,7 @@ def write_excel_deliverable(cfg, data, out_path):
                     vals = vals + list(world_total.values())
                 unit = _display_unit(vals)
         if title is None:
-            title = re.sub(r"^Table\s+\d+\s*-\s*", "", name).strip()
+            title = re.sub(r"^Table\s+\d+\s*-\s*", "", caption).strip()
         has_code = any(r.get("code") for r in rows)
         is_ranked = any("rank" in r for r in rows)
         n = len(years)
@@ -4433,6 +4434,7 @@ def write_excel_deliverable(cfg, data, out_path):
         required_xl.add(("Table 13 - Kenya %s Exports"
                          % (cfg["sub_families"][0].get("title") or "Sub"))[:31])
     for _name in sorted(required_xl):
+        _name = sheet_name(_name)
         if _name in wb.sheetnames:
             continue
         ws = wb.create_sheet(_name)
