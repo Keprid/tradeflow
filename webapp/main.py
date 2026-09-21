@@ -65,6 +65,22 @@ JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
 
+# Trade Map classic downloads carry long product-group names in the filename
+# ("...List_of_exported_products_for_the_selected_product_(Preparations_of_meat_"
+# "...).xls").  Together with the job dir the full path can exceed Windows'
+# 260-char MAX_PATH limit, so stored basenames are clipped to this length.
+_MAX_UPLOAD_NAME_CHARS = 120
+
+
+def _clip_name(name, cap=_MAX_UPLOAD_NAME_CHARS):
+    """Shorten a stored basename to at most ``cap`` chars, keeping the
+    leading Trade Map stem (role detection) and the file extension."""
+    name = os.path.basename(str(name))
+    if len(name) <= cap:
+        return name
+    stem, ext = os.path.splitext(name)
+    return stem[: cap - len(ext)] + ext
+
 # The six raw ITC Trade Map downloads the Goods pipeline needs, in the order
 # make_tables expects (table1..table6).  Trade Map has no public API (it is an
 # Angular SPA), so "auto-fetch" means: we describe the exact per-partner query
@@ -262,8 +278,8 @@ def _cleanup_old_jobs():
 
 
 def _save_upload(uploads_dir, upload: UploadFile):
-    """Persist one uploaded file, keeping only its basename."""
-    name = os.path.basename(upload.filename or "")
+    """Persist one uploaded file, keeping only its (clipped) basename."""
+    name = _clip_name(upload.filename or "")
     if not name.lower().endswith(ALLOWED_EXT):
         raise HTTPException(400, f"Unsupported file type: {upload.filename}")
     dst = uploads_dir / name
@@ -295,6 +311,8 @@ def _extract_zip(zpath, dest):
                 safe = os.path.normpath(member)
                 if safe.startswith("..") or os.path.isabs(safe):
                     raise HTTPException(400, f"Unsafe path inside zip: {member}")
+                safe = os.path.join(os.path.dirname(safe),
+                                    _clip_name(os.path.basename(safe)))
                 out = dest / safe
                 out.parent.mkdir(parents=True, exist_ok=True)
                 with z.open(member) as src, out.open("wb") as dst:
@@ -315,7 +333,7 @@ def _flatten_xlsx(dest):
             if os.path.dirname(src) == str(dest):
                 continue
             base, ext = os.path.splitext(f)
-            dst = os.path.join(dest, f)
+            dst = os.path.join(dest, _clip_name(f))
             i = 1
             while os.path.exists(dst):
                 dst = os.path.join(dest, f"{base}__{i}{ext}")
@@ -983,11 +1001,11 @@ def _autodetect_product_profile(uploads, configs):
         if counts:
             anchor_codes.add(max(counts, key=counts.get))
     for _label, probes in _BY_PRODUCT_PROBES.items():
-        path = next((gpp._find_file(str(uploads), probe)
-                     for probe in probes),
-                    None)
-        if path is None and probes:
-            path = gpp._find_file(str(uploads), probes[0])
+        path = None
+        for probe in probes:
+            path = gpp._find_file(str(uploads), probe)
+            if path is not None:
+                break
         if path is None:
             continue
         _, records = gpp.load_matrix(path)

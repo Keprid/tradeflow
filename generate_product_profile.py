@@ -271,7 +271,7 @@ def _matrix_unit(path):
         wb.close()
     except Exception:
         head_rows = []
-    if head_rows:
+    if len(head_rows) > 1:
         sub = [str(x or "").strip().lower() for x in head_rows[1]]
         body = " ".join(
             str(x or "").lower()
