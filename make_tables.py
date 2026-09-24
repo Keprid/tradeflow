@@ -220,6 +220,37 @@ def _hs_granularity(path, limit=400):
 _PRODUCT_ROLES = ("table2", "table4", "table5", "table6")
 
 
+def _probable_measure(path):
+    """Classify a Trade Map download's measure as ``"value"``, ``"quantity"``
+    or None from its header text.
+
+    Classic HTML ``.xls`` copies name the measure in a block: value files carry
+    ``Exported/Imported value in <year>`` columns, while quantity copies use a
+    bare ``<year>`` run over an ``Exported/Imported quantity`` + ``Unit``
+    sub-header (tonnes / units / mixed).  Modern beta xlsx put the unit on the
+    year header (``2021 (USD Thousand)`` vs ``2021 (Tonnes)``).  Returns None
+    when the measure cannot be told from the head (treated as acceptable by
+    callers).
+    """
+    try:
+        wb, _used = convert_to_xlsx(path)
+        ws = wb[wb.sheetnames[0]]
+        head = [[_cell_text(c) for c in row]
+                for row in ws.iter_rows(values_only=True, max_row=3)]
+        wb.close()
+    except Exception:
+        return None
+    text = " | ".join(str(x) for row in head for x in row if x)
+    low = text.lower()
+    has_qty = bool(re.search(r"\b(quantity|tonnes?|tons?|units?|mixed)\b", low))
+    has_val = bool(re.search(r"\b(value|usd)\b", low))
+    if has_qty and not has_val:
+        return "quantity"
+    if has_val:
+        return "value"
+    return None
+
+
 def _prefer_hs4(candidates, excel_dir):
     """Given a list of candidate filenames for a product-table role, prefer
     the HS4 copy when several are present (Trade Map offers HS2 by default but
@@ -307,8 +338,18 @@ def find_source_files(excel_dir):
             _cands["table6"].append(fname)
 
     # Product tables: when several versions are present (e.g. HS2 *and* HS4 of
-    # the same Tabel Map download), record the HS4 copy.
+    # the same Table Map download), record the HS4 copy.  Quantity (tonnes)
+    # copies of the same download are never usable as value tables, so drop
+    # them first - a browser " (1)" duplicate is often the quantity twin,
+    # whose figures read like USD if the measure is not checked.
     for role in _PRODUCT_ROLES:
+        if not _cands[role]:
+            continue
+        value_cands = [c for c in _cands[role]
+                       if _probable_measure(os.path.join(excel_dir, c))
+                       != "quantity"]
+        if value_cands:
+            _cands[role] = value_cands
         if _cands[role]:
             found[role] = _prefer_hs4(_cands[role], excel_dir)
 

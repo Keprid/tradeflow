@@ -900,17 +900,30 @@ def build_narratives(a: Analysis, cfg):
     t = {}
     world = cfg.get("world_trade", {}) or {}
 
-    _NEXT_UNIT = {"thousand": "million", "million": "billion", "billion": "trillion"}
+    _UNIT_LEVELS = ("thousand", "million", "billion", "trillion")
 
     def usd_auto(v, dec=1, unit="billion"):
-        """Format v (expressed in `unit`) upgrading to the next unit at 1,000,
-        e.g. 2,200 billion -> "2.2 trillion", 1,500 million -> "1.5 billion".
-        The Excel files keep the raw unit; only the narrative upgrades."""
+        """Format v (expressed in `unit`) with a unit that fits the magnitude.
+
+        The narrative carries country totals in USD billion, but a small
+        economy's figures are sub-one there ("0.0 billion").  The unit steps
+        down to million (and thousand when below a million) so every figure
+        reads sensibly: 0.143 billion -> "143.0 million", 0.0007 billion ->
+        "700.0 thousand".  Values >= 1,000 still upgrade (2,200 billion ->
+        "2.2 trillion").  The Excel files keep the raw unit; only the
+        narrative adjusts.
+        """
         if v is None:
             return ""
-        if v >= 1000 and unit in _NEXT_UNIT:
-            return f"{v / 1000:,.{dec}f} {_NEXT_UNIT[unit]}"
-        return f"{v:,.{dec}f} {unit}"
+        lvl = _UNIT_LEVELS.index(unit)
+        while v and v < 1 and lvl > 0:
+            v *= 1000
+            lvl -= 1
+        while v and v >= 1000 and lvl < len(_UNIT_LEVELS) - 1:
+            v /= 1000
+            lvl += 1
+        d = 0 if v and v >= 100 else dec
+        return f"{v:,.{d}f} {_UNIT_LEVELS[lvl]}"
 
     n_years_words = {2: "two", 3: "three", 4: "four", 5: "five",
                      6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
@@ -948,8 +961,18 @@ def build_narratives(a: Analysis, cfg):
             return f"{names[0]} and {names[1]}"
         return ", ".join(names[:-1]) + f", and {names[-1]}"
 
-    wex_s = f", equivalent to {exp_2025 / wex * 100:.1f}% of world exports" if wex else ""
-    wim_s = f", or {imp_2025 / wim * 100:.1f}% of world imports" if wim else ""
+    def share_txt(r):
+        """A share of world trade, avoiding a meaningless '0.0%' for tiny
+        economies: sub-0.1% fractions read as 'less than 0.1%'."""
+        if r is None:
+            return ""
+        p = r * 100
+        if p < 0.1:
+            return "less than 0.1%"
+        return f"{p:.2f}%" if p < 10 else f"{p:.1f}%"
+
+    wex_s = f", equivalent to {share_txt(exp_2025 / wex)} of world exports" if wex else ""
+    wim_s = f", or {share_txt(imp_2025 / wim)} of world imports" if wim else ""
 
     t["background"] = [
         [  # 1) country overview
@@ -978,8 +1001,8 @@ def build_narratives(a: Analysis, cfg):
     ]
 
     # ---- Section 2 intro --------------------------------------------------
-    exp_world = f", equivalent to {exp_2025 / wex * 100:.1f}% of world exports" if wex else ""
-    imp_world = f", or {imp_2025 / wim * 100:.1f}% of world imports" if wim else ""
+    exp_world = f", equivalent to {share_txt(exp_2025 / wex)} of world exports" if wex else ""
+    imp_world = f", or {share_txt(imp_2025 / wim)} of world imports" if wim else ""
 
     dest1 = a.top(a.table3, 1)[0]
     prod1 = a.top(a.table4, 1)[0]

@@ -209,6 +209,14 @@ def _write_csv_as_xlsx(src, out):
 SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv", ".tsv")
 
 
+def _scratch_dir():
+    """A per-process scratch directory for converted copies."""
+    key = f"xlsx_compat_{os.getpid()}"
+    d = Path(tempfile.gettempdir()) / key
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def is_spreadsheet(filename):
     """Return True if *filename* has a recognised spreadsheet extension."""
     return os.path.splitext(filename)[1].lower() in SUPPORTED_EXTENSIONS
@@ -222,9 +230,11 @@ def convert_to_xlsx(src, out_dir=None):
     copy).  Caller is responsible for closing the workbook.
 
     Files already in .xlsx/.xlsm are opened directly.  Everything else
-    is converted to a temp ``.xlsx`` in *out_dir* (defaults to the
-    source file's parent directory).  The temp file is NOT deleted —
-    the caller should clean up if needed.
+    is converted to a temp ``.xlsx`` in *out_dir* (defaults to a scratch
+    directory under the system temp).  The temp file is NOT deleted —
+    the caller should clean up if needed.  Converting into a fresh temp
+    directory (rather than the source's folder) keeps raw Trade Map
+    folders from accumulating ``*.xlsx`` copies next to the originals.
     """
     src = Path(src)
     ext = src.suffix.lower()
@@ -234,7 +244,7 @@ def convert_to_xlsx(src, out_dir=None):
         return wb, str(src)
 
     if out_dir is None:
-        out_dir = src.parent
+        out_dir = _scratch_dir()
     out_dir = Path(out_dir)
 
     out = out_dir / (src.stem + ".xlsx")
