@@ -1582,50 +1582,55 @@ def generate_tables(excel_dir, out_dir, top_n):
     os.makedirs(out_dir, exist_ok=True)
     files = find_source_files(excel_dir)
 
-    # ---- common year set: all six tables must share the same years ---------
+    # ---- per-table year windows ------------------------------------------
+    # Each source keeps its own last-up-to-five consecutive years. Product
+    # downloads often run a year or two ahead of the by-country (market)
+    # downloads, so forcing a single shared window would silently drop the
+    # newest product years. The report still keeps one report year -- the
+    # latest year common to all six tables -- for the narrative, while every
+    # table shows the years its own source actually carries.
     keys = ("table1", "table2", "table3", "table4", "table5", "table6")
-    years_sets = []
+    t_years = {}
     for k in keys:
         _, _, ys, _ = parse_source(files[k])
-        years_sets.append(set(ys))
-    full_years = _pick_years(sorted(set.intersection(*years_sets)))
-    # Tables 1-6 show only the last five years; Figure 1 (the trade balance)
-    # uses the last up-to-TEN consecutive years so the analysis covers e.g.
-    # 2016-2025 whenever the source data carries that history.
-    table_years = full_years[-5:] if len(full_years) > 5 else full_years
+        t_years[k] = _pick_years(ys)[-5:]
+    # Years common to every table (drives the report year); falls back to the
+    # union when the six downloads do not overlap at all.
+    shared_years = sorted(set.intersection(*(set(v) for v in t_years.values()))) \
+        or sorted(set.union(*(set(v) for v in t_years.values())))
     # The balance window is derived from the Kenya exports (Table 5) and
     # imports (Table 6) sources alone -- it must not shrink just because the
     # narrower Tables 1-4 cover fewer years. Older history already captured
     # in an existing balance workbook is merged back in further below.
     _, _, ys5_all, _ = parse_source(files["table5"])
     _, _, ys6_all, _ = parse_source(files["table6"])
-    balance_window = _balance_years(set(ys5_all) & set(ys6_all), n=10) or full_years
+    balance_window = _balance_years(set(ys5_all) & set(ys6_all), n=10) or shared_years
 
     # ---- Table 1: import source markets --------------------------------
-    rows, ycols, years, labels = parse_source(files["table1"], years=table_years)
+    rows, ycols, years, labels = parse_source(files["table1"], years=t_years["table1"])
     total, items = extract_markets(rows, ycols)
     rep = labels["reporter"]
     d1 = prepare({"total": total, "items": items}, years, TOP_MARKETS, 1e6, is_markets=True)
 
     # ---- Table 3: export destinations -----------------------------------
-    rows, ycols, years, labels = parse_source(files["table3"], years=table_years)
+    rows, ycols, years, labels = parse_source(files["table3"], years=t_years["table3"])
     total, items = extract_markets(rows, ycols)
     d3 = prepare({"total": total, "items": items}, years, TOP_MARKETS, 1e6, is_markets=True)
 
     # ---- Table 2: import products ---------------------------------------
-    rows, ycols, years, labels = parse_source(files["table2"], years=table_years)
+    rows, ycols, years, labels = parse_source(files["table2"], years=t_years["table2"])
     total, items = extract_products(rows, ycols)
     d2 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
     p_total_raw = total   # NOTE: USD Million -- prepare() rescaled in place
     p_items_raw = items   # (same object), not raw USD Thousand
 
     # ---- Table 4: export products ---------------------------------------
-    rows, ycols, years, labels = parse_source(files["table4"], years=table_years)
+    rows, ycols, years, labels = parse_source(files["table4"], years=t_years["table4"])
     total, items = extract_products(rows, ycols)
     d4 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
 
     # ---- Table 5: Kenya exports to partner ------------------------------
-    rows, ycols, years, labels = parse_source(files["table5"], years=table_years)
+    rows, ycols, years, labels = parse_source(files["table5"], years=t_years["table5"])
     total, items = extract_kenya(rows, ycols)
     krep = labels["reporter"] or "Kenya"
     kpartner = labels["partner"]
@@ -1634,13 +1639,17 @@ def generate_tables(excel_dir, out_dir, top_n):
     k_items_raw = items   # (same object), not raw USD Thousand
 
     # ---- Table 6: Kenya imports from partner ----------------------------
-    rows, ycols, years, labels = parse_source(files["table6"], years=table_years)
+    rows, ycols, years, labels = parse_source(files["table6"], years=t_years["table6"])
     total, items = extract_kenya(rows, ycols)
     d6 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
 
     # ---- Table 7: Kenya's export composition + market alignment -----------
+    # Alignment compares Kenya's exports to the partner (Table 5) with the
+    # partner's world imports (Table 2) in their latest covered year, so label
+    # the table with the Table 5 window rather than the shared report window.
+    t7_years = t_years["table5"] or years
     bilateral_items = compute_bilateral_alignment(
-        k_items_raw, k_total_raw, p_items_raw, p_total_raw, years)
+        k_items_raw, k_total_raw, p_items_raw, p_total_raw, t7_years)
 
     rep_possessive = rep if rep.endswith("s") else rep + "'s"
 
@@ -1712,7 +1721,7 @@ def generate_tables(excel_dir, out_dir, top_n):
     # Table 7: Kenya's export composition + market alignment
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 7"
     cache = []
-    write_bilateral_table(ws, bilateral_items, years, krep, kpartner,
+    write_bilateral_table(ws, bilateral_items, t7_years, krep, kpartner,
                           row1_label="Table 7:",
                           row1_title=f"{krep}'s Export Composition and Market Alignment with {kpartner}")
     set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})
@@ -1813,7 +1822,7 @@ def generate_tables(excel_dir, out_dir, top_n):
         row1_title=f"{krep}'s Top imports from {kpartner}")
     set_widths(ws, widths_prd); cache_all["Table 6"] = dict(c)
     ws = wb_all["Table 7"]; c = []
-    write_bilateral_table(ws, bilateral_items, years, krep, kpartner,
+    write_bilateral_table(ws, bilateral_items, t7_years, krep, kpartner,
                           row1_label="Table 7:",
                           row1_title=f"{krep}'s Export Composition and Market Alignment with {kpartner}")
     set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})

@@ -618,6 +618,82 @@ class Analysis:
                       f"the correct product granularity.",
                       file=sys.stderr)
 
+    # ---- year-aware access ------------------------------------------------
+    # Every table is analysed on its own terms: by default a lookup uses that
+    # table's own latest year, so a product table that runs to 2025 is not
+    # held back to 2023 just because the by-country (market) table ends there.
+    @staticmethod
+    def table_years(table):
+        return (table or {}).get("years") or []
+
+    def latest(self, table):
+        """Latest year covered by ``table`` (falls back to the report year)."""
+        ys = self.table_years(table)
+        return ys[-1] if ys else self.year
+
+    def at(self, table, item=None, year=None):
+        """Value of ``item`` (or the table total when ``item`` is None) in
+        ``year`` (default: the table's latest year), matched by calendar year
+        so tables carrying different spans stay aligned.  ``None`` when the
+        year is not covered by that table."""
+        year = self.latest(table) if year is None else year
+        ys = self.table_years(table)
+        if year not in ys:
+            return None
+        i = ys.index(year)
+        vals = (item or {}).get("years")
+        if vals is None:
+            vals = ((table or {}).get("total") or {}).get("years")
+        if not vals or i >= len(vals):
+            return None
+        return vals[i]
+
+    def at_prev(self, table, item=None):
+        return self.at(table, item, year=self.latest(table) - 1)
+
+    def _year_index(self, table, year):
+        ys = self.table_years(table)
+        return ys.index(year) if year in ys else None
+
+    def top_at(self, table, n, year=None):
+        """The ``n`` largest items by value in ``year`` (default: the table's
+        latest year), so ranking, values and shares all describe the same
+        year."""
+        year = self.latest(table) if year is None else year
+        i = self._year_index(table, year)
+        if i is None:
+            return []
+        rows = [d for d in (table or {}).get("items", [])
+                if i < len(d.get("years") or []) and d["years"][i] is not None]
+        rows.sort(key=lambda d: d["years"][i], reverse=True)
+        return rows[:n] if n else rows
+
+    def share_at(self, table, item, year=None):
+        """Share of the table total for ``item`` in ``year`` (default: the
+        table's latest year).  ``None`` when either value is unavailable."""
+        v = self.at(table, item, year)
+        t = self.at(table, None, year)
+        if v is None or not t:
+            return None
+        return v / t
+
+    def shares_at(self, table, items=None, year=None):
+        items = (table or {}).get("items", []) if items is None else items
+        return [self.share_at(table, d, year) for d in items]
+
+    def pie_share_rows(self, table, n=10, year=None):
+        """Labels + shares (at the table's latest year) for the top ``n``
+        products, used by the Word pie charts (Figure 2/3)."""
+        out = []
+        for d in self.top_at(table, n, year):
+            s = self.share_at(table, d, year)
+            if s is None:
+                continue
+            out.append((short_product_name(d.get("label") or d.get("name"),
+                                           d.get("code"), maxlen=42),
+                        round(s, 6)))
+        return out
+
     # ---- country aggregates ------------------------------------------------
     def imports_years(self):
         return self.table1["total"]["years"] if self.table1["total"] else [None] * len(self.years)
@@ -632,25 +708,21 @@ class Analysis:
         return self.table6["total"]["years"] if self.table6["total"] else [None] * len(self.years)
 
     def imports_2025(self):
-        return self.imports_years()[self.iy]
+        return self.at(self.table1)
 
     def imports_2024(self):
-        # No previous year when the report window is a single year (e.g. the
-        # six raw downloads only overlap in one calendar year).
-        if self.iy < 1:
-            return None
-        return self.imports_years()[self.iy - 1]
+        # None when the report year's predecessor is not covered (e.g. the six
+        # raw downloads only overlap in one calendar year).
+        return self.at_prev(self.table1)
 
     def imports_2021(self):
         return self.imports_years()[0]
 
     def exports_2025(self):
-        return self.exports_years()[self.iy]
+        return self.at(self.table3)
 
     def exports_2024(self):
-        if self.iy < 1:
-            return None
-        return self.exports_years()[self.iy - 1]
+        return self.at_prev(self.table3)
 
     def imports_growth_2024_25(self):
         a, b = self.imports_2024(), self.imports_2025()
@@ -754,7 +826,8 @@ class Analysis:
         if not vals:
             return None, None
         idx = max(range(len(vals)), key=lambda i: vals[i] if vals[i] is not None else -1e18)
-        return vals[idx], self.years[0] + idx
+        ys = self.table_years(self.table5) or self.years
+        return vals[idx], (ys[idx] if idx < len(ys) else self.years[0] + idx)
 
     def balance_always_negative(self):
         b = self.balance["balance"]
@@ -921,6 +994,15 @@ class Analysis:
 def build_narratives(a: Analysis, cfg):
     c = cfg["country"]
     Y = a.year
+    # Each table is analysed at its own latest covered year, so a table that
+    # reaches 2025 is not held back to 2023 just because a by-country
+    # (market) table stops there.
+    Y1 = a.latest(a.table1)      # imports: source markets
+    Y2 = a.latest(a.table2)      # imports: products
+    Y3 = a.latest(a.table3)      # exports: destination markets
+    Y4 = a.latest(a.table4)      # exports: products
+    Y5 = a.latest(a.table5)      # Kenya exports to partner
+    Y6 = a.latest(a.table6)      # Kenya imports from partner
     t = {}
     world = cfg.get("world_trade", {}) or {}
 
@@ -951,7 +1033,6 @@ def build_narratives(a: Analysis, cfg):
 
     n_years_words = {2: "two", 3: "three", 4: "four", 5: "five",
                      6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
-    wn = n_years_words.get(len(a.years), str(len(a.years)))
 
     # ---- world-trade reference values (used by sections 1, 2) -------------
     wex = world.get("world_exports_usd_billion")
@@ -1034,21 +1115,21 @@ def build_narratives(a: Analysis, cfg):
     imp1 = a.top(a.table2, 1)[0]
 
     t["exports_bullets"] = [
-        f"{c['name']} exports in {Y} were valued at USD {usd_auto(exp_2025)}{exp_world}.",
-        f"The lead export destination market in {Y} was {dest1['name']}, with exports of "
-        f"USD {usd_auto(dest1['years'][a.iy])}. This represented {pct(dest1['share'])} of "
+        f"{c['name']} exports in {Y3} were valued at USD {usd_auto(exp_2025)}{exp_world}.",
+        f"The lead export destination market in {Y3} was {dest1['name']}, with exports of "
+        f"USD {usd_auto(a.at(a.table3, dest1))}. This represented {pct(dest1['share'])} of "
         f"{a.possessive} total exports.",
-        f"The principal export product was {clean_label(prod1['label']) or prod1['name']}, "
-        f"valued at USD {usd_auto(prod1['years'][a.iy])}. It ranked first among "
+        f"The principal export product in {Y4} was {clean_label(prod1['label']) or prod1['name']}, "
+        f"valued at USD {usd_auto(a.at(a.table4, prod1))}. It ranked first among "
         f"{c['name']}'s export products.",
     ]
     t["imports_bullets"] = [
-        f"In {Y}, {c['name']} imports were valued at USD {usd_auto(imp_2025)}{imp_world}.",
-        f"The main import product was {clean_label(imp1['label']) or imp1['name']}, worth "
-        f"USD {usd_auto(imp1['years'][a.iy])}. It accounted for {pct(imp1['share'])} of "
+        f"In {Y1}, {c['name']} imports were valued at USD {usd_auto(imp_2025)}{imp_world}.",
+        f"The main import product in {Y2} was {clean_label(imp1['label']) or imp1['name']}, worth "
+        f"USD {usd_auto(a.at(a.table2, imp1))}. It accounted for {pct(imp1['share'])} of "
         f"the country's imports.",
         f"The leading import source market was {src1['name']}, which supplied products worth "
-        f"USD {usd_auto(src1['years'][a.iy])}. This represented {pct(src1['share'])} of "
+        f"USD {usd_auto(a.at(a.table1, src1))}. This represented {pct(src1['share'])} of "
         f"{c['name']} imports.",
     ]
 
@@ -1057,7 +1138,7 @@ def build_narratives(a: Analysis, cfg):
     cagr = a.imports_cagr_2021_25()
     s21_mkts = top_phrase(
         a.top(a.table1, 3),
-        lambda d: f"{display_name(d['name'])} (USD {usd_auto(d['years'][a.iy])}; {pct(d['share'])})")
+        lambda d: f"{display_name(d['name'])} (USD {usd_auto(a.at(a.table1, d))}; {pct(d['share'])})")
     src3 = a.top(a.table1, 3)
     top3_import_share = sum((d.get("share") or 0) for d in src3)
     s21_analysis = (
@@ -1067,13 +1148,13 @@ def build_narratives(a: Analysis, cfg):
         if top3_import_share and top3_import_share >= 25 else "")
     _prev_imports = a.imports_2024()
     t["s21"] = [
-        (f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}, "
+        (f"In {Y1}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}, "
          f"an increase of {pct(growth)} on the previous year's USD {usd_auto(_prev_imports)}."
          if growth is not None and _prev_imports is not None
-         else f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}."),
+         else f"In {Y1}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}."),
         f"Between {a.years[0]} and {a.years[-1]}, imports grew at an average of "
         f"{round(cagr * 100)}% a year." if cagr else "",
-        f"The lead source markets in {Y} were {s21_mkts}." if s21_mkts else "",
+        f"The lead source markets in {Y1} were {s21_mkts}." if s21_mkts else "",
         s21_analysis if s21_analysis else "",
     ]
 
@@ -1083,7 +1164,7 @@ def build_narratives(a: Analysis, cfg):
     src_benchmark = []
     if afr_imp_share is not None:
         src_benchmark.append(
-            f"Of {a.country}'s total goods imports in {Y}, {pct(afr_imp_share)} "
+            f"Of {a.country}'s total goods imports in {Y1}, {pct(afr_imp_share)} "
             f"originated from Africa.")
     if kenya_src and kenya_src.get("share") is not None:
         rank_txt = (f" (ranking {kenya_src['rank']} among source markets)"
@@ -1096,9 +1177,9 @@ def build_narratives(a: Analysis, cfg):
     # ---- Section 2.2 ------------------------------------------------------
     s22_prods = top_phrase(
         a.top(a.table2, 4),
-        lambda d: f"{clean_label(d['label'])} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
+        lambda d: f"{clean_label(d['label'])} (USD {usd_auto(a.at(a.table2, d))}, {pct(d['share'])})")
     t["s22"] = [
-        f"In {Y}, the leading import products were: {s22_prods}." if s22_prods else "",
+        f"In {Y2}, the leading import products were: {s22_prods}." if s22_prods else "",
     ]
 
     # ---- Section 2.2a: Kenya's share of the partner's top imports --------
@@ -1133,7 +1214,7 @@ def build_narratives(a: Analysis, cfg):
     eg = a.exports_growth_2024_25()
     s23_dsts = top_phrase(
         a.top(a.table3, 4),
-        lambda d: f"{display_name(d['name'])} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
+        lambda d: f"{display_name(d['name'])} (USD {usd_auto(a.at(a.table3, d))}, {pct(d['share'])})")
     dest3 = a.top(a.table3, 3)
     top3_export_share = sum((d.get("share") or 0) for d in dest3)
     s23_analysis = (
@@ -1147,7 +1228,7 @@ def build_narratives(a: Analysis, cfg):
     if afr_share is not None:
         afr_countries = ", ".join(
             display_name(d["name"]) for d in a.africa_destinations() if d.get("share"))
-        msg = (f"Of {a.country}'s total exports in {Y}, "
+        msg = (f"Of {a.country}'s total exports in {Y3}, "
                f"{pct(afr_share)} were destined to Africa"
                + (f" ({afr_countries})." if afr_countries else "."))
         if kenya_dest and kenya_dest.get("share") is not None:
@@ -1157,8 +1238,8 @@ def build_narratives(a: Analysis, cfg):
                     f" of the total{rank_txt}.")
         afr_bullet = msg
     t["s23"] = [
-        (f"In {Y}, {a.possessive} exports were valued at USD {usd_auto(a.exports_2025())}, "
-         f"up {round(eg * 100)}% from USD {usd_auto(a.exports_2024())} in {Y - 1}."
+        (f"In {Y3}, {a.possessive} exports were valued at USD {usd_auto(a.exports_2025())}, "
+         f"up {round(eg * 100)}% from USD {usd_auto(a.exports_2024())} in {Y3 - 1}."
          if eg else ""),
         f"The leading destination markets were {s23_dsts}." if s23_dsts else "",
         afr_bullet if afr_bullet else "",
@@ -1168,25 +1249,29 @@ def build_narratives(a: Analysis, cfg):
     # ---- Section 2.4 ------------------------------------------------------
     s24_prods = top_phrase(
         a.top(a.table4, 5),
-        lambda d: f"{clean_label(d['label'])} (USD {usd_auto(d['years'][a.iy])}, {pct(d['share'])})")
+        lambda d: f"{clean_label(d['label'])} (USD {usd_auto(a.at(a.table4, d))}, {pct(d['share'])})")
     t["s24"] = [
-        f"In {Y}, {a.possessive} top export products were: {s24_prods}." if s24_prods else "",
+        f"In {Y4}, {a.possessive} top export products were: {s24_prods}." if s24_prods else "",
     ]
 
     # ---- Section 3.1 ------------------------------------------------------
-    ke = a.kenya_exports_2025 = a.kenya_exports_years()[a.iy]
+    ke = a.kenya_exports_2025 = a.at(a.table5)
     avg = a.kenya_exports_average()
     mx, mxy = a.kenya_exports_max()
+    # Kenya's bilateral series (Tables 5/6) can span different years from the
+    # market tables, so describe its own range.
+    _k5 = a.table_years(a.table5) or a.years
+    _wn5 = n_years_words.get(len(_k5), str(len(_k5)))
     t["s31"] = [
-        f"In {Y}, Kenya's exports to {c['name']} were valued at USD {usd_auto(ke, unit='million')}.",
-        f"Across {a.years[0]}-{a.years[-1]}, exports to {c['name']} averaged "
+        f"In {Y5}, Kenya's exports to {c['name']} were valued at USD {usd_auto(ke, unit='million')}.",
+        f"Across {_k5[0]}-{_k5[-1]}, exports to {c['name']} averaged "
         f"USD {usd_auto(avg, unit='million')} a year. The peak value was "
         f"USD {usd_auto(mx, unit='million')}, recorded in {mxy}.",
-        (f"Exports in {Y} stood {('above' if ke >= avg else 'below')} the {wn}-year average, "
+        (f"Exports in {Y5} stood {('above' if ke >= avg else 'below')} the {_wn5}-year average, "
          f"indicating a {('favourable' if ke >= avg else 'softening')} short-term trend."
          if avg else ""),
-        f"In {Y}, Kenya's imports from {c['name']} were valued at "
-        f"USD {usd_auto(a.kenya_imports_years()[a.iy], unit='million')}.",
+        f"In {Y6}, Kenya's imports from {c['name']} were valued at "
+        f"USD {usd_auto(a.at(a.table6), unit='million')}.",
     ]
     fluct = a.balance_imports_fluct()
     if fluct:
@@ -1265,7 +1350,7 @@ def build_narratives(a: Analysis, cfg):
     if _t10x:
         note_x.append(
             f"Top 10 export products accounted for {pct(_t10x)} "
-            f"of Kenya's total exports to {narrative_ref(c['name'])} in {Y}, "
+            f"of Kenya's total exports to {narrative_ref(c['name'])} in {Y5}, "
             f"underlining a {('concentrated' if _t10x >= 0.70 else 'fairly diversified')} "
             f"export basket.")
     if _hhix is not None:
@@ -1287,7 +1372,7 @@ def build_narratives(a: Analysis, cfg):
     if _t10i:
         note_i.append(
             f"Top 10 import products accounted for {pct(_t10i)} "
-            f"of Kenya's total imports from {narrative_ref(c['name'])} in {Y}, "
+            f"of Kenya's total imports from {narrative_ref(c['name'])} in {Y6}, "
             f"reflecting a {('concentrated' if _t10i >= 0.70 else 'fairly diversified')} "
             f"import mix.")
     if _hhii is not None:
@@ -2589,6 +2674,13 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     c = cfg["country"]
     rep = cfg["report"]
     Y = a.year
+    # Per-table years: each caption/analysis uses the latest year its own
+    # table covers (e.g. Tables 5-7 reach 2025 even when the market tables
+    # stop at 2023).
+    Y1 = a.latest(a.table1)
+    Y3 = a.latest(a.table3)
+    Y5 = a.latest(a.table5)
+    Y6 = a.latest(a.table6)
     # The Trade Agreements section (optional) is inserted as Section 4 when
     # Kenya-reported by-partner data is available; the later section numbers
     # shift accordingly.
@@ -2686,7 +2778,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
         b.add_bullet(line)
     if a.africa_destinations():
         b.add_para("Focus: {name}'s exports to Africa & Kenya (Optional – Africa breakdown)".format(name=c["name"]), bold=True)
-        b.add_table_caption(f"Table 3a (Optional): {a.country}'s exports destined to Africa in {Y}")
+        b.add_table_caption(f"Table 3a (Optional): {a.country}'s exports destined to Africa in {Y3}")
         b.add_africa_focus_table(a)
         b.add_source()
     b.page_break()
@@ -2721,7 +2813,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     # Export share figure (placed after Table 5, mirroring Table 6 -> Figure 3)
     # 3.2 Export products
     b.add_heading(f"3.2 Kenya's Export Products to {c['name']}", level=2)
-    b.add_table_caption(f"Table 5: Kenya's Top {len(a.table5['items'])} Export Products to {c['name']} in {Y}")
+    b.add_table_caption(f"Table 5: Kenya's Top {len(a.table5['items'])} Export Products to {c['name']} in {Y5}")
     b.add_product_table(a, a.table5, f"Kenya's exports to {c['name']}", "Value in USD Million",
                         widths=[730, 2094, 2094, 656, 711, 711, 711, 712, 931])
     b.add_source()
@@ -2729,10 +2821,10 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
         b.add_bullet(line)
 
     b.add_para(f"Share of Kenya's Top Export Products to {c['name']}", bold=True)
-    b.add_table_caption(f"Figure 2: Share of Kenya's Top Exports to {c['name']} in {Y}")
-    _ex2 = pie_share_rows(a.table5.get("items") if a.table5 else None)
+    b.add_table_caption(f"Figure 2: Share of Kenya's Top Exports to {c['name']} in {Y5}")
+    _ex2 = a.pie_share_rows(a.table5)
     b.add_word_chart(
-        "pie", f"Share of Kenya's Top Exports to {c['name']} in {Y}",
+        "pie", f"Share of Kenya's Top Exports to {c['name']} in {Y5}",
         [lab for lab, _ in _ex2], [sh for _, sh in _ex2],
         width_in=5.6, height_in=4.4, name="Figure 2 - Top Exports")
     b.add_bullet(narr["fig2_note"])
@@ -2740,7 +2832,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
 
     # 3.3 Import products
     b.add_heading(f"3.3 Kenya's Key Import Products from {c['name']}", level=2)
-    b.add_table_caption(f"Table 6: Kenya's Top {len(a.table6['items'])} Import Products from {c['name']} in {Y}")
+    b.add_table_caption(f"Table 6: Kenya's Top {len(a.table6['items'])} Import Products from {c['name']} in {Y6}")
     b.add_product_table(a, a.table6, f"Kenya's imports from {c['name']}", "Value in USD Million",
                         widths=[730, 1901, 1902, 821, 821, 821, 711, 712, 931])
     b.add_source()
@@ -2753,10 +2845,10 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
 
     # 3.4 Import share figure
     b.add_heading("3.4 Share of top Import Products from " + c["name"], level=2)
-    b.add_table_caption(f"Figure 3: Share of Kenya's Top Imports from {c['name']} in {Y}")
-    _ex3 = pie_share_rows(a.table6.get("items") if a.table6 else None)
+    b.add_table_caption(f"Figure 3: Share of Kenya's Top Imports from {c['name']} in {Y6}")
+    _ex3 = a.pie_share_rows(a.table6)
     b.add_word_chart(
-        "pie", f"Share of Kenya's Top Imports from {c['name']} in {Y}",
+        "pie", f"Share of Kenya's Top Imports from {c['name']} in {Y6}",
         [lab for lab, _ in _ex3], [sh for _, sh in _ex3],
         width_in=5.6, height_in=4.4, name="Figure 3 - Top Imports")
     b.add_bullet(narr["fig3_note"])
@@ -2765,7 +2857,8 @@ def build_report(cfg, excel_dir, out_path, tmp_dir, promo_path=None):
     # 3.5 Kenya's export composition and market alignment
     b.add_heading(f"3.5 Kenya's Export Composition and Market Alignment with {c['name']} (Optional)", level=2)
     if getattr(a, "table7", None) and a.table7["items"]:
-        b.add_table_caption(f"Table 7: Kenya's Export Products – Market Alignment with {c['name']} in {Y}")
+        _y7 = (a.table7.get("year") if a.table7 else None) or Y5
+        b.add_table_caption(f"Table 7: Kenya's Export Products – Market Alignment with {c['name']} in {_y7}")
         b.add_bilateral_table(a)
         b.add_source()
         for line in bilateral_bullets(a):
