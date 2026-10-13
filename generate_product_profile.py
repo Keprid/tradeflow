@@ -341,9 +341,12 @@ _BY_PRODUCT_KEYS = {
 
 def _classic_group(path):
     """The product group of a classic filename: ``(..._((Meat_and_edible_
-    meat_offal)).xls`` -> ``Meat and edible meat offal``."""
-    m = re.search(r"\(([^()]+)\)\.?\s*xls?$",
-                  os.path.basename(path), re.IGNORECASE)
+    meat_offal)).xls`` -> ``Meat and edible meat offal``.  A `` (N)``
+    duplicate-suffix (``..._or_...) (1).xls``) is stripped first so it is not
+    mistaken for the group."""
+    base = re.sub(r"\s*\(\d+\)\s*(?=\.\w*$)", "",
+                  os.path.basename(path))
+    m = re.search(r"\(([^()]+)\)\.?\s*xls?$", base, re.IGNORECASE)
     if not m:
         return ""
     return " ".join(
@@ -423,26 +426,6 @@ def _load_any(path, key=None):
         return load_html_matrix(path)
 
 
-def _find_region_product_file(data_dir, flow):
-    """Locate a 'List of products exported/imported by <region>' workbook.
-
-    Trade Map regions report their trade as a pseudo-economy (e.g. Africa), so
-    the by-product download for a region carries the same shape as the world
-    by-product matrix but with ``africa`` in the filename.  Both the beta slug
-    (``africas-exports-to-world-by-product_all.xlsx``) and the classic name
-    (``Trade_Map_-_List_of_products_exported_by_Africa.xls``) are recognised.
-    """
-    verbs = {"export": ("export", "exported", "exports"),
-             "import": ("import", "imported", "imports")}[flow]
-    for path in _walk_files(data_dir):
-        base = os.path.basename(path).lower()
-        if "africa" in base:
-            if any(v in base for v in verbs) and \
-                    ("by-product" in base or "list_of_products" in base):
-                return path
-    return None
-
-
 def _supplier_market_label(path):
     """Best-effort market name from a per-market supplying-markets download.
 
@@ -507,12 +490,28 @@ _ITC_REGIONS = {
     "polynesia", "antarctica", "c.i.s.", "cis", "pacific",
 }
 
+# ITC classic downloads label their summed regional rows with a suffix on
+# top of the plain region name ("Africa Aggregation", "Europe Overall",
+# "European Union (total)").  The marker is stripped before the region check.
+_REGION_MARKER_RE = re.compile(
+    r"\b(aggregations?|overall|totals?|regions?|countries?|economies?)\b",
+    re.IGNORECASE)
+
 
 def _is_region_aggregate(*values):
     """True when any value is one of Trade Map's continent / regional
     aggregate labels (a sum of countries, not a rankable economy)."""
-    return any(str(v).strip().lower() in _ITC_REGIONS
-               for v in values if v is not None)
+    for v in values:
+        if v is None:
+            continue
+        low = " ".join(str(v).strip().lower().split())
+        if low in _ITC_REGIONS:
+            return True
+        core = " ".join(_REGION_MARKER_RE.sub(" ", low).split())
+        core = re.sub(r"[\s()\-]+", " ", core).strip(" -()")
+        if core in _ITC_REGIONS:
+            return True
+    return False
 
 
 def _matrix_roles(header, key):
@@ -766,7 +765,22 @@ def load_html_matrix(path):
             parser.feed(text)
             if not parser.tables:
                 return None, None
-            table = max(parser.tables, key=len)
+            # ITC classic .xls files carry several HTML tables (title, notes,
+            # sources, unit, data).  The notes table - "Sources: ... since
+            # January, 2011" - often ties the data table on row count, so a
+            # plain ``max(..., key=len)`` can mistake it for the data table
+            # (yielding a bogus single year and no records).  Pick instead the
+            # table whose cells concentrate genuine year columns, then the
+            # widest table, then the tallest.
+            def _data_score(tab):
+                rows = [r for r in tab if r]
+                widest = max((len(r) for r in rows), default=0)
+                yrs = 0
+                for r in rows:
+                    yrs = max(yrs, sum(1 for c in r
+                                       if re.search(r"(20\d\d)", str(c))))
+                return (yrs, widest, len(rows))
+            table = max(parser.tables, key=_data_score)
             break
         except Exception:
             continue
@@ -852,10 +866,30 @@ class ProfileData:
             value_hits = [p for p in candidates if _matrix_unit(p) == "value"]
             qty_hits = [p for p in candidates if _matrix_unit(p) == "quantity"]
             if len(value_hits) > 1:
+                # Several downloads can supply the same value table: repeated
+                # browser copies, or a full-world "List of exporters..."
+                # sitting next to an Africa/region-filtered twin with the same
+                # stem.  Rank the duplicates read-only and keep the fullest --
+                # the global tables must rank real economies, and a filtered
+                # subset would both omit countries and shadow the full file.
+                def _fullest(cands):
+                    best, best_n = None, -1
+                    for p in cands:
+                        try:
+                            n = len(_load_any(p, key)[1] or [])
+                        except Exception:
+                            n = 0
+                        if n > best_n:
+                            best, best_n = p, n
+                    return best
+                best = _fullest(value_hits)
                 self.warnings.append(
-                    "%d value candidates for '%s' in %s - using %s"
+                    "%d value candidates for '%s' in %s - using the fullest "
+                    "(%s with %d records)"
                     % (len(value_hits), prefix, self.data_dir,
-                       os.path.basename(value_hits[0])))
+                       os.path.basename(best or ""),
+                       len(_load_any(best, key)[1] or []) if best else 0))
+                value_hits = [best] if best else []
             if len(qty_hits) > 1:
                 self.warnings.append(
                     "%d quantity candidates for '%s' in %s - using %s"
@@ -898,10 +932,33 @@ class ProfileData:
         # ---- region by-product downloads (e.g. Africa) --------------------
         # An ITC region reports its trade as a pseudo-economy, so a "List of
         # products exported/imported by Africa" download drives the template's
-        # Africa sub-section tables.
+        # Africa sub-section tables.  Tables 8/10 are *value* tables, so a
+        # Tonnes (quantity) twin of the same download is rejected here - it
+        # would otherwise populate a "by values" table with tonne figures.
         for flow, key in (("export", "africa_exports_by_product"),
                           ("import", "africa_imports_by_product")):
-            path = _find_region_product_file(self.data_dir, flow)
+            verb = flow
+            hits = []
+            for p in _walk_files(self.data_dir):
+                base = os.path.basename(p).lower()
+                if "africa" not in base or \
+                        ("by-product" not in base and
+                         "list_of_products" not in base):
+                    continue
+                verbs = {"export": ("export", "exported", "exports"),
+                         "import": ("import", "imported", "imports")}[flow]
+                if not any(v in base for v in verbs):
+                    continue
+                hits.append(p)
+            path = next((p for p in hits if _matrix_unit(p) == "value"), None)
+            if path is None and hits:
+                self.warnings.append(
+                    "Africa %s by-product download '%s' is in Tonnes "
+                    "(quantity), not USD value - Tables 8/10 (%s by values) "
+                    "need the value download."
+                    % (verb, os.path.basename(hits[0]),
+                       "exports/imports" if flow == "export" else "imports"))
+                continue
             if path is None:
                 continue
             years, records = _load_any(path, key)
@@ -1001,9 +1058,18 @@ class ProfileData:
                                   for r in records), None)
             if candidate is not None:
                 anchor_product = candidate
-                self.warnings.append(
-                    "by-importer file not found - anchor inferred from the "
-                    "by-product download (%s)" % anchor_product)
+                if partner_rows:
+                    # Classic Trade Map "List of importing markets for a
+                    # product exported by Kenya" files carry no product codes,
+                    # so the anchor cannot be read from them; the report falls
+                    # back to the configured family.
+                    self.warnings.append(
+                        "by-importer file carries no product codes - anchor "
+                        "inferred from the product family (%s)" % anchor_product)
+                else:
+                    self.warnings.append(
+                        "by-importer file not found - anchor inferred from the "
+                        "by-product download (%s)" % anchor_product)
         if anchor_product is None:
             raise OSError("Missing the by-importer file; cannot detect the "
                           "anchor product in %s." % self.data_dir)
@@ -4190,25 +4256,36 @@ def write_excel_deliverable(cfg, data, out_path):
             _xc(ws, ri, label_col, row["label"], align=lm)
             for i, y in enumerate(years):
                 raw = row["years"].get(y)
-                v_out = None if raw is None else (
-                    round(raw, 1) if quantity else _val_cell(raw, unit))
+                if raw is None:
+                    v_out = None
+                elif quantity:
+                    v_out = (round(raw / 1000.0, 1)
+                             if unit == "Thousand Tonnes" else round(raw, 1))
+                else:
+                    v_out = _val_cell(raw, unit)
                 _xc(ws, ri, first_year + i, v_out,
                     number_format=val_fmt, align=cm)
-            # Share: live formula against the Total row below, so editing a
-            # year cell recalculates the whole workbook.
-            rev_letter = get_column_letter(first_year + n)
-            _xc(ws, ri, share_col, "=%s%d/$%s%d"
-                % (rev_letter, ri, rev_letter, last_data + 1),
+            # Share: live formula against the total row's review-year cell
+            # (absolute), so editing a year cell recalculates the sheet and
+            # the doughnut moves with it.  The numerator is the review-year
+            # VALUE column - never the share column (that would make the cell
+            # reference itself and error on recalc, e.g. LibreOffice Err:522).
+            rev_letter = get_column_letter(first_year + n - 1)
+            trow = last_data + 1
+            _xc(ws, ri, share_col, "=%s%d/$%s$%d"
+                % (rev_letter, ri, rev_letter, trow),
                 bold=True, number_format="0.0%", align=cm)
         # Total row: per-year figures (canonical ``world_total`` when given,
-        # else SUM formulas), "100.0%" as the share total.
+        # else SUM formulas), "100.0%" as the share total.  Values are written
+        # in the same unit as the rows above.
         trow = last_data + 1
         _xc(ws, trow, label_col, "World" if is_ranked else "Total",
             bold=True, align=lm)
         for i, y in enumerate(years):
             c_letter = get_column_letter(first_year + i)
             if world_total and not quantity:
-                _xc(ws, trow, first_year + i, world_total.get(y),
+                wt = world_total.get(y)
+                _xc(ws, trow, first_year + i, _val_cell(wt, unit),
                     bold=True, number_format=val_fmt, align=cm)
             else:
                 _xc(ws, trow, first_year + i,
@@ -4238,11 +4315,12 @@ def write_excel_deliverable(cfg, data, out_path):
         if doughnut and len(doughnut[1]) >= 2:
             anchor = trow + 3
             _add_doughnut_here(ws, anchor, doughnut[0], doughnut[1],
-                               share_letter, first_data)
+                               share_letter, first_data,
+                               table_total_row=trow)
         return ws
 
     def _add_doughnut_here(ws, top_row, title, labels_values,
-                           share_letter="", ref_row=2):
+                           share_letter="", ref_row=2, table_total_row=None):
         from openpyxl.chart import DoughnutChart
         from openpyxl.chart.label import DataLabelList
         from openpyxl.chart.legend import Legend
@@ -4255,13 +4333,20 @@ def write_excel_deliverable(cfg, data, out_path):
             c.font = Font(bold=True)
             c.fill = hdr_fill
             c.alignment = cm
+        if not table_total_row:
+            table_total_row = ref_row + len(labels_values) - 1
         for i, (lab, v) in enumerate(labels_values, start=top_row + 1):
             ws.cell(i, 1).value = lab
             cv = ws.cell(i, 2)
             # Live reference into the main table's share column (same sheet),
-            # so editing the table moves the chart.
-            cv.value = ("=%s%d" % (share_letter, ref_row + i)
-                        if share_letter and ref_row + i != top_row else v)
+            # so editing the table moves the chart.  The doughnut rows sit
+            # ``trow - ref_row`` rows below the table, so each doughnut row
+            # maps back to its matching table row's share cell.
+            c_share = ref_row + (i - top_row) - 1
+            if share_letter and c_share <= table_total_row:
+                cv.value = "=%s$%d" % (share_letter, c_share)
+            else:
+                cv.value = v
             cv.number_format = "0.0%"
             cv.border = BORDER
             cv.alignment = cm
