@@ -268,14 +268,34 @@ def _cell_grid(ws):
 
 def _find_year_run(grid):
     """Return (row_index, start_col, [years]) for the longest run of
-    consecutive year integers (between 2 and 10 years) anywhere in the grid,
+    consecutive year integers (between 1 and 10 years) anywhere in the grid,
     else (None, None, []).
 
     This lets the parser accept any consecutive year range (e.g. 2021..2025,
     2021..2024, 2015..2024 or a short 2023..2025 window as produced by the
-    classic Trade Map interface), not just a fixed five-year block.
+    classic Trade Map interface), not just a fixed five-year block.  A
+    single-year table is accepted too: when the six raw downloads only
+    overlap in one calendar year (e.g. stale market files) ``make_tables``
+    emits one year column, so a run of length 1 is still a valid header.
+
+    Multi-year runs are preferred so an incidental lone 4-digit value in a
+    data row is never mistaken for the header; a single-year run is used
+    only when no longer run exists anywhere in the grid.
     """
     best = None
+    single = None
+
+    def _consider(ri, cur):
+        nonlocal best, single
+        if not 1 <= len(cur) <= 10:
+            return
+        cand = (ri, cur[0][0], [y for _, y in cur])
+        if len(cur) >= 2:
+            if best is None or len(cur) > len(best[2]):
+                best = cand
+        elif single is None:
+            single = cand
+
     for ri, row in enumerate(grid):
         cur = []
         prev = None
@@ -294,15 +314,13 @@ def _find_year_run(grid):
                 if prev is not None and iv == prev + 1:
                     cur.append((ci, iv))
                 else:
-                    if 2 <= len(cur) <= 10 and (best is None or len(cur) > len(best[2])):
-                        best = (ri, cur[0][0], [y for _, y in cur])
+                    _consider(ri, cur)
                     cur = [(ci, iv)]
                 prev = iv
             else:
                 prev = None
-        if 2 <= len(cur) <= 10 and (best is None or len(cur) > len(best[2])):
-            best = (ri, cur[0][0], [y for _, y in cur])
-    return best if best else (None, None, [])
+        _consider(ri, cur)
+    return best or single or (None, None, [])
 
 
 def parse_rank_table(path):
@@ -617,6 +635,10 @@ class Analysis:
         return self.imports_years()[self.iy]
 
     def imports_2024(self):
+        # No previous year when the report window is a single year (e.g. the
+        # six raw downloads only overlap in one calendar year).
+        if self.iy < 1:
+            return None
         return self.imports_years()[self.iy - 1]
 
     def imports_2021(self):
@@ -626,6 +648,8 @@ class Analysis:
         return self.exports_years()[self.iy]
 
     def exports_2024(self):
+        if self.iy < 1:
+            return None
         return self.exports_years()[self.iy - 1]
 
     def imports_growth_2024_25(self):
@@ -1041,9 +1065,12 @@ def build_narratives(a: Analysis, cfg):
         f"of total imports. This concentration indicates that supply is heavily "
         f"dependent on a few partners, so diversifying import sources would reduce risk."
         if top3_import_share and top3_import_share >= 25 else "")
+    _prev_imports = a.imports_2024()
     t["s21"] = [
-        f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}, "
-        f"an increase of {pct(growth)} on the previous year's USD {usd_auto(a.imports_2024())}.",
+        (f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}, "
+         f"an increase of {pct(growth)} on the previous year's USD {usd_auto(_prev_imports)}."
+         if growth is not None and _prev_imports is not None
+         else f"In {Y}, {a.possessive} imports were valued at USD {usd_auto(a.imports_2025())}."),
         f"Between {a.years[0]} and {a.years[-1]}, imports grew at an average of "
         f"{round(cagr * 100)}% a year." if cagr else "",
         f"The lead source markets in {Y} were {s21_mkts}." if s21_mkts else "",
