@@ -1446,7 +1446,12 @@ def _read_job_log(job_dir):
 def _job_worker(job_dir, job_fn):
     logs = _JobLog(job_dir)
     try:
+        # Log before taking the lock: if another job is still running the
+        # worker blocks here, and without this line the UI would show a job
+        # that is "running" forever with an empty log.
+        logs.append("Job received; waiting for the renderer to become free ...")
         with _PIPELINE_LOCK:
+            logs.append("Renderer acquired; build starting.")
             report_path, manifest = job_fn(logs)
         (job_dir / "manifest.json").write_text(
             json.dumps(manifest), encoding="utf-8")
@@ -1461,10 +1466,11 @@ def _job_worker(job_dir, job_fn):
         (job_dir / "error.txt").write_text(f"Pipeline aborted: {e}",
                                            encoding="utf-8")
     except Exception as e:
+        tb = traceback.format_exc()
         LOG.error("Background job %s failed:", job_dir.name)
-        LOG.error("%s", traceback.format_exc())
-        (job_dir / "error.txt").write_text(f"Pipeline failed: {e}",
-                                           encoding="utf-8")
+        LOG.error("%s", tb)
+        (job_dir / "error.txt").write_text(
+            f"Pipeline failed: {e}\n\n{tb}", encoding="utf-8")
 
 
 @app.get("/api/status/{job_id}")

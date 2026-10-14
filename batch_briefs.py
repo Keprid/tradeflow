@@ -168,7 +168,7 @@ def _top_import_insight(a, n=20):
     how much the market imports of that product worldwide, from Africa (where
     the per-product-partner detail is provided) and from Kenya."""
     total = a.imports_2025() or 0
-    lines = [f"- Top {n} imported products ({a.latest(a.table2)}) -- worldwide vs Africa vs Kenya:"]
+    lines = [f"- Top {n} imported products ({a.year}) -- worldwide vs Africa vs Kenya:"]
     for r in a.top_import_products(n):
         ww = r["worldwide_val_bin"]
         ksh = r["kenya_share"]
@@ -256,15 +256,13 @@ def deliverable_performance_brief(market, out_dir, default_report, hs_level):
     path = os.path.join(out_dir, f"PERFORMANCE_{_slug(name)}.md")
     ex = a.kenya_exports_years()
     im = a.kenya_imports_years()
-    ex_yr = a.at(a.table5)
-    im_yr = a.at(a.table6)
     lines = [
         f"# Export Performance Brief -- Kenya to {name}",
         "",
-        f"- Data year: {a.latest(a.table5)} | HS4",
-        f"- Kenya's exports to {name}: {_usd(ex_yr)} "
+        f"- Data year: {a.year} | HS4",
+        f"- Kenya's exports to {name}: {_usd(ex[a.iy])} "
         f"(series {[f'{v:.1f}' if v is not None else 'n/a' for v in ex]})",
-        f"- Kenya's imports from {name}: {_usd(im_yr)}",
+        f"- Kenya's imports from {name}: {_usd(im[a.iy])}",
     ]
     g = a.exports_growth_2024_25()
     cagr = a.exports_cagr() if hasattr(a, "exports_cagr") else None
@@ -350,7 +348,7 @@ def deliverable_prefeasibility(dl, out_dir, default_report, hs_level):
             a, cfg = _load_analysis(m, default_report, out_dir)
             imports = a.imports_2025()
             growth = a.imports_growth_2024_25()
-            kenya_ex = a.at(a.table5)
+            kenya_ex = a.kenya_exports_years()[a.iy]
             score = None
             if imports:
                 score = (imports or 0) * ((growth or 0) + 1.0)

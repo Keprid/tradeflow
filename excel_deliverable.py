@@ -105,59 +105,75 @@ def _fit_col_widths(ws, widths):
 
 
 def _write_rank_table(ws, table, years, title, header, widths, flow_label,
-                      unit_row=False, total_header=None):
+                      unit_row=False, total_header=None, unit_text=None):
     """Write one parsed rank table (Table 1-6) as an editable range.
 
     ``header`` lists the plain header cells that precede any merged content;
     here we keep a flat, copy-friendly header: Rank, Code (if has_code),
     label/partner, one column per year, then Share.
     """
+    if unit_text is None:
+        unit_text = "Value in USD Billion"
     has_code = bool(table.get("has_code"))
     n_years = len(years)
     col0 = 1  # rank
     col_code = 2 if has_code else None
     col_label = (col_code + 1) if has_code else 2
-    col_share = col_label + n_years
+    col_year0 = col_label + 1          # first year column (after the name)
+    col_share = col_year0 + n_years
 
     r = 1
     if title:
         span = col_share
         r = _title_row(ws, r, title, span)
-    hstart = r
-    hdr_cells = ["Rank", "Code", header]
-    # one header cell per year
-    r2 = r + 1
-
-    # --- header ---
+    # --- header (three rows, matching Templates/table template.xlsx) ---
+    # Row r   : Rank-in-latest | name col(s) | flow label (over year cols) | Share
+    # Row r+1 :   (merged)     |   (merged)  | year 1 | year 2 | ...          | (merged)
+    # Row r+2 :   (merged)     |   (merged)  | unit label (over year cols)   | (merged)
     _put = ws.cell
-    # Rank merged across 2 rows
-    ws.merge_cells(start_row=r, start_column=col0, end_row=r2, end_column=col0)
-    _put(r, col0).value = "Rank in %s" % years[-1]
+    r2 = r + 1
+    r3 = r + 2
+    hcenter = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # Rank column (merged over the three header rows)
+    ws.merge_cells(start_row=r, start_column=col0, end_row=r3, end_column=col0)
+    _put(r, col0).value = "Rank\nin\n%s" % years[-1]
     if col_code is not None:
-        ws.merge_cells(start_row=r, start_column=col_code, end_row=r2,
+        ws.merge_cells(start_row=r, start_column=col_code, end_row=r3,
                        end_column=col_code)
         _put(r, col_code).value = "Code"
-    ws.merge_cells(start_row=r, start_column=col_label,
-                   end_row=r, end_column=col_label + len(years) - 1)
-    _put(r, col_label).value = flow_label
+    # Name / label column (its own column, spanning the three header rows).
+    ws.merge_cells(start_row=r, start_column=col_label, end_row=r3,
+                   end_column=col_label)
+    _put(r, col_label).value = header or "Name"
+    # Flow label (first header row, spanning the year columns)
+    ws.merge_cells(start_row=r, start_column=col_year0,
+                   end_row=r, end_column=col_year0 + len(years) - 1)
+    _put(r, col_year0).value = flow_label
+    # Year labels (second header row, one per year)
     for i, y in enumerate(years):
-        _put(r2, col_label + i).value = y
-    ws.merge_cells(start_row=r, start_column=col_share, end_row=r2,
+        _put(r2, col_year0 + i).value = y
+    # Unit label (third header row, spanning the year columns)
+    ws.merge_cells(start_row=r3, start_column=col_year0,
+                   end_row=r3, end_column=col_year0 + len(years) - 1)
+    _put(r3, col_year0).value = unit_text
+    # Share column (merged over the three header rows)
+    ws.merge_cells(start_row=r, start_column=col_share, end_row=r3,
                    end_column=col_share)
-    _put(r, col_share).value = "Share in %s %%" % years[-1]
+    _put(r, col_share).value = "Share\nin\n%s" % years[-1]
 
     # style header
-    for rr in (r, r2):
+    for rr in (r, r2, r3):
         for cc in range(col0, col_share + 1):
             cell = ws.cell(rr, cc)
             cell.font = HDR_FONT
             cell.fill = HDR_FILL
-            cell.alignment = CENTER
+            cell.alignment = hcenter
             cell.border = Border(top=THICK, bottom=THIN,
                                  left=THIN, right=THIN)
 
-    # --- unit row (optional) ---
-    rbody = r2 + 1
+    # --- body ---
+    rbody = r3 + 1
     body_start = None
     n_years = len(years)
     last_col = col_share
@@ -182,7 +198,7 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
         name_cell.alignment = LEFT
         for i, y in enumerate(years):
             v = d["years"][i] if i < len(d.get("years") or []) else None
-            vc = _put(rw, col_label + i)
+            vc = _put(rw, col_year0 + i)
             _value_cell(vc, v if v is not None else "", "#,##0.0")
             vc.alignment = RIGHT if isinstance(v, (int, float)) else CENTER
         sc = _put(rw, col_share)
@@ -213,7 +229,7 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
     # it a formula that references All-other would create a circular reference.
     if item_rows and all_row is not None and total_row is not None:
         for i in range(n_years):
-            valc = col_label + i
+            valc = col_year0 + i
             items_ref = ",".join("%s%d" % (get_column_letter(valc), rw)
                                  for rw in item_rows)
             tot_cell = "%s%d" % (get_column_letter(valc), total_row)
@@ -221,7 +237,7 @@ def _write_rank_table(ws, table, years, title, header, widths, flow_label,
             ws.cell(all_row, valc).number_format = "#,##0.0"
     elif item_rows and total_row is not None and all_row is None:
         for i in range(n_years):
-            valc = col_label + i
+            valc = col_year0 + i
             items_ref = ",".join("%s%d" % (get_column_letter(valc), rw)
                                  for rw in item_rows)
             ws.cell(total_row, valc).value = "=SUM(%s)" % items_ref
@@ -381,28 +397,32 @@ def build_deliverable(a, cfg, out_path):
     years = a.years
 
     sheets = [
-        ("Table 1 - Import Source Markets", a.table1, c["short"], False),
-        ("Table 2 - Import Products from the World", a.table2, c["short"], True),
-        ("Table 3 - Export Destination Markets", a.table3, c["short"], False),
-        ("Table 4 - Export Products to the World", a.table4, c["short"], True),
-        ("Table 5 - Kenya Exports to %s" % country, a.table5, country, True),
-        ("Table 6 - Kenya Imports from %s" % country, a.table6, country, True),
+        ("Table 1 - Import Source Markets", a.table1, c["short"], False,
+         "Value in USD Billion"),
+        ("Table 2 - Import Products from the World", a.table2, c["short"], True,
+         "Value in USD Billion"),
+        ("Table 3 - Export Destination Markets", a.table3, c["short"], False,
+         "Value in USD Billion"),
+        ("Table 4 - Export Products to the World", a.table4, c["short"], True,
+         "Value in USD Billion"),
+        ("Table 5 - Kenya Exports to %s" % country, a.table5, country, True,
+         "Value in USD Million"),
+        ("Table 6 - Kenya Imports from %s" % country, a.table6, country, True,
+         "Value in USD Million"),
     ]
-    for title, table, hdr, has_code_flag in sheets:
+    for title, table, hdr, has_code_flag, unit in sheets:
         if not table:
             continue
         ws = wb.create_sheet(title[:31])
         flow = "Importing Countries from %s" % country if not has_code_flag \
             and "Import Source" in title else \
             ("Exports to %s" % hdr if "Export Dest" in title else hdr)
-        # Each table keeps its own year span (product tables can reach a later
-        # year than the by-country ones), so label the columns from the table.
-        table_years = table.get("years") or years
         _write_rank_table(
-            ws, table, table_years, title,
+            ws, table, years, title,
             "Market" if not table.get("has_code") else "Product",
             [], flow,
-            unit_row=not table.get("has_code"))
+            unit_row=not table.get("has_code"),
+            unit_text=unit)
 
     if a.table7:
         _write_table7_sheet(wb, a)
@@ -414,47 +434,53 @@ def build_deliverable(a, cfg, out_path):
 
 
 def _write_table7_sheet(wb, a):
-    """Write the Table 7 "market alignment" sheet.
-
-    ``Analysis.table7`` is a single-year table (``{"year", "items"}``), not a
-    multi-year rank table, so it gets its own layout: rank, HS code, product,
-    the year's Kenya export value, and the three fraction columns.
-    """
-    t7 = a.table7 or {}
-    rows = t7.get("items") or []
-    if not rows:
-        return
     ws = wb.create_sheet("Table 7 - Market Alignment")
-    year = t7.get("year") or a.latest(a.table5)
-    headers = ["Rank", "HS Code", "Product",
-               "Kenya Value USD M (%s)" % year,
-               "Kenya Share %",
-               "%s Import Share %%" % a.country,
-               "Annual Growth %"]
-    widths = [8, 10, 40, 20, 13, 22, 15]
-    r = _title_row(ws, 1, "Table 7 - Market Alignment", len(headers))
-    r = _write_header_row(ws, r, headers, widths)
-    first = r
+    t7 = a.table7
+    years = t7.get("years") or a.years
+    n = len(years)
+    rows = t7.get("data") or []
+    r = _title_row(ws, 1, "Table 7 - Market Alignment", 3 + n)
+    hr = r
+    ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=2 + n)
+    ws.cell(r, 3).value = "Kenya exports to %s (USD Million)" % a.country
+    ws.cell(r, 1).value = "Rank"
+    ws.cell(r, 2).value = "Country"
+    ws.cell(r, 3 + n).value = "Share in %s %%" % years[-1]
+    ws.merge_cells(start_row=r, start_column=2 + n, end_row=r,
+                   end_column=3 + n)
+    for cc in range(1, 4 + n):
+        cell = ws.cell(hr, cc)
+        cell.font = HDR_FONT
+        cell.fill = HDR_FILL
+        cell.alignment = CENTER
+        cell.border = Border(top=THICK, bottom=THIN, left=THIN, right=THIN)
+    rr = hr + 1
+    first = None
     for d in rows:
-        ws.cell(r, 1).value = d.get("rank")
-        ws.cell(r, 2).value = d.get("code")
-        ws.cell(r, 3).value = d.get("label")
-        _value_cell(ws.cell(r, 4), d.get("value"), "#,##0.0")
-        for col, key in ((5, "kenya_share"), (6, "partner_share"),
-                         (7, "growth")):
-            v = d.get(key)
-            cell = ws.cell(r, col)
-            if v is not None:
-                cell.value = round(v, 6)
-                cell.number_format = "0.0%"
-        for cc in range(1, len(headers) + 1):
-            ws.cell(r, cc).alignment = CENTER
-            ws.cell(r, cc).border = Border(left=THIN, right=THIN,
-                                           top=THIN, bottom=THIN)
-        ws.cell(r, 3).alignment = LEFT
-        r += 1
-    _apply_borders(ws, first - 1, 1, r - 1, len(headers), len(headers))
-    _fit_col_widths(ws, widths)
+        if first is None:
+            first = rr
+        ws.cell(rr, 1).value = d.get("rank")
+        ws.cell(rr, 2).value = d.get("name")
+        for i, y in enumerate(years):
+            v = d.get("years") or []
+            c = ws.cell(rr, 3 + i)
+            val = v[i] if i < len(v) else None
+            c.value = round(val, 1) if isinstance(val, (int, float)) else ""
+            c.number_format = "#,##0.0"
+        sc = ws.cell(rr, 3 + n)
+        if d.get("share") is not None:
+            sc.value = round(d["share"], 6)
+            sc.number_format = "0.0%"
+        sc.font = Font(bold=True)
+        for cc in range(1, 4 + n):
+            ws.cell(rr, cc).alignment = CENTER
+            ws.cell(rr, cc).border = Border(left=THIN, right=THIN,
+                                            top=THIN, bottom=THIN)
+        ws.cell(rr, 2).alignment = LEFT
+        rr += 1
+    last = rr - 1 if first is not None else hr
+    _apply_borders(ws, hr, 1, last, 3 + n, 3 + n)
+    _fit_col_widths(ws, [8, 30] + [11] * n + [12])
 
 
 def _add_doughnut(ws, top_row, title, labels_values, colors=None,
@@ -587,13 +613,13 @@ def _write_charts_sheet(wb, a):
     if exp:
         ws = wb.create_sheet("Figure 2 - Top Exports")
         _add_pie(ws, 1, "Share of Kenya's Top Exports to %s in %s"
-                 % (a.country, a.latest(a.table5)), exp)
+                 % (a.country, a.years[-1]), exp)
 
     imp = _pie_data_rows(a.table6.get("items") if a.table6 else [], 10)
     if imp:
         ws = wb.create_sheet("Figure 3 - Top Imports")
         _add_pie(ws, 1, "Share of Kenya's Top Imports from %s in %s"
-                 % (a.country, a.latest(a.table6)), imp)
+                 % (a.country, a.years[-1]), imp)
 
 
 # ---------------------------------------------------------------------------

@@ -291,6 +291,8 @@ def find_source_files(excel_dir):
     _cands = {r: [] for r in _PRODUCT_ROLES}
     bilaterals = []
     for fname in sorted(os.listdir(excel_dir)):
+        if fname.startswith("~$"):
+            continue          # Office lock/owner file (workbook open in Excel)
         if not is_spreadsheet(fname):
             continue
         low = fname.lower().replace(" ", "_")
@@ -848,7 +850,8 @@ def prepare(extracted, years, top_n, divisor, is_markets):
     t_latest = total["vals"][-1] if total else None
     for it in shown:
         it["share"] = share(it["vals"][-1], t_latest)
-    total["share"] = share(t_latest, t_latest) if total else None
+    if total is not None:
+        total["share"] = share(t_latest, t_latest)
     all_other = {"vals": ao_vals,
                  "share": share(ao_vals[-1], t_latest) if total else None}
 
@@ -1080,8 +1083,67 @@ def _finalize(ws, path, cache):
 # ---------------------------------------------------------------------------
 # Table writers
 # ---------------------------------------------------------------------------
+def _write_template_header(ws, top, years, name_labels, flow_title, unit_text):
+    """Write the strict three-row table header used by
+    ``Templates/table template.xlsx``.
+
+    ``top`` marks the first header row::
+
+        +--------+-------------+------------------+--------+
+        | Rank   | name col(s) | flow title       | Share  |
+        | in     |   (merged)  |------------------| in     |
+        | YYYY   |             | year1 year2 ...  | YYYY   |
+        |        |             |------------------|        |
+        |        |             | unit label       |        |
+        +--------+-------------+------------------+--------+
+
+    The Rank, name and Share columns are merged down through all three rows;
+    the flow title (row ``top``) and the unit label (row ``top + 2``) each
+    span the year columns.  Returns ``(first_data_row, share_col)``.
+    """
+    n = len(years)
+    latest = years[-1]
+    name_start = 2
+    name_end = 1 + len(name_labels)
+    y_start = name_end + 1
+    y_end = y_start + n - 1
+    share_col = y_end + 1
+    hfont = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
+    wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def hcell(r, c, value):
+        cell = ws.cell(r, c)
+        cell.value = value
+        cell.font = hfont
+        cell.fill = HDR_FILL
+        cell.alignment = wrap
+
+    # Rank column (merged over the three header rows)
+    merge(ws, top, 1, top + 2, 1)
+    hcell(top, 1, f"Rank\nin\n{latest}")
+    # Name column(s)
+    for j, label in enumerate(name_labels):
+        c = name_start + j
+        merge(ws, top, c, top + 2, c)
+        hcell(top, c, label)
+    # Flow title (row top, spanning the year columns)
+    merge(ws, top, y_start, top, y_end)
+    hcell(top, y_start, flow_title)
+    # Year labels (row top + 1, one per year column)
+    for k, y in enumerate(years):
+        hcell(top + 1, y_start + k, y)
+    # Unit label (row top + 2, spanning the year columns)
+    merge(ws, top + 2, y_start, top + 2, y_end)
+    hcell(top + 2, y_start, unit_text)
+    # Share column (merged over the three header rows)
+    merge(ws, top, share_col, top + 2, share_col)
+    hcell(top, share_col, f"Share\nin\n{latest}")
+    return top + 3, share_col
+
+
 def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
-                       row1_label=None, row1_title=None, cache=None):
+                       row1_label=None, row1_title=None, unit_text=None,
+                       cache=None):
     """Table 1 (import source markets) and Table 3 (export destinations).
 
     The share column, the "All other countries" row and the "World" row are
@@ -1098,8 +1160,8 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
     label_col = "Importers" if is_exports else "Exporters"
     verb = ("Importing Countries from " if is_exports else "List of Exporters to ")
     verb += rep
-    if not unit_row:
-        verb += "\nValue in USD Billion"
+    if unit_text is None:
+        unit_text = "Value in USD Billion"
 
     # optional title row (Table 1 only)
     if row1_label or row1_title:
@@ -1114,40 +1176,8 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
         title_rows = 0
 
     h = 1 + title_rows
-    share_col = 3 + n
-    
-    # Header row with dark navy fill
-    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=HEADER_FONT_SIZE, 
-             fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, 1).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, 1, h + 1, 1)
-    
-    put_text(ws, h, 2, label_col, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, 2).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, 3, h, 2 + n)
-    put_text(ws, h, 3, verb, bold=True, size=HEADER_FONT_SIZE if unit_row else HEADER_FONT_SIZE,
-             fill=None if unit_row else HDR_FILL, wrap=True, align="center", use_row_fill=False)
-    if not unit_row:
-        ws.cell(h, 3).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, share_col, h + 1, share_col)
-    put_text(ws, h, share_col, f"Share in {latest} %", bold=True, size=HEADER_FONT_SIZE, 
-             fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, share_col).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-
-    # years row
-    for k, y in enumerate(years):
-        put_text(ws, h + 1, 3 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
-        ws.cell(h + 1, 3 + k).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-
-    if unit_row:
-        merge(ws, h + 2, 3, h + 2, 2 + n)
-        put_text(ws, h + 2, 3, "Value in USD Billion", bold=True, size=HEADER_FONT_SIZE,
-                 fill=HDR_FILL, align="center", use_row_fill=False)
-        ws.cell(h + 2, 3).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-        put_text(ws, h + 2, 2, "", bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
-        row0 = h + 3
-    else:
-        row0 = h + 2
+    row0, share_col = _write_template_header(
+        ws, h, years, [label_col], verb, unit_text)
 
     # data rows
     r_first = row0
@@ -1207,7 +1237,7 @@ def write_market_table(ws, data, rep, is_exports, unit_row, kenya_highlight,
 
 def write_product_table(ws, data, hdr, unit_row,
                         row1_label=None, row1_title=None,
-                        prefix_apostrophe=True, cache=None):
+                        prefix_apostrophe=True, unit_text=None, cache=None):
     """Tables 2, 4, 5, 6 (product tables).
 
     The share column, the "All other products" row and the "All products"
@@ -1233,37 +1263,10 @@ def write_product_table(ws, data, hdr, unit_row,
         title_rows = 0
 
     h = 1 + title_rows
-    # Header row with dark navy fill
-    put_text(ws, h, 1, f"Rank in {latest}", bold=True, size=HEADER_FONT_SIZE, 
-             fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, 1).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, 2, h + 1, 2)
-    put_text(ws, h, 2, "Code", bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, 2).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, 3, h + 1, 3)
-    put_text(ws, h, 3, "Product label", bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, 3).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, 4, h, 3 + n)
-    put_text(ws, h, 4, hdr, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, wrap=True, align="center", use_row_fill=False)
-    ws.cell(h, 4).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-    merge(ws, h, 4 + n, h + 1, 4 + n)
-    put_text(ws, h, 4 + n, f"Share in {latest} %", bold=True, size=HEADER_FONT_SIZE, 
-             fill=HDR_FILL, align="center", use_row_fill=False)
-    ws.cell(h, 4 + n).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-
-    # years row
-    for k, y in enumerate(years):
-        put_text(ws, h + 1, 4 + k, y, bold=True, size=HEADER_FONT_SIZE, fill=HDR_FILL, align="center", use_row_fill=False)
-        ws.cell(h + 1, 4 + k).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-
-    if unit_row:
-        merge(ws, h + 2, 4, h + 2, 3 + n)
-        put_text(ws, h + 2, 4, "Value in USD Billion", bold=True, size=HEADER_FONT_SIZE,
-                 fill=HDR_FILL, align="center", use_row_fill=False)
-        ws.cell(h + 2, 4).font = Font(name=FONT, size=HEADER_FONT_SIZE, bold=True, color=HDR_FONT_COLOR)
-        row0 = h + 3
-    else:
-        row0 = h + 2
+    if unit_text is None:
+        unit_text = "Value in USD Billion"
+    row0, share_col = _write_template_header(
+        ws, h, years, ["Code", "Product label"], hdr, unit_text)
 
     # data rows
     r_first = row0
@@ -1582,55 +1585,50 @@ def generate_tables(excel_dir, out_dir, top_n):
     os.makedirs(out_dir, exist_ok=True)
     files = find_source_files(excel_dir)
 
-    # ---- per-table year windows ------------------------------------------
-    # Each source keeps its own last-up-to-five consecutive years. Product
-    # downloads often run a year or two ahead of the by-country (market)
-    # downloads, so forcing a single shared window would silently drop the
-    # newest product years. The report still keeps one report year -- the
-    # latest year common to all six tables -- for the narrative, while every
-    # table shows the years its own source actually carries.
+    # ---- common year set: all six tables must share the same years ---------
     keys = ("table1", "table2", "table3", "table4", "table5", "table6")
-    t_years = {}
+    years_sets = []
     for k in keys:
         _, _, ys, _ = parse_source(files[k])
-        t_years[k] = _pick_years(ys)[-5:]
-    # Years common to every table (drives the report year); falls back to the
-    # union when the six downloads do not overlap at all.
-    shared_years = sorted(set.intersection(*(set(v) for v in t_years.values()))) \
-        or sorted(set.union(*(set(v) for v in t_years.values())))
+        years_sets.append(set(ys))
+    full_years = _pick_years(sorted(set.intersection(*years_sets)))
+    # Tables 1-6 show only the last five years; Figure 1 (the trade balance)
+    # uses the last up-to-TEN consecutive years so the analysis covers e.g.
+    # 2016-2025 whenever the source data carries that history.
+    table_years = full_years[-5:] if len(full_years) > 5 else full_years
     # The balance window is derived from the Kenya exports (Table 5) and
     # imports (Table 6) sources alone -- it must not shrink just because the
     # narrower Tables 1-4 cover fewer years. Older history already captured
     # in an existing balance workbook is merged back in further below.
     _, _, ys5_all, _ = parse_source(files["table5"])
     _, _, ys6_all, _ = parse_source(files["table6"])
-    balance_window = _balance_years(set(ys5_all) & set(ys6_all), n=10) or shared_years
+    balance_window = _balance_years(set(ys5_all) & set(ys6_all), n=10) or full_years
 
     # ---- Table 1: import source markets --------------------------------
-    rows, ycols, years, labels = parse_source(files["table1"], years=t_years["table1"])
+    rows, ycols, years, labels = parse_source(files["table1"], years=table_years)
     total, items = extract_markets(rows, ycols)
     rep = labels["reporter"]
     d1 = prepare({"total": total, "items": items}, years, TOP_MARKETS, 1e6, is_markets=True)
 
     # ---- Table 3: export destinations -----------------------------------
-    rows, ycols, years, labels = parse_source(files["table3"], years=t_years["table3"])
+    rows, ycols, years, labels = parse_source(files["table3"], years=table_years)
     total, items = extract_markets(rows, ycols)
     d3 = prepare({"total": total, "items": items}, years, TOP_MARKETS, 1e6, is_markets=True)
 
     # ---- Table 2: import products ---------------------------------------
-    rows, ycols, years, labels = parse_source(files["table2"], years=t_years["table2"])
+    rows, ycols, years, labels = parse_source(files["table2"], years=table_years)
     total, items = extract_products(rows, ycols)
     d2 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
     p_total_raw = total   # NOTE: USD Million -- prepare() rescaled in place
     p_items_raw = items   # (same object), not raw USD Thousand
 
     # ---- Table 4: export products ---------------------------------------
-    rows, ycols, years, labels = parse_source(files["table4"], years=t_years["table4"])
+    rows, ycols, years, labels = parse_source(files["table4"], years=table_years)
     total, items = extract_products(rows, ycols)
     d4 = prepare({"total": total, "items": items}, years, top_n, 1e6, is_markets=False)
 
     # ---- Table 5: Kenya exports to partner ------------------------------
-    rows, ycols, years, labels = parse_source(files["table5"], years=t_years["table5"])
+    rows, ycols, years, labels = parse_source(files["table5"], years=table_years)
     total, items = extract_kenya(rows, ycols)
     krep = labels["reporter"] or "Kenya"
     kpartner = labels["partner"]
@@ -1639,17 +1637,13 @@ def generate_tables(excel_dir, out_dir, top_n):
     k_items_raw = items   # (same object), not raw USD Thousand
 
     # ---- Table 6: Kenya imports from partner ----------------------------
-    rows, ycols, years, labels = parse_source(files["table6"], years=t_years["table6"])
+    rows, ycols, years, labels = parse_source(files["table6"], years=table_years)
     total, items = extract_kenya(rows, ycols)
     d6 = prepare({"total": total, "items": items}, years, top_n, 1e3, is_markets=False)
 
     # ---- Table 7: Kenya's export composition + market alignment -----------
-    # Alignment compares Kenya's exports to the partner (Table 5) with the
-    # partner's world imports (Table 2) in their latest covered year, so label
-    # the table with the Table 5 window rather than the shared report window.
-    t7_years = t_years["table5"] or years
     bilateral_items = compute_bilateral_alignment(
-        k_items_raw, k_total_raw, p_items_raw, p_total_raw, t7_years)
+        k_items_raw, k_total_raw, p_items_raw, p_total_raw, years)
 
     rep_possessive = rep if rep.endswith("s") else rep + "'s"
 
@@ -1660,7 +1654,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     write_market_table(ws, d1, rep, is_exports=False, unit_row=False,
                        kenya_highlight=True, cache=cache,
                        row1_label="Table 1:",
-                       row1_title=f"{rep} Import Source Markets")
+                       row1_title=f"{rep} Import Source Markets",
+                       unit_text="Value in USD Billion")
     set_widths(ws, {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
                     "G": 12, "H": 12})
     out["t1"] = os.path.join(out_dir, f"Table 1 {rep} Import Source Markets.xlsx")
@@ -1670,7 +1665,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     cache = []
     write_product_table(ws, d2, "Imported Products from the World",
                         unit_row=True, cache=cache,
-                        row1_title=f"List of products imported by {rep}")
+                        row1_title=f"List of products imported by {rep}",
+                        unit_text="Value in USD Billion")
     set_widths(ws, {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
                     "G": 12, "H": 12, "I": 12})
     out["t2"] = os.path.join(out_dir, f"Table 2 {rep} Lead Imports.xlsx")
@@ -1679,7 +1675,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 3"
     cache = []
     write_market_table(ws, d3, rep, is_exports=True, unit_row=True,
-                       kenya_highlight=True, cache=cache)
+                       kenya_highlight=True, cache=cache,
+                       unit_text="Value in USD Billion")
     set_widths(ws, {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
                     "G": 12, "H": 12})
     out["t3"] = os.path.join(out_dir, f"Table 3 {rep} Lead Export Destinations.xlsx")
@@ -1688,9 +1685,10 @@ def generate_tables(excel_dir, out_dir, top_n):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 4"
     cache = []
     write_product_table(
-        ws, d4, "Exported Products to the World\nValue in USD Billions",
+        ws, d4, "Exported Products to the World",
         unit_row=False, cache=cache,
-        row1_title=f"{rep_possessive} Lead Export Products to the World")
+        row1_title=f"{rep_possessive} Lead Export Products to the World",
+        unit_text="Value in USD Billion")
     set_widths(ws, {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
                     "G": 12, "H": 12, "I": 12})
     out["t4"] = os.path.join(out_dir, f"Table 4 {rep} Lead Export Products.xlsx")
@@ -1699,8 +1697,8 @@ def generate_tables(excel_dir, out_dir, top_n):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 5"
     cache = []
     write_product_table(
-        ws, d5, f"{krep}'s exports to {kpartner}\nValue in USD Million",
-        unit_row=False, cache=cache)
+        ws, d5, f"{krep}'s exports to {kpartner}",
+        unit_row=False, cache=cache, unit_text="Value in USD Million")
     set_widths(ws, {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
                     "G": 12, "H": 12, "I": 12})
     out["t5"] = os.path.join(out_dir, f"Table 5 {krep} Exports to {kpartner}.xlsx")
@@ -1709,10 +1707,11 @@ def generate_tables(excel_dir, out_dir, top_n):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 6"
     cache = []
     write_product_table(
-        ws, d6, f"{krep}'s imports from {kpartner}\nValue in USD Million",
+        ws, d6, f"{krep}'s imports from {kpartner}",
         unit_row=False, cache=cache,
         row1_label="Table 6",
-        row1_title=f"{krep}'s Top imports from {kpartner}")
+        row1_title=f"{krep}'s Top imports from {kpartner}",
+        unit_text="Value in USD Million")
     set_widths(ws, {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
                     "G": 12, "H": 12, "I": 12})
     out["t6"] = os.path.join(out_dir, f"Table 6 {krep} Top Imports from {kpartner}.xlsx")
@@ -1721,7 +1720,7 @@ def generate_tables(excel_dir, out_dir, top_n):
     # Table 7: Kenya's export composition + market alignment
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 7"
     cache = []
-    write_bilateral_table(ws, bilateral_items, t7_years, krep, kpartner,
+    write_bilateral_table(ws, bilateral_items, years, krep, kpartner,
                           row1_label="Table 7:",
                           row1_title=f"{krep}'s Export Composition and Market Alignment with {kpartner}")
     set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})
@@ -1792,37 +1791,42 @@ def generate_tables(excel_dir, out_dir, top_n):
     write_market_table(ws, d1, rep, is_exports=False, unit_row=False,
                        kenya_highlight=True, cache=c,
                        row1_label="Table 1:",
-                       row1_title=f"{rep} Import Source Markets")
+                       row1_title=f"{rep} Import Source Markets",
+                       unit_text="Value in USD Billion")
     set_widths(ws, widths_mkt); cache_all["Table 1"] = dict(c)
     ws = wb_all["Table 2"]; c = []
     write_product_table(ws, d2, "Imported Products from the World",
                         unit_row=True, cache=c,
-                        row1_title=f"List of products imported by {rep}")
+                        row1_title=f"List of products imported by {rep}",
+                        unit_text="Value in USD Billion")
     set_widths(ws, widths_prd); cache_all["Table 2"] = dict(c)
     ws = wb_all["Table 3"]; c = []
     write_market_table(ws, d3, rep, is_exports=True, unit_row=True,
-                       kenya_highlight=True, cache=c)
+                       kenya_highlight=True, cache=c,
+                       unit_text="Value in USD Billion")
     set_widths(ws, widths_mkt); cache_all["Table 3"] = dict(c)
     ws = wb_all["Table 4"]; c = []
     write_product_table(
-        ws, d4, "Exported Products to the World\nValue in USD Billions",
+        ws, d4, "Exported Products to the World",
         unit_row=False, cache=c,
-        row1_title=f"{rep_possessive} Lead Export Products to the World")
+        row1_title=f"{rep_possessive} Lead Export Products to the World",
+        unit_text="Value in USD Billion")
     set_widths(ws, widths_prd); cache_all["Table 4"] = dict(c)
     ws = wb_all["Table 5"]; c = []
     write_product_table(
-        ws, d5, f"{krep}'s exports to {kpartner}\nValue in USD Million",
-        unit_row=False, cache=c)
+        ws, d5, f"{krep}'s exports to {kpartner}",
+        unit_row=False, cache=c, unit_text="Value in USD Million")
     set_widths(ws, widths_prd); cache_all["Table 5"] = dict(c)
     ws = wb_all["Table 6"]; c = []
     write_product_table(
-        ws, d6, f"{krep}'s imports from {kpartner}\nValue in USD Million",
+        ws, d6, f"{krep}'s imports from {kpartner}",
         unit_row=False, cache=c,
         row1_label="Table 6",
-        row1_title=f"{krep}'s Top imports from {kpartner}")
+        row1_title=f"{krep}'s Top imports from {kpartner}",
+        unit_text="Value in USD Million")
     set_widths(ws, widths_prd); cache_all["Table 6"] = dict(c)
     ws = wb_all["Table 7"]; c = []
-    write_bilateral_table(ws, bilateral_items, t7_years, krep, kpartner,
+    write_bilateral_table(ws, bilateral_items, years, krep, kpartner,
                           row1_label="Table 7:",
                           row1_title=f"{krep}'s Export Composition and Market Alignment with {kpartner}")
     set_widths(ws, {"A": 7, "B": 10, "C": 48, "D": 18, "E": 14, "F": 20, "G": 14})
