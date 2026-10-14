@@ -454,7 +454,7 @@ def _country_from_download_name(path):
     """
     stem = os.path.splitext(os.path.basename(str(path)))[0].lower()
     stem = stem.replace(" ", "_")
-    stem = re.sub(r"_*\(\d+\)$", "", stem)
+    stem = re.sub(r"_*\([^)]*\)", "", stem)   # drop '(1)', '(Mirror)', etc.
     stem = re.sub(r"_all$", "", stem)
     m = re.search(r"(?:^|_)by_([a-z0-9_]+)$", stem) \
         or re.search(r"_and_([a-z0-9_]+)$", stem)
@@ -554,7 +554,7 @@ def _parse_classic_markets(grid, path, years):
             continue
         label = _cell_text(r[0])
         vals = [r[i] if i < len(r) else None for i, _ in chosen]
-        cd = "000" if label.lower() == "world" else "---"
+        cd = "000" if label.lower() in ("world", "total") else "---"
         rows.append(["", "", cd, label, "TOTAL", label] + vals)
 
     labels = {"reporter": partner or "Partner", "partner": "World"}
