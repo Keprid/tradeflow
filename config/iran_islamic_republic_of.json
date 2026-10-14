@@ -1,0 +1,57 @@
+{
+  "country": {
+    "name": "Iran Islamic Republic of",
+    "short": "IRAN",
+    "title": "IRAN",
+    "adjective": "Iranian",
+    "possessive": "Iran's",
+    "capital": "Tehran"
+  },
+  "report": {
+    "month_year": "OCTOBER 2026",
+    "year": 2023,
+    "title_line1": "KENYA- IRAN TRADE FLOW",
+    "title_line2": "ANALYSIS REPORT"
+  },
+  "world_trade": {
+    "world_exports_usd_billion": 25800,
+    "world_imports_usd_billion": 25200
+  },
+  "export_potential": {
+    "image": "../assets/export_potential_iran.png",
+    "paragraphs": [
+      "The products with greatest export potential from Kenya to Iran are ...",
+      "Kenya has the highest supply capacity in ..."
+    ]
+  },
+  "map": {
+    "image": "../assets/map_iran.png",
+    "source": "Google map"
+  },
+  "quick_facts": [
+    ["Official name", "Islamic Republic of Iran (Jomhuri-ye Eslami-ye Iran)"],
+    ["Head of state", "Supreme Leader Ali Khamenei (since 1989)"],
+    ["Head of government", "President Masoud Pezeshkian (since July 2024)"],
+    ["Capital", "Tehran"],
+    ["Form of government", "Islamic republic (unitary, theocratic)"],
+    ["Official language", "Persian (Farsi)"],
+    ["Total area (sq km)", "1,648,195 sq km"],
+    ["Population", "about 89 million (2025)"],
+    ["Population rank", "18th in the world"],
+    ["Population projection 2030", "about 92 million (UN World Population Prospects)"],
+    ["Population density", "about 54 persons per sq km"],
+    ["Urban / rural population", "about 77% urban / 23% rural"],
+    ["Life expectancy at birth", "about 77 years (World Bank)"],
+    ["Literacy (age 15 and over)", "about 89%"],
+    ["Monetary unit", "Iranian rial (IRR); 1 rial = 100 dinars (10 rials = 1 toman)"],
+    ["Currency exchange rate", "US$1 = market rate, IRR (managed multiple rates; varies)"],
+    ["GNI", "about US$400 billion (World Bank)"],
+    ["GNI per capita", "about US$4,500 (World Bank Atlas method)"]
+  ],
+  "references": [
+    "Google Maps",
+    "World Bank (World Development Indicators; Macro Poverty Outlook), IMF (World Economic Outlook)",
+    "WTO (member information, tariff and trade data)",
+    "Statistical Center of Iran"
+  ]
+}
