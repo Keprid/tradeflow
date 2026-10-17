@@ -55,6 +55,7 @@ import make_quarterly_tables as mqt      # noqa: E402
 import generate_quarterly_report as gqr  # noqa: E402
 import generate_product_profile as gpp   # noqa: E402
 import generate_crafts_report as gcr     # noqa: E402
+import generate_competitor_analysis as gca  # noqa: E402
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
@@ -895,6 +896,25 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Could not recognise the services upload set.\n"
             f"Uploaded files: {uploaded}\n"
             f"Expected filenames containing any of: {kw_list}")
+    if report_type == "competitor":
+        # Explicitly selected: need the per-product supplying-markets
+        # downloads ("...-imports-from-world-by-exporter_<HS>.xlsx").
+        if any(gca.is_supplier_download(n) for n in names):
+            return "competitor", ""
+        uploaded = ", ".join(sorted(names))
+        return None, (
+            f"Could not recognise the competitor-analysis upload set.\n"
+            f"Uploaded files: {uploaded}\n"
+            f"Expected per-product supplying-market downloads named like "
+            f"'<partner>-imports-from-world-by-exporter_<HS>.xlsx' (ITC "
+            f"Trade Map: List of supplying markets for a product imported "
+            f"by <partner>, one file per product).")
+    # Competitor files are recognised even without an explicit selection
+    # (they would otherwise look like a goods "raw" set): when every workbook
+    # is a per-product supplying-markets download the set is a competitor
+    # analysis, not a goods report.
+    if names and all(gca.is_supplier_download(n) for n in names):
+        return "competitor", ""
     # The raw services files are recognised by their own distinctive keywords,
     # so the upload set can be detected even when the client did not explicitly
     # select the "Services Trade Flow" report type.
@@ -1359,6 +1379,43 @@ def _run_crafts_pipeline(job_dir, cfg_id, top_n, logs):
     return report_path, manifest
 
 
+def _run_competitor_pipeline(job_dir, logs):
+    """Standalone competitor analysis from per-product supplying-markets
+    downloads. Independent of the goods flow on purpose: the products to
+    analyse are only known after a first trade-flow run."""
+    uploads = job_dir / "uploads"
+    logs.append("Mode: per-product supplying-market downloads -> "
+                "building competitor analysis ...")
+    try:
+        result = gca.generate(str(uploads), str(job_dir))
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Competitor analysis failed: {e}")
+    products = result["products"]
+    logs.append("Products analysed: %d (review year %s)"
+                % (len(products), result["year"]))
+    for p in products:
+        logs.append("  %d. HS %s - imported %s"
+                    % (p["rank"], p["code"],
+                       "{:,.0f}".format(p["world"]) if p["world"] is not None
+                       else "n/a"))
+    report_name = os.path.basename(result["docx"])
+    manifest = {
+        "mode": "competitor",
+        "report_type": "competitor",
+        "report_name": report_name,
+        "png_name": os.path.basename(result["png"]),
+        "xlsx_name": os.path.basename(result["xlsx"]),
+        "year": result["year"],
+        "partner": result["partner"],
+    }
+    logs.append("Saved %s (+ .png, .xlsx) in the job folder" % report_name)
+    (job_dir / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    return job_dir / report_name, manifest
+
+
 def _run_quarterly_pipeline(job_dir, top_n, mode, logs):
     uploads = job_dir / "uploads"
     tables = job_dir / "tables"
@@ -1500,6 +1557,10 @@ def api_status(job_id: str):
         if m.get("report_type") in ("product", "crafts"):
             resp["product_tables_url"] = f"/api/product-tables/{job_id}"
             resp.pop("tables_url", None)
+        if m.get("report_type") == "competitor":
+            resp["png_url"] = f"/api/competitor-file/{job_id}/png"
+            resp["xlsx_url"] = f"/api/competitor-file/{job_id}/xlsx"
+            resp.pop("tables_url", None)
         if m.get("promotion_name"):
             resp["promotion_url"] = f"/api/promotion/{job_id}"
         return resp
@@ -1525,8 +1586,10 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         raise HTTPException(400, "Please select files (or a zip) to upload.")
     if top < 1:
         raise HTTPException(400, "top must be >= 1")
-    if report_type not in ("goods", "services", "quarterly", "product"):
-        raise HTTPException(400, "report_type must be 'goods', 'services', 'quarterly' or 'product'")
+    if report_type not in ("goods", "services", "quarterly", "product",
+                           "competitor"):
+        raise HTTPException(400, "report_type must be 'goods', 'services', "
+                                 "'quarterly', 'product' or 'competitor'")
 
     job_dir = _new_job_dir()
     try:
@@ -1554,6 +1617,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
             report_type = "product"
         elif mode == "crafts":
             report_type = "crafts"
+        elif mode == "competitor":
+            report_type = "competitor"
         elif mode in ("raw", "ready"):
             report_type = "goods"
 
@@ -1572,6 +1637,9 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         elif report_type == "crafts":
             job_fn = lambda logs: _run_crafts_pipeline(      # noqa: E731
                 job_dir, config, top, logs)
+        elif report_type == "competitor":
+            job_fn = lambda logs: _run_competitor_pipeline(   # noqa: E731
+                job_dir, logs)
         else:
             job_fn = lambda logs: _run_pipeline(             # noqa: E731
                 job_dir, config, top, mode, logs, promotion=promotion)
@@ -1660,6 +1728,30 @@ def api_product_tables(job_id: str):
     return FileResponse(
         str(tables), filename=tables.name,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.get("/api/competitor-file/{job_id}/{kind}")
+def api_competitor_file(job_id: str, kind: str):
+    """Download a competitor-analysis deliverable (png / xlsx / docx)."""
+    job_dir = JOBS_DIR / job_id
+    manifest_path = job_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(404, "Job not found (or expired).")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("report_type") != "competitor":
+        raise HTTPException(404, "Not a competitor-analysis job.")
+    key = {"png": "png_name", "xlsx": "xlsx_name", "docx": "report_name"}.get(kind)
+    if key is None:
+        raise HTTPException(400, "kind must be png, xlsx or docx.")
+    path = job_dir / manifest.get(key, "")
+    if not path.exists():
+        raise HTTPException(404, "Deliverable not found.")
+    media = {
+        "png": "image/png",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }[kind]
+    return FileResponse(str(path), filename=path.name, media_type=media)
 
 
 # ---------------------------------------------------------------------------

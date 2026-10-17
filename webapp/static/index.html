@@ -859,6 +859,10 @@ input[type=file]::file-selector-button:hover {
         <input type="radio" name="report_type" value="product" id="rt-product">
         <label for="rt-product"><i class="fas fa-boxes"></i> Product Profile</label>
       </div>
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="competitor" id="rt-competitor">
+        <label for="rt-competitor"><i class="fas fa-chess"></i> Competitor Analysis</label>
+      </div>
     </div>
 
     <div id="cfg-wrapper" style="display:none;" aria-hidden="true">
@@ -898,6 +902,11 @@ input[type=file]::file-selector-button:hover {
     <div id="product-profile-wrap" class="info-box">
       <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i>
       &nbsp;<b>Product Profile Mode:</b> Upload the <b>ITC matrix files</b> for a product family (or a <b>.zip</b> containing them). The product family is <b>auto-detected</b> from the files; pick a specific profile (e.g. coffee, crafts) only if you prefer. A Word report plus an editable Excel deliverable are generated.
+    </div>
+
+    <div id="competitor-wrap" class="info-box" style="display:none;" aria-hidden="true">
+      <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i>
+      &nbsp;<b>Competitor Analysis Mode:</b> Run this <b>separately, after the goods trade flow</b> &mdash; that first run tells you which products matter. Then download, <b>for each product</b>, the ITC Trade Map <i>&ldquo;List of supplying markets for a product imported by &lt;partner&gt;&rdquo;</i> file and upload them all (or a <b>.zip</b>). Expected names like <code>nigerias-imports-from-world-by-exporter_0902.xlsx</code>. Output: <b>COMPETITOR ANALYSIS</b> as .png (paste-ready), .docx and .xlsx &mdash; products ranked by import value, top exporters with value &amp; share, Kenya highlighted in red. The tariff column is left empty.
     </div>
 
     <div class="row">
@@ -995,6 +1004,7 @@ input[type=file]::file-selector-button:hover {
   const servicesInfo = $('services-info');
   const quarterlyInfo = $('quarterly-info');
   const productInfo = $('product-profile-wrap');
+  const competitorInfo = $('competitor-wrap');
   const productCfgWrapper = $('product-cfg-wrapper');
   const productCfgSelect = $('product-cfg');
   const filesInput = $('files');
@@ -1335,6 +1345,7 @@ input[type=file]::file-selector-button:hover {
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'none';
+        competitorInfo.style.display = 'none';
         productCfgWrapper.style.display = 'none';
       } else if (r.value === 'services') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
@@ -1348,6 +1359,7 @@ input[type=file]::file-selector-button:hover {
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'none';
+        competitorInfo.style.display = 'none';
         productCfgWrapper.style.display = 'none';
       } else if (r.value === 'product') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
@@ -1361,7 +1373,23 @@ input[type=file]::file-selector-button:hover {
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'block';
+        competitorInfo.style.display = 'none';
         productCfgWrapper.style.display = 'block';
+      } else if (r.value === 'competitor') {
+        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
+          'Run this <b>after the goods trade flow</b>. Upload the per-product ITC Trade Map ' +
+          '<b>&ldquo;List of supplying markets for a product imported by &lt;partner&gt;&rdquo;</b> files, ' +
+          'one per product (names like <code>nigerias-imports-from-world-by-exporter_0902.xlsx</code>), or a <b>.zip</b>. ' +
+          'Produces <b>COMPETITOR ANALYSIS</b> as .png / .docx / .xlsx.';
+        cfgSelect.value = '__auto__';
+        cfgWrapper.style.display = 'none';
+        servicesInfo.style.display = 'none';
+        quarterlyInfo.style.display = 'none';
+        partnerWrap.style.display = 'none';
+        promotionWrap.style.display = 'none';
+        productInfo.style.display = 'none';
+        competitorInfo.style.display = 'block';
+        productCfgWrapper.style.display = 'none';
       } else {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
           'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
@@ -1374,6 +1402,7 @@ input[type=file]::file-selector-button:hover {
         partnerWrap.style.display = 'block';
         promotionWrap.style.display = 'flex';
         productInfo.style.display = 'none';
+        competitorInfo.style.display = 'none';
         productCfgWrapper.style.display = 'none';
       }
     });
@@ -1457,17 +1486,31 @@ input[type=file]::file-selector-button:hover {
       }
       appendLog('Done.', 'ok');
       const isProduct = final.mode === 'product' || final.mode === 'crafts';
+      const isCompetitor = final.mode === 'competitor';
       $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
-        `${isProduct ? 'Product profile' : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables')}` +
+        `${isCompetitor ? 'Competitor analysis'
+          : (isProduct ? 'Product profile'
+          : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'))}` +
         ` &middot; job ${final.job_id}`;
       $('dl-report').href = final.report_url;
-      $('dl-tables').href = isProduct ? (final.product_tables_url || '#') : final.tables_url;
-      $('dl-tables').innerHTML = isProduct
-        ? '<i class="fas fa-file-excel"></i> Download Excel Deliverable'
-        : '<i class="fas fa-file-archive"></i> Download Tables (.zip)';
+      $('dl-report').innerHTML = isCompetitor
+        ? '<i class="fas fa-file-word"></i> Download Table (.docx)'
+        : '<i class="fas fa-file-word"></i> Download Word Report (.docx)';
+      $('dl-tables').href = isCompetitor ? (final.png_url || '#')
+        : (isProduct ? (final.product_tables_url || '#') : final.tables_url);
+      $('dl-tables').innerHTML = isCompetitor
+        ? '<i class="fas fa-image"></i> Download Table Picture (.png)'
+        : (isProduct
+          ? '<i class="fas fa-file-excel"></i> Download Excel Deliverable'
+          : '<i class="fas fa-file-archive"></i> Download Tables (.zip)');
       const dlPromo = $('dl-promotion');
-      if (final.promotion_url) {
+      if (isCompetitor && final.xlsx_url) {
+        dlPromo.href = final.xlsx_url;
+        dlPromo.innerHTML = '<i class="fas fa-file-excel"></i> Download Table (.xlsx)';
+        dlPromo.style.display = 'flex';
+      } else if (final.promotion_url) {
         dlPromo.href = final.promotion_url;
+        dlPromo.innerHTML = '<i class="fas fa-file-excel"></i> Download Promotion Workbook (.xlsx)';
         dlPromo.style.display = 'flex';
       } else {
         dlPromo.style.display = 'none';

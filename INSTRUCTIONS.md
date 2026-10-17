@@ -218,6 +218,44 @@ fake prior-year rows).
 
 ---
 
+## 6c. Competitor Analysis (standalone, after the goods flow)
+
+This step is **deliberately not bundled** into the goods report: you only
+know *which* products to analyse once the first Kenya–partner trade flow has
+been generated (its Table 5/6 show the products that matter). Run it as a
+separate step whenever the per-product downloads are ready — days later is
+fine.
+
+1. Run the goods trade flow first and note the products to analyse.
+2. For **each product**, download from ITC Trade Map the "List of supplying
+   markets for a product imported by <partner>" file (imports of that HS
+   code by exporter). Save them in one folder, e.g. `TEKTAT/`, keeping the
+   Trade Map names (`<partner>-imports-from-world-by-exporter_<HS>.xlsx`).
+3. Generate the competitor analysis:
+
+```
+python generate_competitor_analysis.py --data TEKTAT --out TEKTAT
+```
+
+or double-click **`run_competitor.bat`** (Windows; optional arguments:
+`run_competitor.bat <data_folder> <out_folder>`).
+
+Products are ranked by the partner's import value; each shows its top 5
+exporters with value and share. **Kenya's row is always shown in red** —
+when she is outside the top 5 her row carries her true rank. Three
+deliverables are written:
+
+- `COMPETITOR ANALYSIS.png` – paste-ready table picture (the report embeds
+  its tables as pictures)
+- `COMPETITOR ANALYSIS.docx` – editable Word table
+- `COMPETITOR ANALYSIS.xlsx` – editable Excel workbook
+
+The "Tariff Applied %" column is left empty (the Trade Map value-only
+download carries no tariff). Options: `--year YYYY` (default: latest year in
+the files), `--top N` (exporters per product, default 5).
+
+---
+
 ## 7. Generating a report for a different country
 
 Two ways to get the country config:
@@ -305,6 +343,8 @@ Then fill in the country-specific text that the program cannot compute:
 make_tables.py             Builds the six Table 1-6 workbooks from raw ITC files
 make_config.py             Auto-generates config/<country>.json from the data
 generate_report.py         Reads the tables and writes the Word report
+generate_competitor_analysis.py  Standalone competitor analysis (per-product
+                           supplying-markets downloads) - see section 6c
 webapp/                    FastAPI web app (main.py + static/index.html)
 config/saudi_arabia.json   Working configuration (Saudi Arabia)
 config/uae.json            Configuration for the United Arab Emirates
@@ -319,6 +359,7 @@ install_deps.bat           Finds Python and auto-installs missing packages
 tradeflow                  One-word launcher (Linux/macOS): starts the web app
 tradeflow.bat              One-word launcher (Windows): starts the web app
 run_tables.bat             Windows launcher for make_tables.py
+run_competitor.bat         Windows launcher for generate_competitor_analysis.py
 run.bat                    Windows one-click launcher for generate_report.py
 run_webapp.bat             Windows launcher for the web app
 README.md                  Technical overview
