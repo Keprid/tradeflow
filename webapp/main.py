@@ -51,8 +51,9 @@ import generate_report as gr             # noqa: E402
 import make_config                       # noqa: E402
 import make_services_tables              # noqa: E402
 import generate_services_report as gsr   # noqa: E402
-import make_quarterly_tables as mqt      # noqa: E402
-import generate_quarterly_report as gqr  # noqa: E402
+import make_period_tables as mpt             # noqa: E402
+import generate_period_report as gpr         # noqa: E402
+import period_data                           # noqa: E402
 import generate_product_profile as gpp   # noqa: E402
 import generate_crafts_report as gcr     # noqa: E402
 import generate_competitor_analysis as gca  # noqa: E402
@@ -726,9 +727,33 @@ def api_goods_partner_setup(partner: str = "", year: int = 0):
 # ---------------------------------------------------------------------------
 _SAMPLE_LABELS = {
     "services": "Services Trade Flow",
-    "quarterly": "Quarterly Performance",
+    "quarterly": "Export Performance",
     "product": "Product Profile",
     "goods": "Goods Trade Flow",
+}
+
+# Review periods of the Export Performance feature (report_type keeps its
+# internal "quarterly" name for manifest/JS routing). Each entry maps to
+# (period, quarter, half) for make_period_tables.build(); the half-year
+# sub-picker sends semi1 (Jan-Jun) or semi2 (Jul-Dec).
+_EXPORT_PERIODS = {
+    "q1": ("quarter", 1, 1),
+    "q2": ("quarter", 2, 1),
+    "q3": ("quarter", 3, 1),
+    "q4": ("quarter", 4, 1),
+    "semi1": ("semi", 1, 1),
+    "semi2": ("semi", 1, 2),
+    "annual": ("year", 1, 1),
+}
+
+_EXPORT_PERIOD_LABELS = {
+    "q1": "Q1 (Jan-Mar)",
+    "q2": "Q2 (Apr-Jun)",
+    "q3": "Q3 (Jul-Sep)",
+    "q4": "Q4 (Oct-Dec)",
+    "semi1": "Semi-Annual H1 (Jan-Jun)",
+    "semi2": "Semi-Annual H2 (Jul-Dec)",
+    "annual": "Annual (Jan-Dec)",
 }
 
 
@@ -856,16 +881,19 @@ def _detect_mode(uploads_dir, report_type="goods"):
     if report_type == "quarterly":
         stems = {os.path.splitext(n)[0] for n in names}
         if {"exports", "imports"} <= stems:
-            return "quarterly_ready", ""
-        if any(any(k in n for k in QUARTERLY_RAW_KEYWORDS) for n in names):
-            return "quarterly_raw", ""
-        uploaded = ", ".join(sorted(names))
-        kw_list = ", ".join(QUARTERLY_RAW_KEYWORDS)
-        return None, (
-            f"Could not recognise the quarterly upload set.\n"
-            f"Uploaded files: {uploaded}\n"
-            f"Expected the raw KRA extracts (filenames containing any of: "
-            f"{kw_list}) or the generated Exports.xlsx and Imports.xlsx.")
+            return None, (
+                "The generated Exports.xlsx / Imports.xlsx workbooks use the "
+                "old quarterly layout and cannot be read back as monthly "
+                "data.\nUpload the raw monthly extracts instead - the KNBS "
+                "workbook and/or the KRA extracts (...Exports by HS "
+                "Destination... / ...Imports by HS Origin...). Every sheet "
+                "is inspected individually; summary and pivot sheets are "
+                "ignored.")
+        # Any spreadsheet may carry the monthly data (KNBS workbook, KRA
+        # extracts, workbooks mixing raw and pivot sheets): the loader
+        # deciphers the file sheet by sheet and errors only when no sheet
+        # yields usable Year/Month rows.
+        return "quarterly_raw", ""
     # When the user explicitly selects a report type, honour that choice
     # before trying to auto-detect from filenames.
     # Craft product-group downloads are a product-profile dataset even though
@@ -1416,60 +1444,75 @@ def _run_competitor_pipeline(job_dir, logs):
     return job_dir / report_name, manifest
 
 
-def _run_quarterly_pipeline(job_dir, top_n, mode, logs):
+def _run_export_pipeline(job_dir, top_n, mode, period_key, logs):
+    """Export Performance: raw monthly extracts -> period tables + report.
+
+    Every sheet of every upload is inspected individually (period_data);
+    summary/pivot sheets without Year/Month columns are ignored, and the
+    review year comes from the data (the newest year present), compared
+    with the same sub-period one year earlier.
+    """
     uploads = job_dir / "uploads"
     tables = job_dir / "tables"
-    charts = job_dir / "charts"
+    period, quarter, half = _EXPORT_PERIODS[period_key]
+    logs.append("Mode: Export Performance - review period: %s"
+                % _EXPORT_PERIOD_LABELS[period_key])
 
-    if mode == "quarterly_raw":
-        logs.append("Mode: raw KRA extracts -> building quarterly pivot workbooks ...")
-        try:
-            meta = mqt.generate_quarterly_tables(
-                str(uploads), str(tables),
-                top_markets=top_n, top_products=top_n)
-        except SystemExit as e:
-            raise HTTPException(400, str(e))
-        if meta.get("comparison"):
-            logs.append("Review quarter %s %d compared with %s %d"
-                        % (meta["quarter"], meta["year"],
-                           meta["quarter"], meta["year"] - 1))
-        else:
-            logs.append(
-                "Single-year data detected -> tables built without the "
-                "year-on-year comparison columns. Upload the previous "
-                "year's extracts too to enable comparisons.")
-        excel_dir = str(tables)
-        logs.append(f"Quarterly workbooks written to {tables}")
-    else:
-        excel_dir = str(uploads)
-        logs.append("Mode: ready-made Exports/Imports workbooks -> skipping make_quarterly_tables.py")
+    # Load once up front so the job log shows which file/sheets were read;
+    # make_period_tables.build() reuses this disk cache for its own call.
+    df = period_data.load_monthly(str(uploads))
+    for unit, n in sorted(df.groupby("SourceUnit").size().items()):
+        logs.append("  read %s: %s rows" % (unit, format(n, ",")))
+    year = int(df["Year"].max())
+    chk = period_data.period_spec(period, year, half=half, quarter=quarter)
+    covered = set(df.loc[df["Year"] == year, "Month"])
+    missing = [m for m in chk["months"] if m not in covered]
+    if len(missing) == len(chk["months"]):
+        # Every month of the review period is absent (e.g. a quarter beyond
+        # the months the uploads cover) - fail with guidance instead of
+        # building an all-zero report.
+        raise HTTPException(
+            400,
+            "No data for {} {} in the uploaded files (the {} rows cover {}). "
+            "Choose a review period covered by the data, or upload extracts "
+            "that include it.".format(
+                chk["span"], year, year,
+                ", ".join(period_data.MONTH_NAMES[m] for m in sorted(covered))))
+    if missing:
+        logs.append("Note: no %s rows for part of %s %s" % (
+            year, chk["span"], year))
+    logs.append("Data years: %s; review year %d vs %d"
+                % (", ".join(str(y) for y in sorted(set(df["Year"]))),
+                   year, year - 1))
 
-    os.makedirs(charts, exist_ok=True)
-    report_name = "KENYA EXPORT PERFORMANCE REPORT.docx"   # renamed below
-    tmp_path = job_dir / report_name
-    logs.append(f"Building quarterly report (charts -> {charts})")
     try:
-        a, doc = gqr.build_quarterly_report(excel_dir, str(tmp_path),
-                                            str(charts))
+        xlsx_path, spec = mpt.build(
+            str(uploads), str(tables), period, year=year,
+            half=half, quarter=quarter,
+            top_products=top_n, top_markets=top_n)
     except SystemExit as e:
         raise HTTPException(400, str(e))
-    doc.save(str(tmp_path))
-    quarter_tag = f"{a.quarter.upper()} {a.year - 1}-{a.year}"
-    report_name = f"KENYA EXPORT PERFORMANCE IN {quarter_tag}.docx"
-    report_path = job_dir / report_name
-    tmp_path.rename(report_path)
-    logs.append(f"Review period: {a.quarter} {a.year} - report saved as {report_name}")
+    logs.append("Period workbooks written to %s" % tables.name)
+
+    report_name = "KENYA EXPORT PERFORMANCE IN %s %d-%d.docx" % (
+        spec["span"].upper(), spec["prev_year"], spec["year"])
+    try:
+        gpr.build_report(xlsx_path, str(job_dir / report_name))
+    except SystemExit as e:
+        raise HTTPException(400, str(e))
+    logs.append("Report saved as %s" % report_name)
 
     manifest = {
         "mode": mode,
         "report_type": "quarterly",
         "report_name": report_name,
-        "excel_dir": os.path.relpath(excel_dir, job_dir),
+        "excel_dir": os.path.relpath(str(tables), job_dir),
         "config": "",
+        "period": period_key,
     }
     (job_dir / "manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8")
-    return report_path, manifest
+    return job_dir / report_name, manifest
 
 
 _SERVER_START = time.time()
@@ -1578,6 +1621,7 @@ def api_status(job_id: str):
 @app.post("/api/run")
 async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                   report_type: str = Form("goods"),
+                  period: str = Form(""),
                   promotion: bool = Form(False),
                   files: list[UploadFile] = File(default=None),
                   zipfile: UploadFile | None = File(default=None)):
@@ -1590,6 +1634,11 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                            "competitor"):
         raise HTTPException(400, "report_type must be 'goods', 'services', "
                                  "'quarterly', 'product' or 'competitor'")
+    if report_type == "quarterly" and period not in _EXPORT_PERIODS:
+        # Force an explicit choice: a default would silently run a full-year
+        # report when only one quarter was wanted.
+        raise HTTPException(400, "Please choose a review period: Q1, Q2, "
+                                 "Q3, Q4, Semi-Annual or Annual.")
 
     job_dir = _new_job_dir()
     try:
@@ -1622,12 +1671,13 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
         elif mode in ("raw", "ready"):
             report_type = "goods"
 
-        LOG.info("POST /api/run config=%s top=%s mode=%s report_type=%s job=%s",
-                 config, top, mode, report_type, job_dir.name)
+        LOG.info("POST /api/run config=%s top=%s mode=%s report_type=%s "
+                 "period=%s job=%s",
+                 config, top, mode, report_type, period, job_dir.name)
 
         if report_type == "quarterly":
-            job_fn = lambda logs: _run_quarterly_pipeline(   # noqa: E731
-                job_dir, top, mode, logs)
+            job_fn = lambda logs: _run_export_pipeline(       # noqa: E731
+                job_dir, top, mode, period, logs)
         elif report_type == "services":
             job_fn = lambda logs: _run_services_pipeline(    # noqa: E731
                 job_dir, config, top, logs)

@@ -265,6 +265,18 @@ PIE_PALETTE = ["#4472C4", "#ED7D31", "#A5A5A5", "#FFC000", "#5B9BD5",
 
 
 def share_pie(out_path, labels, values, title):
+    if not any(v for v in values if v):
+        # A period the uploads do not cover has no shares to draw, and
+        # matplotlib refuses an all-zero pie - state the gap plainly instead
+        # of failing the whole report.
+        fig, ax = new_fig(width=7.9, height=4.9)
+        ax.set_title(title, fontsize=13, weight="bold", fontfamily=chart_font())
+        ax.text(0.5, 0.5, "No data recorded for this period", ha="center",
+                va="center", fontsize=14, color="#666666",
+                transform=ax.transAxes, style="italic")
+        ax.set_axis_off()
+        finish(fig, out_path, ax=ax)
+        return out_path
     labels, values = consolidate(labels, values, max_slices=7, min_pct=2.5,
                                 other_label="All other")
     fig, ax = new_fig(width=7.9, height=4.9)

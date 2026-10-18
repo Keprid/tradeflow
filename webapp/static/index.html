@@ -350,6 +350,40 @@ input[type=file]::file-selector-button:hover {
   outline-offset: -2px;
 }
 
+/* Export Performance: review-period picker */
+#export-period-wrap .radio-group {
+  margin: 8px 0 0;
+}
+
+#export-period-wrap .radio-option label {
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 6px;
+  font-size: 13px;
+  white-space: normal;
+  text-align: center;
+}
+
+#export-period-wrap .radio-option label .sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.req-star {
+  color: #c00000;
+}
+
+.inline-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  margin: 0;
+  color: var(--text);
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -853,7 +887,7 @@ input[type=file]::file-selector-button:hover {
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="quarterly" id="rt-quarterly">
-        <label for="rt-quarterly"><i class="fas fa-calendar-alt"></i> Quarterly Performance</label>
+        <label for="rt-quarterly"><i class="fas fa-chart-line"></i> Export Performance</label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="product" id="rt-product">
@@ -896,7 +930,42 @@ input[type=file]::file-selector-button:hover {
 
     <div id="quarterly-info" class="info-box">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Quarterly Mode:</b> Upload the raw KRA extracts (<i>&hellip;Exports by HS Destination&hellip;</i> and <i>&hellip;Imports by HS Origin&hellip;</i>) &mdash; for both years if you want the year-on-year comparison (up to 4 files, or a .zip) &mdash; or the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. Top N controls rows per market/product table (markets default to 25).
+      &nbsp;<b>Export Performance Mode:</b> Upload the raw monthly extracts &mdash; the <b>KNBS</b> workbook (<i>KNBS Data for the Economic Survey&hellip;</i>) and/or the KRA files (<i>&hellip;Exports by HS Destination&hellip;</i> / <i>&hellip;Imports by HS Origin&hellip;</i>), up to four files or a .zip. Every sheet of every file is read individually; pivot and summary sheets are skipped. The newest year in the data is the review year, compared with the same months one year earlier. Top N controls rows per market/product table (markets default to 25).
+    </div>
+
+    <div id="export-period-wrap" class="info-box" style="display:none;" aria-hidden="true">
+      <i class="fas fa-calendar-day" style="color:var(--dark-blue);"></i>
+      &nbsp;<b>Review period <span class="req-star">*</span>:</b> choose the months the report covers &mdash; no default is preselected. The comparison is always the same months one year earlier.
+      <div class="radio-group period-group" role="radiogroup" aria-label="Review period">
+        <div class="radio-option">
+          <input type="radio" name="export_period" value="q1" id="ep-q1">
+          <label for="ep-q1">Q1<span class="sub">Jan&ndash;Mar</span></label>
+        </div>
+        <div class="radio-option">
+          <input type="radio" name="export_period" value="q2" id="ep-q2">
+          <label for="ep-q2">Q2<span class="sub">Apr&ndash;Jun</span></label>
+        </div>
+        <div class="radio-option">
+          <input type="radio" name="export_period" value="q3" id="ep-q3">
+          <label for="ep-q3">Q3<span class="sub">Jul&ndash;Sep</span></label>
+        </div>
+        <div class="radio-option">
+          <input type="radio" name="export_period" value="q4" id="ep-q4">
+          <label for="ep-q4">Q4<span class="sub">Oct&ndash;Dec</span></label>
+        </div>
+        <div class="radio-option">
+          <input type="radio" name="export_period" value="semi" id="ep-semi">
+          <label for="ep-semi">Semi-Annual<span class="sub">two halves</span></label>
+        </div>
+        <div class="radio-option">
+          <input type="radio" name="export_period" value="annual" id="ep-annual">
+          <label for="ep-annual">Annual<span class="sub">Jan&ndash;Dec</span></label>
+        </div>
+      </div>
+      <div id="semi-half-wrap" style="display:none;margin-top:8px;gap:18px;align-items:center;">
+        <label class="inline-radio"><input type="radio" name="export_half" value="1" checked> Half 1 &mdash; Jan&ndash;Jun</label>
+        <label class="inline-radio"><input type="radio" name="export_half" value="2"> Half 2 &mdash; Jul&ndash;Dec</label>
+      </div>
     </div>
 
     <div id="product-profile-wrap" class="info-box">
@@ -963,7 +1032,8 @@ input[type=file]::file-selector-button:hover {
     <div class="hint" style="margin-top:10px;">
       <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
       &nbsp;Sample files are pre-grouped by feature: <b>Goods</b> (US goods
-      files), <b>Services</b> (services files), <b>Quarterly</b> (KRA extracts)
+      files), <b>Services</b> (services files), <b>Export Performance</b> (KRA
+      / KNBS extracts)
       and <b>Product</b> (crafts / coffee matrices). Loading one fills the upload
       box with the matching files and selects that analysis type &mdash; then
       just click <b>Generate Report</b>.
@@ -1003,6 +1073,7 @@ input[type=file]::file-selector-button:hover {
   const cfgWrapper = $('cfg-wrapper');
   const servicesInfo = $('services-info');
   const quarterlyInfo = $('quarterly-info');
+  const exportPeriodWrap = $('export-period-wrap');
   const productInfo = $('product-profile-wrap');
   const competitorInfo = $('competitor-wrap');
   const productCfgWrapper = $('product-cfg-wrapper');
@@ -1335,13 +1406,15 @@ input[type=file]::file-selector-button:hover {
       clearError();
       if (r.value === 'quarterly') {
         hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
-          'Upload the <b>raw KRA extracts</b> (&hellip;<b>Exports by HS Destination&hellip;</b> and &hellip;<b>Imports by HS Origin&hellip;</b>, or a .zip of them) &mdash; ' +
-          'for <b>both years</b> to get the year-on-year comparison (up to 4 files), ' +
-          '<i>or</i> the generated <b>Exports.xlsx</b> + <b>Imports.xlsx</b>. ' +
+          'Upload the <b>raw monthly extracts</b> &mdash; the <b>KNBS</b> workbook and/or the <b>KRA</b> ' +
+          '&hellip;<b>Exports by HS Destination&hellip;</b> / &hellip;<b>Imports by HS Origin&hellip;</b> files ' +
+          '(up to 4 files, or a .zip) &mdash; then pick the <b>review period</b> below. ' +
+          'Every sheet is read individually; pivot and summary sheets are ignored. ' +
           '<b>.xls</b> files are converted automatically.';
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'block';
+        exportPeriodWrap.style.display = 'block';
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'none';
@@ -1356,6 +1429,7 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'block';
         quarterlyInfo.style.display = 'none';
+        exportPeriodWrap.style.display = 'none';
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'none';
@@ -1370,6 +1444,7 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'none';
+        exportPeriodWrap.style.display = 'none';
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'block';
@@ -1385,6 +1460,7 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'none';
+        exportPeriodWrap.style.display = 'none';
         partnerWrap.style.display = 'none';
         promotionWrap.style.display = 'none';
         productInfo.style.display = 'none';
@@ -1399,12 +1475,20 @@ input[type=file]::file-selector-button:hover {
         cfgWrapper.style.display = 'none';
         servicesInfo.style.display = 'none';
         quarterlyInfo.style.display = 'none';
+        exportPeriodWrap.style.display = 'none';
         partnerWrap.style.display = 'block';
         promotionWrap.style.display = 'flex';
         productInfo.style.display = 'none';
         competitorInfo.style.display = 'none';
         productCfgWrapper.style.display = 'none';
       }
+    });
+  });
+
+  // Review-period picker: the half-year sub-picker only applies to Semi-Annual.
+  document.querySelectorAll('input[name="export_period"]').forEach(r => {
+    r.addEventListener('change', () => {
+      $('semi-half-wrap').style.display = (r.value === 'semi') ? 'flex' : 'none';
     });
   });
 
@@ -1428,6 +1512,23 @@ input[type=file]::file-selector-button:hover {
     fd.append('top', $('top').value);
     fd.append('report_type', rt);
     fd.append('promotion', $('promotion').checked ? 'true' : 'false');
+    let periodVal = '';
+    if (rt === 'quarterly') {
+      // No default on purpose: a silent full-year run when only one quarter
+      // was wanted is exactly what the picker exists to prevent.
+      const pr = document.querySelector('input[name="export_period"]:checked');
+      if (!pr) {
+        showError('Please choose a review period: Q1-Q4, Semi-Annual or Annual.');
+        appendLog('Please choose a review period first.', 'err');
+        return;
+      }
+      periodVal = pr.value;
+      if (periodVal === 'semi') {
+        periodVal = 'semi' +
+          document.querySelector('input[name="export_half"]:checked').value;
+      }
+    }
+    fd.append('period', periodVal);
     let zips = 0, others = 0;
     for (const f of files) {
       if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
@@ -1487,10 +1588,12 @@ input[type=file]::file-selector-button:hover {
       appendLog('Done.', 'ok');
       const isProduct = final.mode === 'product' || final.mode === 'crafts';
       const isCompetitor = final.mode === 'competitor';
+      const isExport = (final.mode || '').startsWith('quarterly');
       $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
         `${isCompetitor ? 'Competitor analysis'
           : (isProduct ? 'Product profile'
-          : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables'))}` +
+          : (isExport ? 'Export performance (raw monthly extracts)'
+          : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables')))}` +
         ` &middot; job ${final.job_id}`;
       $('dl-report').href = final.report_url;
       $('dl-report').innerHTML = isCompetitor

@@ -183,11 +183,10 @@ This is a separate, simpler report: the quarterly *Kenya Export Performance*
 report built from two raw KRA customs extracts (the files named
 `…Exports by HS Destination…` and `…Imports by HS Origin…`).
 
-**Web app:** choose **Quarterly Performance**, upload the KRA `.xls` files
-(up to four: exports + imports for each of the two years, or a single file
-per side covering both years; a zip also works), and click Generate.
-Everything else is automatic. You can also upload the already-built
-`Exports.xlsx` + `Imports.xlsx` instead.
+**Web app:** this legacy generator is no longer exposed in the web app -
+choose **Export Performance** (section 6b2) instead: upload the raw monthly
+extracts (KNBS and/or KRA), pick the review period (Q1-Q4 / Semi-Annual /
+Annual) and click Generate.
 
 **Command line:**
 
@@ -226,13 +225,25 @@ flow, like the quarterly one, but it reads the KNBS monthly workbook rather
 than the KRA HS extracts, and it can build a **quarter**, a **half-year** or a
 **full year** in one go.
 
+**Web app:** choose **Export Performance**, upload the raw monthly extracts
+(the `KNBS Data for the Economic Survey...` workbook, the KRA
+`...Exports by HS Destination...` / `...Imports by HS Origin...` files, or
+any mix - up to four files or a .zip), pick the review period (**Q1, Q2, Q3,
+Q4, Semi-Annual** with a Jan-Jun / Jul-Dec switch, or **Annual** - nothing is
+preselected) and click Generate. The newest year in the data becomes the
+review year and is compared with the same period one year earlier; Top N
+trims the ranked tables.
+
 **What it does**
 
-1. Reads every workbook/CSV in a folder (the KNBS `IMTS` sheet, plus any KRA
-   `…Exports by HS Destination…` / `…Imports by HS Origin…` files).
-   **Total exports = Domestic exports + Re-exports** at every level, and rows
-   repeated across *different* files are de-duplicated (repeats inside one
-   file are kept - they are two real transactions).
+1. Reads every workbook/CSV in a folder, inspecting **each sheet
+   individually** (the KNBS `IMTS` sheet, the KRA `...Exports by HS
+   Destination...` / `...Imports by HS Origin...` files, and mixed workbooks
+   whose other sheets are pivots - those are skipped). The header row is
+   located within the first rows of a sheet, so a title above the table is
+   fine. **Total exports = Domestic exports + Re-exports** at every level,
+   and rows repeated across *different* files or sheets are de-duplicated
+   (repeats inside one sheet are kept - they are two real transactions).
 2. Groups products the way the KEPROBA half-year workbook does: Horticulture =
    HS 06+07+08, Tea = 0902, Coffee = 0901, Textile and Apparel Accessories =
    HS 60-63, plus the remaining chapters; imports are grouped by plain HS

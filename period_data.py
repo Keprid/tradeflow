@@ -106,6 +106,18 @@ def _pick(cols, *names):
     return None
 
 
+def _looks_like_header(row):
+    """True when a row names Year and Month: that row is the table header.
+
+    Sheets are deciphered individually, so a title / preamble row above the
+    real header does not make the sheet unusable.
+    """
+    if row is None:
+        return False
+    low = {str(c).strip().lower() for c in row if c is not None}
+    return "year" in low and "month" in low
+
+
 def _read_xlsx(path, sheet):
     """Fast path: stream a workbook sheet with openpyxl instead of
     ``pd.read_excel``, which is an order of magnitude slower on large
@@ -113,9 +125,18 @@ def _read_xlsx(path, sheet):
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb[sheet] if sheet in wb.sheetnames else wb[wb.sheetnames[0]]
     it = ws.iter_rows(values_only=True)
-    try:
-        header = next(it)
-    except StopIteration:
+    # Find the header row among the first 10 rows (row 1 for clean raw
+    # extracts; a later row when the sheet opens with a title).
+    header = None
+    for _ in range(10):
+        try:
+            row = next(it)
+        except StopIteration:
+            break
+        if _looks_like_header(row):
+            header = row
+            break
+    if header is None:
         wb.close()
         return None
     cols = [str(c).strip() if c is not None else "" for c in header]
@@ -128,19 +149,20 @@ def _read_xlsx(path, sheet):
             cols[i] = "%s.%d" % (c, seen[c])
         else:
             seen[c] = 0
-    need = [i for i, c in enumerate(cols)
-            if c in ("Year", "Month", "Value", "CIF Value", "FOB Value",
-                     "NET VALUE", "Flow", "HS_C", "HS Code",
-                     "Commodity Code", "Destination Name", "Destination",
-                     "Destin", "Origin Name", "Origin", "Partner",
-                     "Partner.1", "Partner Name")]
-    if not need or "Year" not in cols or "Month" not in cols:
+    lower = [c.lower() for c in cols]
+    need = [i for i, c in enumerate(lower)
+            if c in ("year", "month", "value", "cif value", "fob value",
+                     "net value", "flow", "hs_c", "hs code",
+                     "commodity code", "destination name", "destination",
+                     "destin", "origin name", "origin", "partner",
+                     "partner.1", "partner name")]
+    if not need or "year" not in lower or "month" not in lower:
         # without Year/Month nothing can be attributed to a period; bail out
         # instead of raising (the caller would fall back to the slow parser).
         wb.close()
         return None
     rows = []
-    yi, mi = cols.index("Year"), cols.index("Month")
+    yi, mi = lower.index("year"), lower.index("month")
     for r in it:
         if r is None or len(r) <= max(need):
             continue
@@ -214,8 +236,12 @@ def _read_one(path, sheet):
     out["Year"] = out["Year"].astype(int)
     out["Month"] = out["Month"].astype(int)
     out["SourceFile"] = os.path.basename(path)
+    # SourceUnit = file + sheet: dedup treats one sheet as one unit of
+    # record (same key on two sheets of one workbook = copied rows).
+    out["SourceUnit"] = (os.path.basename(path) if sheet is None
+                         else "%s/%s" % (os.path.basename(path), sheet))
     return out[["Year", "Month", "Side", "Partner", "Group", "GroupLabel",
-                "Value", "SourceFile", "SourceKind"]]
+                "Value", "SourceFile", "SourceUnit", "SourceKind"]]
 
 
 def _dir_fingerprint(data_dir):
@@ -228,6 +254,8 @@ def _dir_fingerprint(data_dir):
     """
     parts = []
     for fname in sorted(os.listdir(data_dir)):
+        if fname.startswith(("~$", ".")):  # lock files, dot-directories
+            continue
         if not fname.lower().endswith((".xls", ".xlsx", ".xlsm", ".csv")):
             continue
         try:
@@ -245,16 +273,17 @@ def load_monthly(data_dir):
     Re-running for a different period/quarter reuses the cache instead of
     re-parsing the ~240 MB KNBS workbook (which takes ~80 s).
 
-    Rows identical to a row from a *different* file (the same extract saved
-    twice) are counted once; rows repeated inside one file are kept, since
-    two declarations of equal value are two real transactions.
+    Rows identical to a row from a *different* source unit (file/sheet:
+    the same extract uploaded twice, or one workbook's raw sheets overlapping
+    each other) are counted once; rows repeated inside one sheet are kept,
+    since two declarations of equal value are two real transactions.
     """
     frames = []
     cache_dir = os.path.join(data_dir, ".cache")
-    # v2: caches now carry the SourceKind provenance column; older pickles
-    # (monthly-<fingerprint>.pkl) are never read again.
+    # v3: caches now carry the SourceUnit (file/sheet) column used for
+    # dedup; older monthly-/monthly2- pickles are never read again.
     cache_path = os.path.join(
-        cache_dir, "monthly2-%s.pkl" % _dir_fingerprint(data_dir))
+        cache_dir, "monthly3-%s.pkl" % _dir_fingerprint(data_dir))
     if os.path.exists(cache_path):
         try:
             out = pd.read_pickle(cache_path)
@@ -264,6 +293,8 @@ def load_monthly(data_dir):
         except Exception:
             pass  # corrupt cache: fall through and rebuild
     for fname in sorted(os.listdir(data_dir)):
+        if fname.startswith(("~$", ".")):  # lock files, dot-directories
+            continue
         if not fname.lower().endswith((".xls", ".xlsx", ".xlsm", ".csv")):
             continue
         path = os.path.join(data_dir, fname)
@@ -274,26 +305,33 @@ def load_monthly(data_dir):
                 print("  loaded %-58s %7d rows"
                       % (os.path.basename(path) + "/" + str(sheet), len(df)))
     if not frames:
-        sys.exit("[ERROR] No usable monthly trade data found in '%s'." % data_dir)
+        sys.exit(
+            "[ERROR] No usable monthly trade data found in '%s'.\n"
+            "Expected the KNBS monthly workbook and/or the raw KRA extracts "
+            "(...Exports by HS Destination... / ...Imports by HS Origin...). "
+            "Every sheet of every file is inspected individually; summary "
+            "and pivot sheets without Year/Month columns are ignored."
+            % data_dir)
     out = pd.concat(frames, ignore_index=True)
-    # The same extract uploaded twice must not be counted twice: when one
+    # The same extract uploaded twice - or raw sheets copied over each other
+    # inside one workbook - must not be counted twice: when one
     # (year, month, side, partner, group, value) key appears under two
-    # different filenames, keep the first file's rows only.  Repeats inside
-    # one file are real transactions and are kept.
+    # different source units, keep the first unit's rows only.  Repeats
+    # inside one sheet are real transactions and are kept.
     key = ["Year", "Month", "Side", "Partner", "Group", "Value"]
-    # Map each key to its first (alphabetically) source file.  A row survives
-    # only when it came from that winning file, so the same extract uploaded
-    # twice is counted once, while repeats inside one file are kept.
-    out = out.sort_values("SourceFile")
+    # Map each key to its first (alphabetically) source unit.  A row survives
+    # only when it came from that winning unit.
+    out = out.sort_values(["SourceUnit", "SourceFile"])
     first = out.drop_duplicates(subset=key, keep="first")
-    first = first[key + ["SourceFile"]]
+    first = first[key + ["SourceUnit"]]
     before = len(out)
     out = out.merge(first, on=key, how="left")
-    out = out[out["SourceFile_x"] == out["SourceFile_y"]].drop(
-        columns=["SourceFile_y"]).rename(columns={"SourceFile_x": "SourceFile"})
+    out = out[out["SourceUnit_x"] == out["SourceUnit_y"]].drop(
+        columns=["SourceUnit_y"]).rename(columns={"SourceUnit_x": "SourceUnit"})
     dropped = before - len(out)
     if dropped:
-        print("  [info] %d rows repeated across files counted once" % dropped)
+        print("  [info] %d rows repeated across files/sheets counted once"
+              % dropped)
     try:
         os.makedirs(cache_dir, exist_ok=True)
         out.to_pickle(cache_path)

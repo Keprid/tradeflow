@@ -353,13 +353,20 @@ class PeriodTables:
             ws.freeze_panes = "A2"
 
 
-def build(data_dir, out_dir, period, year, half=1, quarter=1,
+def build(data_dir, out_dir, period, year=None, half=1, quarter=1,
           top_products=20, top_markets=25, prev_year=None):
     # validate the period arguments before the slow data load
-    spec = period_spec(period, year, half=half, quarter=quarter,
-                       prev_year=prev_year)
+    period_spec(period, year or 0, half=half, quarter=quarter,
+                prev_year=prev_year)
     print("Reading raw monthly data from %s ..." % data_dir)
     df = load_monthly(data_dir)
+    if year is None:
+        # the newest year in the uploads is the review year (the comparison
+        # is always that same sub-period one year earlier)
+        year = int(df["Year"].max())
+        print("  [info] review year inferred from data: %d" % year)
+    spec = period_spec(period, year, half=half, quarter=quarter,
+                       prev_year=prev_year)
     print("Review period: %s %d vs %d (%d months)"
           % (spec["span"], spec["year"], spec["prev_year"], len(spec["months"])))
 
