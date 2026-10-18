@@ -218,6 +218,72 @@ fake prior-year rows).
 
 ---
 
+## 6b2. Period Performance Report (quarterly / half-year / annual, KNBS data)
+
+A second performance report builder that turns KNBS monthly raw data into the
+KEPROBA period tables **and** the matching Word report. It is a two-command
+flow, like the quarterly one, but it reads the KNBS monthly workbook rather
+than the KRA HS extracts, and it can build a **quarter**, a **half-year** or a
+**full year** in one go.
+
+**What it does**
+
+1. Reads every workbook/CSV in a folder (the KNBS `IMTS` sheet, plus any KRA
+   `…Exports by HS Destination…` / `…Imports by HS Origin…` files).
+   **Total exports = Domestic exports + Re-exports** at every level, and rows
+   repeated across *different* files are de-duplicated (repeats inside one
+   file are kept - they are two real transactions).
+2. Groups products the way the KEPROBA half-year workbook does: Horticulture =
+   HS 06+07+08, Tea = 0902, Coffee = 0901, Textile and Apparel Accessories =
+   HS 60-63, plus the remaining chapters; imports are grouped by plain HS
+   chapter.
+3. Writes one workbook, `PERFORMANCE TABLES <SPAN> <YEAR>.xlsx`, with
+   `META`, `DATA PARTNER`, `DATA GROUP`, `EXP PDT`, `EXP DES`, `IMP PDT`,
+   `IMP SUP` and `BOT` sheets. Values are Ksh. Billion, the Total / Change /
+   % columns are live Excel formulas (with cached results), and the change
+   columns are colour-coded green ▲ / red ▼. `META` also records the data
+   source detected while loading (KNBS / KRA / both), which the report
+   prints as its `Source:` line.
+
+**Command line**
+
+```
+python make_period_tables.py --data-dir "KNBS DATA" --out-dir output/period --period semi --year 2026 --half 1
+python generate_period_report.py --tables "output/period/PERFORMANCE TABLES JAN JUN 2026.xlsx" --output "output/period/report.docx"
+```
+
+`--period` is `quarter`, `semi` or `year`:
+
+| `--period` | Add | Review period |
+|------------|-----|----------------|
+| `quarter` | `--quarter 1..4` | one quarter vs the same quarter a year earlier |
+| `semi` | `--half 1\|2` | January-June or July-December |
+| `year` | (none) | January-December vs the previous year |
+
+`--top-products` / `--top-markets` trim the ranked tables (default 20 and
+25), `--prev-year N` overrides the comparison year (default `year - 1`).
+
+Report-side options: `--top N` caps each ranked table at N rows (default:
+every row the workbook carries), `--month-year "July 2026"` overrides the
+date printed on the title page.
+
+**Caching.** Re-parsing the ~240 MB KNBS workbook takes ~80 s the first time.
+`load_monthly()` caches the normalised result under `<data-dir>/.cache/`,
+keyed on the folder's file names/sizes/mtimes, so re-running for a different
+quarter or period is ~0.2 s. Delete `.cache/` if you replace a file in place
+with the same name and size.
+
+**What the report contains:** title page, table of contents, lists of tables
+and figures, a performance-overview narrative (exports/imports/trade balance
+with the correct widening/narrowing wording for deficits), Table 1 lead
+destination markets + Figure 1 markets share pie, Table 2 export products +
+the growth/decline exhibit (over Ksh. 1 billion) + Figure 2 products share pie,
+a deduction and implication section, and both import annexes. Table captions
+read "Total Jan-Jun 2025" style, and the sub-period columns follow the chosen
+period (three months, two quarters, or four quarters).
+
+---
+
 ## 6c. Competitor Analysis (standalone, after the goods flow)
 
 This step is **deliberately not bundled** into the goods report: you only

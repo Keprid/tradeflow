@@ -1034,7 +1034,13 @@ def _missing_cached_refs(path, refs):
             seen = set()
             for row in ws2.iter_rows():
                 for c in row:
-                    key = (c.row, c.column)
+                    # read-only sheets emit EmptyCell placeholders that carry
+                    # no coordinates
+                    r_i = getattr(c, "row", None)
+                    c_i = getattr(c, "column", None)
+                    if r_i is None or c_i is None:
+                        continue
+                    key = (r_i, c_i)
                     if key in want and c.value is not None:
                         seen.add(key)
                 if len(seen) == len(want):
