@@ -717,7 +717,7 @@ def api_goods_partner_setup(partner: str = "", year: int = 0):
         "note": (
             "ITC Trade Map has no public API. Run each query below in the "
             "Trade Map web app, download the workbook, then upload them together "
-            "for Goods Trade Flow. Filenames matching the patterns below are "
+            "for the Trade Brief. Filenames matching the patterns below are "
             "auto-detected and the partner config is reused automatically."),
     }
 
@@ -726,10 +726,10 @@ def api_goods_partner_setup(partner: str = "", year: int = 0):
 # Bundled sample datasets (Samplefiles/), grouped by app feature.
 # ---------------------------------------------------------------------------
 _SAMPLE_LABELS = {
-    "services": "Services Trade Flow",
+    "services": "Services Brief",
     "quarterly": "Export Performance",
     "product": "Product Profile",
-    "goods": "Goods Trade Flow",
+    "goods": "Trade Brief",
 }
 
 # Review periods of the Export Performance feature (report_type keeps its
@@ -945,7 +945,7 @@ def _detect_mode(uploads_dir, report_type="goods"):
         return "competitor", ""
     # The raw services files are recognised by their own distinctive keywords,
     # so the upload set can be detected even when the client did not explicitly
-    # select the "Services Trade Flow" report type.
+    # select the "Services Brief" report type.
     if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
         return "services_raw", ""
     # Auto-detect: distinctive all-countries/all-products matrix names mean a

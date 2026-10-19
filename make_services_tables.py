@@ -3635,6 +3635,14 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     out["t13_peer"] = os.path.join(out_dir, "Table 13 Kenya vs Peers Service Exports.xlsx")
     _finalize(ws, out["t13_peer"], cache)
 
+    # Column widths + cell cache shared by the standalone Table 14 below and
+    # the combined workbook at the end (must be defined before either use).
+    widths_mkt = {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
+                  "G": 12, "H": 12, "I": 12, "J": 12}
+    widths_prd = {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
+                  "G": 12, "H": 12, "I": 12, "J": 12, "K": 12, "L": 12}
+    cache_all = {}
+
     # Table 14: Global service exports by category (feeds editable Figures 4/5)
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 14"
     cache = []
@@ -3700,15 +3708,10 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     # ---- Combined workbook: all sheets in one file -----------------------
     wb_all = openpyxl.Workbook()
     wb_all.remove(wb_all.active)
-    widths_mkt = {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
-                  "G": 12, "H": 12, "I": 12, "J": 12}
-    widths_prd = {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
-                  "G": 12, "H": 12, "I": 12, "J": 12, "K": 12, "L": 12}
-    cache_all = {}
 
     for s in ("Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6",
               "Table 7", "Table 8", "Table 9", "Table 10", "Table 11", "Table 12",
-              "Table 13", "Figure 1"):
+              "Table 13", "Table 14", "Figure 1"):
         wb_all.create_sheet(s)
 
     ws = wb_all["Table 1"]; c = write_market_table(ws, d1, "Exporters",
@@ -3796,6 +3799,13 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                                 row1_label="Table 13:",
                                 row1_title="Kenya vs Peer Countries: Service Exports")
     cache_all["Table 13"] = dict(c)
+
+    ws = wb_all["Table 14"]; c = write_product_table(ws, d_gexp,
+                        "Global Service Exports by Category\nValue in USD Billion",
+                        unit_row=True,
+                        row1_label="Table 14:",
+                        row1_title="Global Service Exports by Category")
+    set_widths(ws, widths_prd); cache_all["Table 14"] = dict(c)
 
     ws = wb_all["Figure 1"]; c = []
     write_balance(ws, bal_years, exports_full, imports_full, cache=c)
