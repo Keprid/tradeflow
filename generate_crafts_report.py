@@ -59,7 +59,7 @@ from docx.oxml.ns import nsdecls, qn
 from docx.shared import Pt
 
 from generate_product_profile import (
-    ProfileBuilder, make_donut, _add_share_donut,
+    ProfileBuilder, make_donut, _add_share_donut, SRC,
     cagr, yoy_change, display, usd_phrase, growth_phrase, yoy_phrase,
     period_phrase, ordinal_list, _shares, _year_totals, top_rows,
     _ranked_rows, short_label, _ordinal, _series_unit, fmt_for_unit,
@@ -1321,7 +1321,7 @@ def section_policy(b, cfg, data, source, tmp_dir):
 def build_crafts_report(cfg, data_dir, out_path, tmp_dir):
     """Build the crafts Word report to ``out_path``."""
     os.makedirs(tmp_dir, exist_ok=True)
-    source = cfg.get("source", "International Trade Centre (ITC), Trade Map")
+    source = SRC
     data = CraftsData(data_dir)
     b = ProfileBuilder(cfg, {})
     b.title_page(cfg)

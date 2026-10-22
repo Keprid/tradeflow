@@ -81,8 +81,10 @@ THEME_ACCENTS = ["#156082", "#E97132", "#196B24", "#0F9ED5", "#A02B93", "#4EA72E
 # the metrically-similar Linux fallback when Century Gothic is not installed.
 FONT_PREFERENCE = ["Century Gothic", "Liberation Serif", "DejaVu Serif", "Arial"]
 
-SRC = ("Source: International Trade Centre (ITC) Trade Map database. "
-       "Compiled by KEPROBA - Research and Innovation Directorate (RID).")
+# Canonical table/figure source line — kept identical across every analysis
+# type (goods, services, product, crafts, competitor) so all reports cite the
+# same referencing.
+SRC = "Source: International Trade Centre (ITC) Database; Compiled by KEPROBA."
 
 # Footnote for the destination tables. ITC reports a country's export
 # destinations using mirror (partner-reported) data rather than the reporter's

@@ -25,7 +25,7 @@ sys.path.insert(0, BASE_DIR)
 
 from generate_product_profile import (  # noqa: E402
     ProfileBuilder, ProfileData, _ranked_rows, short_label, display,
-    usd_phrase, write_excel_deliverable)
+    usd_phrase, write_excel_deliverable, SRC)
 from country_names import fix_label  # noqa: E402
 
 CFG = json.load(open(os.path.join(BASE_DIR, "config",
@@ -94,7 +94,7 @@ def _static_table(b, rows, widths=None, header=True):
 
 
 def _cap(b, code, *args):
-    return b._next_table(code, CFG.get("source"))
+    return b._next_table(code, SRC)
 
 
 def main():
@@ -550,7 +550,7 @@ def main():
     b.add_value_table(
         "Product", sorted(data.members, key=lambda r: r["code"]), years,
         "Share in %d" % rev, "Kenya's Coffee Exports by Product",
-        CFG.get("source"), total_label="Total")
+        SRC, total_label="Total")
     b.add_para(
         "Green, unroasted, non-decaffeinated coffee (HS 090111) dominates "
         "Kenya's exports, accounting for roughly %.0f%% of export value in %d, "
@@ -568,7 +568,7 @@ def main():
         "Destination market",
         _ranked_rows(dest, 10, years, residual="All other markets"),
         years, "Share in %d" % rev, "Destinations for Kenya's Coffee",
-        CFG.get("source"), total_label="Total")
+        SRC, total_label="Total")
     if dest_top:
         lead, second, third = dest_top[0], dest_top[1], dest_top[2]
         b.add_para(
@@ -596,7 +596,7 @@ def main():
         "Exporting economy",
         _ranked_rows(data.exporters(), 10, years, residual="All other economies"),
         years, "Share in %d" % rev, "Countries Exporting Coffee",
-        CFG.get("source"), total_label="Total", rank=True)
+        SRC, total_label="Total", rank=True)
     b.add_para(
         "Brazil, Vietnam, Colombia, Indonesia and Ethiopia are the dominant "
         "global producers, with Brazil alone producing about 37 percent of "
@@ -614,7 +614,7 @@ def main():
             _anchor(b, data)))
         b.add_value_table("Exporting economy", peers, years,
                           "Share in %d" % rev, "African Coffee Exporters",
-                          CFG.get("source"), total_label="Total")
+                          SRC, total_label="Total")
         older = [p for p in peers if p.get("src_year") and p["src_year"] != rev]
         if older:
             b.add_para(

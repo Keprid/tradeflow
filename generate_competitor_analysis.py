@@ -579,8 +579,9 @@ def write_docx(products, out_docx, year=None, partner_label="", top=5):
     note_run.font.size = Pt(8)
 
     src = doc.add_paragraph()
-    src_run = src.add_run("Source: International Trade Centre database; "
-                          "Compiled by KEPROBA")
+    src_run = src.add_run("Source: International Trade Centre (ITC) "
+                          "Database; Compiled by KEPROBA.")
+    src_run.italic = True
     src_run.font.size = Pt(8)
 
     os.makedirs(os.path.dirname(os.path.abspath(out_docx)) or ".", exist_ok=True)
@@ -663,8 +664,8 @@ def write_xlsx(products, out_xlsx, year=None, partner_label="", top=5):
                    "her true rank. Tariff data not provided in the source "
                    "downloads.").font = Font(name="Century Gothic", italic=True,
                                              size=9)
-    ws.cell(nr + 1, 1, "Source: International Trade Centre database; "
-                       "Compiled by KEPROBA").font = Font(
+    ws.cell(nr + 1, 1, "Source: International Trade Centre (ITC) "
+                       "Database; Compiled by KEPROBA.").font = Font(
         name="Century Gothic", italic=True, size=9)
 
     os.makedirs(os.path.dirname(os.path.abspath(out_xlsx)) or ".", exist_ok=True)

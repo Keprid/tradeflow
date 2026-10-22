@@ -116,7 +116,7 @@ def _base_config_for(name, report_block, base=None):
     cfg.setdefault("report", {}).update(copy.deepcopy(report_block or {}))
     cfg.setdefault("quick_facts", [])
     cfg.setdefault("references", ["Source: International Trade Centre (ITC) Database; "
-                                  "Compiled by KEPROBA"])
+                                  "Compiled by KEPROBA."])
     return cfg
 
 

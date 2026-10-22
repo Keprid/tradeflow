@@ -133,8 +133,9 @@ noscript .noscript-msg {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 28px;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
+  text-align: center;
 }
 
 .site-footer p {

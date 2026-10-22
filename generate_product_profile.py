@@ -61,7 +61,7 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Inches, Pt, RGBColor
 
 from generate_report import (ReportBuilder, num, pct, clean_label, short_label,
-                             to_float)
+                             to_float, SRC)
 from country_names import display_name, fix_label, is_africa
 import charts
 from excel_deliverable import THEME
@@ -4053,9 +4053,7 @@ def section_mirror_policy(b, cfg, source):
         b.add_bullet(r)
     b.page_break()
     b.add_heading("References", level=1)
-    refs = cfg.get("references") or [
-        "International Trade Centre, Trade Map database (source: %s)."
-        % source]
+    refs = cfg.get("references") or [SRC]
     for r in refs:
         b.add_bullet(r)
 
@@ -4065,7 +4063,7 @@ def section_mirror_policy(b, cfg, source):
 # --------------------------------------------------------------------------
 def build_profile_document(cfg, data, tmp_dir):
     os.makedirs(tmp_dir, exist_ok=True)
-    source = cfg.get("source", "International Trade Centre Database")
+    source = SRC
     b = ProfileBuilder(cfg, {})
     b.title_page(cfg)
 
