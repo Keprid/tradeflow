@@ -1300,6 +1300,8 @@ def _run_export_pipeline(job_dir, top_n, mode, period_key, logs):
     df = period_data.load_monthly(str(uploads))
     for unit, n in sorted(df.groupby("SourceUnit").size().items()):
         logs.append("  read %s: %s rows" % (unit, format(n, ",")))
+    for w in period_data.WARNINGS:
+        logs.append("  [warn] %s" % w)
     year = int(df["Year"].max())
     chk = period_data.period_spec(period, year, half=half, quarter=quarter)
     covered = set(df.loc[df["Year"] == year, "Month"])

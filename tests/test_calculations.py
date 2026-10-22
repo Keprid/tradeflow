@@ -21,7 +21,8 @@ import make_quarterly_tables as mqt
 import make_services_tables as mst
 import make_tables
 from generate_report import parse_trade_balance
-from period_data import _read_one, data_sheets, period_spec
+import period_data
+from period_data import _read_one, data_sheets, load_monthly, period_spec
 from pipeline_errors import PipelineError
 from xlsx_tools import _finalize
 
@@ -381,3 +382,74 @@ def test_knbs_flow_case_insensitive_mapping(tmp_path):
     counts = m.groupby("Side")["Value"].sum().to_dict()
     assert counts["Exports"] == pytest.approx(3.0)
     assert counts["Imports"] == pytest.approx(4.0)
+
+
+# ---------------------------------------------------------------------------
+# KNBS Flow hardening: blank/garbage Flow rows are dropped, never guessed
+# ---------------------------------------------------------------------------
+def test_knbs_flow_blank_and_garbage_rows_dropped(tmp_path):
+    csv = _write_knbs_csv(tmp_path / "dirty.csv", [
+        (2026, 4, "FRANCE", "France", "0901", 2_000_000_000, "Domestic exports"),
+        (2026, 4, "FRANCE", "France", "0901", 1_000_000_000, "Re-exports"),
+        (2026, 4, "X", "X", "01", 9_000_000_000, ""),          # blank
+        (2026, 4, "X", "X", "01", 8_000_000_000, "banana"),    # garbage
+        (2026, 4, "X", "X", "01", 7_000_000_000, "n/a"),
+        (2026, 4, "CHINA", "China", "8471", 5_000_000_000, "Imports"),
+        (2026, 4, "X", "X", "01", 6_000_000_000, "???"),       # garbage
+    ])
+    period_data.WARNINGS.clear()
+    m = _read_one(csv, None)
+    # only the recognised rows survive; the junk rows are gone
+    assert len(m) == 3
+    exp = m[m["Side"] == "Exports"]["Value"].sum()
+    imp = m[m["Side"] == "Imports"]["Value"].sum()
+    assert exp == pytest.approx(3.0)      # 2 + 1 -- NOT inflated by junk
+    assert imp == pytest.approx(5.0)
+    # the drop is reported, with the offending values (blanks included)
+    assert len(period_data.WARNINGS) == 1
+    warn = period_data.WARNINGS[0]
+    assert "dropped 4 row(s)" in warn
+    assert "'banana'" in warn and "'???'" in warn and "'(blank)'" in warn
+
+
+def test_knbs_flow_all_rows_unknown_returns_none(tmp_path):
+    csv = _write_knbs_csv(tmp_path / "junk.csv", [
+        (2026, 4, "X", "X", "01", 1_000_000_000, ""),
+        (2026, 4, "X", "X", "01", 2_000_000_000, "mystery"),
+    ])
+    period_data.WARNINGS.clear()
+    assert _read_one(csv, None) is None    # unusable, not exports-by-default
+    assert any("dropped 2 row(s)" in w for w in period_data.WARNINGS)
+
+
+def test_knbs_flow_recognised_variants_still_map(tmp_path):
+    csv = _write_knbs_csv(tmp_path / "variants.csv", [
+        (2026, 4, "X", "X", "01", 1_000_000_000, "Export"),
+        (2026, 4, "X", "X", "01", 2_000_000_000, "Exports"),
+        (2026, 4, "X", "X", "01", 4_000_000_000, "reexports"),
+        (2026, 4, "X", "X", "01", 8_000_000_000, "re exports"),
+        (2026, 4, "X", "X", "01", 16_000_000_000, "Domestic Export"),
+        (2026, 4, "X", "X", "01", 32_000_000_000, "Import"),
+    ])
+    period_data.WARNINGS.clear()
+    m = _read_one(csv, None)
+    counts = m.groupby("Side")["Value"].sum().to_dict()
+    assert counts["Exports"] == pytest.approx(31.0)
+    assert counts["Imports"] == pytest.approx(32.0)
+    assert period_data.WARNINGS == []      # nothing dropped
+
+
+def test_load_monthly_cache_restores_flow_warnings(tmp_path):
+    _write_knbs_csv(tmp_path / "knbs.csv", [
+        (2026, 4, "FRANCE", "France", "0901", 2_000_000_000, "Domestic exports"),
+        (2026, 4, "X", "X", "01", 9_000_000_000, "garbage-flow"),
+    ])
+    period_data.WARNINGS.clear()
+    df1 = load_monthly(str(tmp_path))
+    assert len(df1) == 1
+    assert any("dropped 1 row(s)" in w for w in period_data.WARNINGS)
+    # second load hits the disk cache -- warnings must survive
+    period_data.WARNINGS.clear()
+    df2 = load_monthly(str(tmp_path))
+    assert len(df2) == 1
+    assert any("dropped 1 row(s)" in w for w in period_data.WARNINGS)

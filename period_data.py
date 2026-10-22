@@ -6,7 +6,9 @@ Two raw shapes are accepted (files in one folder are merged):
 * KNBS monthly data - Year, Month, Partner, Partner.1, HS_C, Value, Flow
   where Flow is "Domestic exports" / "Re-exports" / "Imports".
   **Total exports = Domestic exports + Re-exports** at every level
-  (month, quarter, half year, year).
+  (month, quarter, half year, year).  Rows whose Flow is blank or
+  unrecognised are dropped and reported (see WARNINGS) -- never
+  silently counted as exports.
 * KRA customs extracts - "Exports by HS Destination" / "Imports by HS
   Origin" layouts (Year, Month, Destination/Origin Name, HS_C, CIF Value).
 
@@ -29,6 +31,39 @@ from hs_chapters import CHAPTER_NAMES
 MONTH_NAMES = {1: "January", 2: "February", 3: "March", 4: "April",
                5: "May", 6: "June", 7: "July", 8: "August", 9: "September",
                10: "October", 11: "November", 12: "December"}
+
+# Data-quality warnings raised while parsing the current folder of raw
+# extracts (blank/unrecognised Flow rows, ...).  load_monthly() clears and
+# refills this list on every call (cache hits restore the saved copy), and
+# the webapp copies it into the job log.
+WARNINGS = []
+
+
+def _warn(msg):
+    WARNINGS.append(msg)
+    print("  [warn] %s" % msg)
+
+
+def _flow_side(value):
+    """Classify one raw Flow cell -> "Exports" / "Imports" / None.
+
+    KNBS Flow values are "Domestic exports" / "Re-exports" / "Imports";
+    case, hyphenation and stray whitespace vary between extracts.  Only
+    recognised labels count: blank or garbage cells return None so the
+    caller drops and reports the row instead of silently inflating exports.
+    """
+    if value is None:
+        return None
+    text = str(value).replace("\u00a0", " ").strip().lower()
+    if not text or text in ("nan", "none", "n/a", "na", "null",
+                            "-", "..", "..."):
+        return None
+    if text.startswith("import"):
+        return "Imports"
+    if text.startswith(("domestic export", "re-export", "reexport",
+                        "re export", "export")):
+        return "Exports"
+    return None
 
 def normalise_hs(value):
     """HS code padded to the next standard HS length (2 / 4 / 6 / 8 digits),
@@ -208,21 +243,42 @@ def _read_one(path, sheet):
     if col_year is None or col_month is None or col_val is None:
         return None
 
-    out = pd.DataFrame()
-    out["Year"] = pd.to_numeric(df[col_year], errors="coerce")
-    out["Month"] = pd.to_numeric(df[col_month], errors="coerce")
-
     col_flow = _pick(cols, "Flow")
     col_hs = _pick(cols, "HS_C", "HS Code", "Commodity Code")
     col_dest = _pick(cols, "Destination Name", "Destination", "Destin")
     col_orig = _pick(cols, "Origin Name", "Origin")
     col_partner = _pick(cols, "Partner.1", "Partner Name", "Partner")
 
+    # Classify (and drop unrecognisable) Flow rows before the output frame
+    # is built, so every column below is derived from the same row set.
+    sides = None
     if col_flow is not None:
-        flow = df[col_flow].astype(str).str.strip().str.lower()
+        sides = df[col_flow].map(_flow_side)
+        unknown = sides.isna()
+        if unknown.any():
+            # fillna BEFORE astype: recent pandas keeps NaN as NaN through
+            # astype(str), and value_counts() would then hide the blanks.
+            sample = (df[col_flow][unknown].fillna("(blank)")
+                      .astype(str).str.strip().replace("", "(blank)")
+                      .value_counts().head(3))
+            detail = ", ".join("%s x%d" % (repr(v), n)
+                               for v, n in sample.items())
+            _warn("%s%s: dropped %d row(s) with blank/unrecognised Flow "
+                  "(%s)" % (os.path.basename(path),
+                            "" if sheet is None else "/" + str(sheet),
+                            int(unknown.sum()), detail))
+            df = df[~unknown]
+            sides = sides[~unknown]
+        if not len(df):
+            return None
+
+    out = pd.DataFrame()
+    out["Year"] = pd.to_numeric(df[col_year], errors="coerce")
+    out["Month"] = pd.to_numeric(df[col_month], errors="coerce")
+
+    if sides is not None:
         # Total exports = domestic exports + re-exports.
-        out["Side"] = flow.map(lambda f: "Imports" if f.startswith("import")
-                               else "Exports")
+        out["Side"] = sides
     elif col_dest is not None:
         out["Side"] = "Exports"
     elif col_orig is not None:
@@ -289,16 +345,26 @@ def load_monthly(data_dir):
     the same extract uploaded twice, or one workbook's raw sheets overlapping
     each other) are counted once; rows repeated inside one sheet are kept,
     since two declarations of equal value are two real transactions.
+
+    Data-quality warnings raised during the parse (blank/unrecognised Flow
+    rows dropped) are stashed in ``WARNINGS`` on every call -- cache hits
+    restore the copy saved with the cached frame.
     """
     frames = []
+    del WARNINGS[:]              # fresh list for this load (cache refills it)
     cache_dir = os.path.join(data_dir, ".cache")
-    # v3: caches now carry the SourceUnit (file/sheet) column used for
-    # dedup; older monthly-/monthly2- pickles are never read again.
+    # v4: caches carry the parse-time WARNINGS too; monthly3- and older
+    # pickles (built by the lenient Flow mapper that counted garbage rows
+    # as exports) are never read again.
     cache_path = os.path.join(
-        cache_dir, "monthly3-%s.pkl" % _dir_fingerprint(data_dir))
+        cache_dir, "monthly4-%s.pkl" % _dir_fingerprint(data_dir))
     if os.path.exists(cache_path):
         try:
-            out = pd.read_pickle(cache_path)
+            payload = pd.read_pickle(cache_path)
+            out, warns = payload["df"], payload["warnings"]
+            WARNINGS.extend(warns)
+            for w in warns:
+                print("  [warn] %s" % w)
             print("  cached  %-58s %7d rows"
                   % (os.path.basename(data_dir), len(out)))
             return out
@@ -346,7 +412,7 @@ def load_monthly(data_dir):
               % dropped)
     try:
         os.makedirs(cache_dir, exist_ok=True)
-        out.to_pickle(cache_path)
+        pd.to_pickle({"df": out, "warnings": list(WARNINGS)}, cache_path)
     except Exception:
         pass  # read-only volume: skip caching, still return the result
     return out
