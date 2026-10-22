@@ -44,6 +44,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 import make_tables                       # noqa: E402
+import input_validation                  # noqa: E402
 import generate_report as gr             # noqa: E402
 import make_config                       # noqa: E402
 import make_services_tables              # noqa: E402
@@ -1026,6 +1027,14 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs, promotion=False):
 
     if mode == "raw":
         logs.append("Mode: raw ITC downloads -> building Table 1-6 + Figure 1 ...")
+        checks, problems = input_validation.validate_goods_inputs(str(uploads))
+        for level, msg in checks:
+            logs.append(input_validation.log_line(level, msg))
+        if problems:
+            raise PipelineError(
+                "[ERROR] Input validation failed -- fix the source files "
+                "listed above and re-run:\n"
+                + "\n".join(f"  - {p}" for p in problems))
         try:
             make_tables.generate_tables(str(uploads), str(tables), top_n)
         except SystemExit as e:

@@ -416,7 +416,7 @@ def _country_from_download_name(path):
     return display_name(m.group(1).replace("_", " ").strip().title())
 
 
-def parse_source(path, years=None):
+def parse_source(path, years=None, _grid=None):
     """Read an ITC workbook (either Trade Map layout).
 
     Returns ``(rows, year_columns, years, labels)`` where rows/ycols are
@@ -428,11 +428,17 @@ def parse_source(path, years=None):
     ``year_columns`` is a list of (column_index, year); when ``years`` is
     given only those years are kept (all tables in one report must share
     the same year set), otherwise they are chosen via _pick_years.
+
+    ``_grid`` lets a caller that already opened the sheet pass it in so
+    the workbook is only read once (the pre-flight validator uses it).
     """
-    wb, _used = convert_to_xlsx(path)
-    ws = wb[wb.sheetnames[0]]
-    grid = [[c for c in row] for row in ws.iter_rows(values_only=True)]
-    wb.close()
+    if _grid is None:
+        wb, _used = convert_to_xlsx(path)
+        ws = wb[wb.sheetnames[0]]
+        grid = [[c for c in row] for row in ws.iter_rows(values_only=True)]
+        wb.close()
+    else:
+        grid = _grid
 
     kind = _detect_classic_layout(grid)
     if kind == "markets":
