@@ -32,6 +32,8 @@ import json
 import os
 import sys
 
+from pipeline_errors import PipelineError
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -115,7 +117,7 @@ def find_service_excel_files(excel_dir):
         for k in missing:
             missing_detail.append(f"  - {k}: expected filename containing '{expected[k]}'")
         found_names = {k: os.path.basename(v) for k, v in found.items()}
-        sys.exit(
+        raise PipelineError(
             "[ERROR] Missing service Excel file(s) in '%s'.\n"
             "Found %d file(s): %s\n"
             "Missing %d required file(s):\n%s"
@@ -1379,4 +1381,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PipelineError as e:
+        sys.exit(str(e))

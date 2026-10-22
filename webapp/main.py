@@ -17,9 +17,6 @@ Run (from the project root):
     python -m uvicorn webapp.main:app --host 127.0.0.1 --port 8000
 """
 
-import csv
-import html
-import html.parser
 import io
 import json
 import logging
@@ -57,6 +54,10 @@ import period_data                           # noqa: E402
 import generate_product_profile as gpp   # noqa: E402
 import generate_crafts_report as gcr     # noqa: E402
 import generate_competitor_analysis as gca  # noqa: E402
+from pipeline_errors import PipelineError   # noqa: E402
+from xlsx_compat import (                   # noqa: E402
+    _write_csv_as_xlsx, _write_xls_as_xlsx, _write_xlsb_as_xlsx,
+)
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = WEBAPP_DIR / "static"
@@ -66,6 +67,17 @@ SAMPLE_DIR = BASE_DIR / "Samplefiles"
 JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
+
+# Upload guards: the hosted (Render free-tier) disk is small and one pipeline
+# runs at a time, so cap what a single job may consume.  KRA quarterly
+# extracts run to ~400 MB, hence the generous per-file ceiling.
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024        # 500 MB per file
+MAX_TOTAL_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB per job
+
+# Job ids are uuid4().hex; anything else must never reach the filesystem.
+_JOB_ID_RE = re.compile(r"[0-9a-f]{32}")
+# Config stems come from filenames we control, but reject traversal anyway.
+_CFG_ID_RE = re.compile(r"[A-Za-z0-9_\-]+")
 
 # Trade Map classic downloads carry long product-group names in the filename
 # ("...List_of_exported_products_for_the_selected_product_(Preparations_of_meat_"
@@ -266,6 +278,39 @@ def _new_job_dir():
     return jd
 
 
+def _job_dir(job_id):
+    """Resolve a validated job id to its directory (404 when unknown)."""
+    if not _JOB_ID_RE.fullmatch(job_id or ""):
+        raise HTTPException(404, "Job not found (or expired).")
+    job_dir = JOBS_DIR / job_id
+    if not job_dir.is_dir():
+        raise HTTPException(404, "Job not found (or expired).")
+    return job_dir
+
+
+def _read_manifest(job_dir):
+    """Load the job manifest, 404 when missing/corrupt."""
+    p = Path(job_dir) / "manifest.json"
+    if not p.exists():
+        raise HTTPException(404, "Job not found (or expired).")
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(404, "Job manifest unreadable (or expired).")
+
+
+def _cfg_path(cfg_id):
+    """Resolve a validated config id to its path (404 when unknown)."""
+    if not cfg_id or cfg_id == "__auto__":
+        raise HTTPException(404, "Config not found")
+    if not _CFG_ID_RE.fullmatch(cfg_id):
+        raise HTTPException(400, f"Invalid config id: {cfg_id!r}")
+    p = CONFIG_DIR / f"{cfg_id}.json"
+    if not p.exists():
+        raise HTTPException(404, f"Config '{cfg_id}' not found")
+    return p
+
+
 def _cleanup_old_jobs():
     now = time.time()
     if not JOBS_DIR.exists():
@@ -277,30 +322,6 @@ def _cleanup_old_jobs():
                     shutil.rmtree(d, ignore_errors=True)
             except OSError:
                 pass
-
-
-def _save_upload(uploads_dir, upload: UploadFile):
-    """Persist one uploaded file, keeping only its (clipped) basename."""
-    name = _clip_name(upload.filename or "")
-    if not name.lower().endswith(ALLOWED_EXT):
-        raise HTTPException(400, f"Unsupported file type: {upload.filename}")
-    dst = uploads_dir / name
-    if dst.exists():
-        base, ext = os.path.splitext(name)
-        i = 1
-        while dst.exists():
-            dst = uploads_dir / f"{base}__{i}{ext}"
-            i += 1
-    with dst.open("wb") as f:
-        shutil.copyfileobj(upload.file, f)
-    try:
-        return _convert_to_xlsx(dst)
-    except HTTPException as exc:
-        # Keep the raw file so the loader can still try it (an unneeded or
-        # unsupported extra file must not abort the whole upload set).
-        LOG.warning("Keeping raw upload %s after conversion failure: %s",
-                    name, exc.detail)
-        return dst
 
 
 def _extract_zip(zpath, dest):
@@ -354,188 +375,8 @@ def _flatten_xlsx(dest):
 # ---------------------------------------------------------------------------
 # Spreadsheet normalisation: anything -> .xlsx (openpyxl can only read .xlsx)
 # ---------------------------------------------------------------------------
-_INVALID_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
-
-
-def _safe_sheet_name(name, fallback):
-    """A valid openpyxl sheet title (non-empty, <= 31 chars, no bad chars)."""
-    n = _INVALID_SHEET_CHARS.sub("_", (name or "").strip())
-    return n[:31] or fallback
-
-
-def _read_text_any(path):
-    """Read a text file, trying common encodings in turn."""
-    for enc in ("utf-8-sig", "utf-8", "latin-1"):
-        try:
-            return path.read_text(encoding=enc)
-        except UnicodeDecodeError:
-            continue
-    return path.read_text(encoding="latin-1", errors="replace")
-
-
-def _sniff_spreadsheet_kind(path):
-    """Classify a non-.xlsx upload: 'xls' | 'html' | 'csv'.
-
-    ITC / Trade Map downloads are often HTML tables (or comma/tab-delimited
-    text) saved with a ``.xls`` extension. xlrd only understands the real
-    binary format, so sniff the first bytes to pick the right parser.
-    """
-    with path.open("rb") as f:
-        head = f.read(8192)
-    low = head.lower()
-    if b"<html" in low or b"<table" in low or b"<!doctype" in low \
-            or b"<head" in low or b"<meta" in low:
-        return "html"
-    if b"\x00" in head:
-        return "xls"
-    try:
-        text = head.decode("utf-8", "ignore")
-    except Exception:
-        return "xls"
-    if any(ch in text for ch in ("\t", ",", ";", "|")):
-        return "csv"
-    return "xls"
-
-
-class _HTMLTableParser(html.parser.HTMLParser):
-    """Extract the largest <table> in an HTML file as a list of row lists."""
-
-    def __init__(self):
-        super().__init__()
-        self.tables = []
-        self._cur = None
-        self._row = None
-        self._data = []
-        self._in_cell = False
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "table":
-            self._cur = []
-        elif tag == "tr" and self._cur is not None:
-            self._row = []
-        elif tag in ("td", "th") and self._row is not None:
-            self._data = []
-            self._in_cell = True
-
-    def handle_endtag(self, tag):
-        if tag == "table" and self._cur is not None:
-            if self._cur:
-                self.tables.append(self._cur)
-            self._cur = None
-        elif tag == "tr" and self._row is not None:
-            if self._row:
-                self._cur.append(self._row)
-            self._row = None
-        elif tag in ("td", "th") and self._in_cell:
-            self._row.append("".join(self._data).replace("\xa0", " ").strip())
-            self._data = []
-            self._in_cell = False
-
-    def handle_data(self, data):
-        if self._in_cell:
-            self._data.append(data)
-
-
-def _write_html_as_xlsx(src, out):
-    """Parse an HTML file (often a .xls download) into the first .xlsx sheet."""
-    text = _read_text_any(src)
-    parser = _HTMLTableParser()
-    parser.feed(text)
-    if not parser.tables:
-        raise ValueError("No HTML table found in file")
-    table = max(parser.tables, key=len)
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Sheet1"
-    for r, row in enumerate(table, start=1):
-        for c, v in enumerate(row, start=1):
-            if v != "":
-                ws.cell(row=r, column=c, value=v)
-    # Keep the ITC "Product group: <Category>" label (the numbered craft
-    # files carry the category only in this page text, never in the
-    # filename), so the crafts loader can still identify the family after
-    # the HTML -> xlsx conversion discards the rest of the page.
-    m = re.search(r"Product group\s*:\s*([^<]+)", text)
-    if m:
-        ws.cell(row=1, column=20,
-                value="Product group: %s" % m.group(1).strip())
-    wb.save(str(out))
-
-
-def _write_xls_as_xlsx(src, out):
-    import xlrd
-    kind = _sniff_spreadsheet_kind(src)
-    if kind == "html":
-        _write_html_as_xlsx(src, out)
-        return
-    if kind == "csv":
-        _write_csv_as_xlsx(src, out)
-        return
-    book = xlrd.open_workbook(str(src), formatting_info=False)
-    wb = openpyxl.Workbook()
-    for idx in range(book.nsheets):
-        sheet = book.sheet_by_index(idx)
-        if idx == 0:
-            ws = wb.active
-        else:
-            ws = wb.create_sheet()
-        ws.title = _safe_sheet_name(sheet.name, f"Sheet{idx + 1}")
-        for r in range(sheet.nrows):
-            for c in range(sheet.ncols):
-                cell = sheet.cell(r, c)
-                v = cell.value
-                if cell.ctype == xlrd.XL_CELL_DATE:
-                    try:
-                        v = xlrd.xldate_as_datetime(v, book.datemode)
-                    except (ValueError, OverflowError):
-                        pass
-                elif cell.ctype == xlrd.XL_CELL_NUMBER \
-                        and isinstance(v, float) and v.is_integer():
-                    v = int(v)
-                if v is not None:
-                    ws.cell(row=r + 1, column=c + 1, value=v)
-    wb.save(str(out))
-
-
-def _write_xlsb_as_xlsx(src, out):
-    from pyxlsb import open_workbook
-    wb = openpyxl.Workbook()
-    first = True
-    with open_workbook(str(src)) as book:
-        for name in book.sheets:
-            if first:
-                ws = wb.active
-                first = False
-            else:
-                ws = wb.create_sheet()
-            ws.title = _safe_sheet_name(name, f"Sheet{len(wb.sheetnames) + 1}")
-            with book.get_sheet(name) as sheet:
-                r = 1
-                for row in sheet.rows():
-                    for c, cell in enumerate(row):
-                        v = cell.v
-                        if isinstance(v, float) and v.is_integer():
-                            v = int(v)
-                        if v is not None:
-                            ws.cell(row=r, column=c + 1, value=v)
-                    r += 1
-    wb.save(str(out))
-
-
-def _write_csv_as_xlsx(src, out):
-    text = _read_text_any(src)
-    lines = text.splitlines()
-    first = lines[0] if lines else ""
-    counts = {d: first.count(d) for d in ("\t", ";", ",", "|")}
-    delim = max(counts, key=counts.get) if any(counts.values()) else ","
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Sheet1"
-    for r, row in enumerate(csv.reader(io.StringIO(text), delimiter=delim), start=1):
-        for c, v in enumerate(row, start=1):
-            if v != "":
-                ws.cell(row=r, column=c, value=v)
-    wb.save(str(out))
+# _safe_sheet_name / _read_text_any / _sniff_spreadsheet_kind / HTMLTableParser
+# / the per-format writers all live in xlsx_compat.py (single source of truth).
 
 
 def _convert_to_xlsx(src):
@@ -592,11 +433,6 @@ def _convert_to_xlsx(src):
 # ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
-@app.on_event("startup")
-def _startup():
-    _cleanup_old_jobs()
-
-
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(STATIC_DIR / "index.html",
@@ -717,7 +553,7 @@ def api_goods_partner_setup(partner: str = "", year: int = 0):
         "note": (
             "ITC Trade Map has no public API. Run each query below in the "
             "Trade Map web app, download the workbook, then upload them together "
-            "for Goods Trade Flow. Filenames matching the patterns below are "
+            "for the Trade Brief. Filenames matching the patterns below are "
             "auto-detected and the partner config is reused automatically."),
     }
 
@@ -726,10 +562,10 @@ def api_goods_partner_setup(partner: str = "", year: int = 0):
 # Bundled sample datasets (Samplefiles/), grouped by app feature.
 # ---------------------------------------------------------------------------
 _SAMPLE_LABELS = {
-    "services": "Services Trade Flow",
+    "services": "Services Brief",
     "quarterly": "Export Performance",
     "product": "Product Profile",
-    "goods": "Goods Trade Flow",
+    "goods": "Trade Brief",
 }
 
 # Review periods of the Export Performance feature (report_type keeps its
@@ -945,7 +781,7 @@ def _detect_mode(uploads_dir, report_type="goods"):
         return "competitor", ""
     # The raw services files are recognised by their own distinctive keywords,
     # so the upload set can be detected even when the client did not explicitly
-    # select the "Services Trade Flow" report type.
+    # select the "Services Brief" report type.
     if any(any(k in n for k in SERVICE_RAW_KEYWORDS) for n in names):
         return "services_raw", ""
     # Auto-detect: distinctive all-countries/all-products matrix names mean a
@@ -1151,9 +987,7 @@ def _resolve_cfg(excel_dir, cfg_id, logs):
     generated automatically from the data.
     """
     if cfg_id and cfg_id != "__auto__":
-        cfg_path = CONFIG_DIR / f"{cfg_id}.json"
-        if not cfg_path.exists():
-            raise HTTPException(404, f"Config '{cfg_id}' not found")
+        cfg_path = _cfg_path(cfg_id)
         gr.cfg_path = os.path.abspath(str(cfg_path))
         cfg = gr.load_config(gr.cfg_path)
         _check_reporter_matches_config(cfg, excel_dir)
@@ -1164,8 +998,8 @@ def _resolve_cfg(excel_dir, cfg_id, logs):
         raise HTTPException(
             400,
             "Could not detect the country from the uploaded data. Pick a "
-            "country config manually (or upload the standard Table 1 with a "
-            "country title).")
+            "country from the Country configuration dropdown (or upload the "
+            "standard Table 1 with a country title).")
     for p in sorted(CONFIG_DIR.glob("*.json")):
         if p.name == "config_template.json":
             continue
@@ -1255,9 +1089,7 @@ def _run_services_pipeline(job_dir, cfg_id, top_n, logs):
         # Auto-select services_world config when report_type is services
         cfg_id = "services_world"
 
-    cfg_path = CONFIG_DIR / f"{cfg_id}.json"
-    if not cfg_path.exists():
-        raise HTTPException(404, f"Config '{cfg_id}' not found")
+    cfg_path = _cfg_path(cfg_id)
     gr.cfg_path = os.path.abspath(str(cfg_path))
     cfg = gr.load_config(gr.cfg_path)
 
@@ -1300,9 +1132,7 @@ def _run_product_pipeline(job_dir, cfg_id, top_n, logs):
         logs.append(f"Auto-detected product profile: "
                     f"{cfg.get('family_title', cfg_id)}")
     else:
-        cfg_path = CONFIG_DIR / f"{cfg_id}.json"
-        if not cfg_path.exists():
-            raise HTTPException(404, f"Config '{cfg_id}' not found")
+        cfg_path = _cfg_path(cfg_id)
         cfg = gr.load_config(str(cfg_path))
 
     os.makedirs(charts, exist_ok=True)
@@ -1354,9 +1184,7 @@ def _run_crafts_pipeline(job_dir, cfg_id, top_n, logs):
     if not cfg_id or cfg_id == "__auto__":
         cfg_id = "product_profile_crafts"
 
-    cfg_path = CONFIG_DIR / f"{cfg_id}.json"
-    if not cfg_path.exists():
-        raise HTTPException(404, f"Config '{cfg_id}' not found")
+    cfg_path = _cfg_path(cfg_id)
     cfg = gr.load_config(str(cfg_path))
     if not cfg.get("family_title"):
         raise HTTPException(400, "The selected config is not a product-profile "
@@ -1543,6 +1371,15 @@ def _read_job_log(job_dir):
     return p.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
+def _write_job_error(job_dir, message, traceback_text=None):
+    """Persist a job failure: a short user-facing message plus (optionally)
+    the full traceback.  /api/status only ever returns the short message."""
+    (job_dir / "error.txt").write_text(
+        message if not traceback_text else f"{message}\n\n{traceback_text}",
+        encoding="utf-8")
+    (job_dir / "error_public.txt").write_text(message, encoding="utf-8")
+
+
 def _job_worker(job_dir, job_fn):
     logs = _JobLog(job_dir)
     try:
@@ -1560,17 +1397,18 @@ def _job_worker(job_dir, job_fn):
                  job_dir.name, manifest["report_name"])
     except HTTPException as e:
         LOG.error("Background job %s failed: %s", job_dir.name, e.detail)
-        (job_dir / "error.txt").write_text(str(e.detail), encoding="utf-8")
+        _write_job_error(job_dir, str(e.detail))
+    except PipelineError as e:
+        LOG.error("Background job %s failed: %s", job_dir.name, e)
+        _write_job_error(job_dir, str(e))
     except SystemExit as e:
         LOG.error("Background job %s aborted: %s", job_dir.name, e)
-        (job_dir / "error.txt").write_text(f"Pipeline aborted: {e}",
-                                           encoding="utf-8")
+        _write_job_error(job_dir, f"Pipeline aborted: {e}")
     except Exception as e:
         tb = traceback.format_exc()
         LOG.error("Background job %s failed:", job_dir.name)
         LOG.error("%s", tb)
-        (job_dir / "error.txt").write_text(
-            f"Pipeline failed: {e}\n\n{tb}", encoding="utf-8")
+        _write_job_error(job_dir, f"Pipeline failed: {e}", tb)
 
 
 @app.get("/api/status/{job_id}")
@@ -1580,12 +1418,12 @@ def api_status(job_id: str):
     States: running | done | error. A job whose meta.json predates this
     server process must have been interrupted by a restart -> error.
     """
-    job_dir = JOBS_DIR / job_id
-    if not re.fullmatch(r"[0-9a-f]{32}", job_id or "") or not job_dir.is_dir():
-        raise HTTPException(404, "Job not found (or expired).")
+    job_dir = _job_dir(job_id)
 
     log_lines = _read_job_log(job_dir)
-    err_path = job_dir / "error.txt"
+    err_path = job_dir / "error_public.txt"
+    if not err_path.exists():
+        err_path = job_dir / "error.txt"
     man_path = job_dir / "manifest.json"
     if err_path.exists():
         return {"state": "error", "detail": err_path.read_text(encoding="utf-8"),
@@ -1618,18 +1456,53 @@ def api_status(job_id: str):
     return {"state": "running", "log": log_lines}
 
 
+def _write_upload(dst, upload, budget):
+    """Stream an upload to disk, enforcing the per-job byte budget.
+
+    ``budget`` is a one-item list holding the remaining allowed bytes; it is
+    decremented as bytes arrive so the whole job (files + zip) shares one cap.
+    """
+    remaining = budget[0]
+    written = 0
+    with dst.open("wb") as f:
+        while True:
+            chunk = upload.file.read(1024 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            remaining -= len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    400, f"File too large: {upload.filename or 'upload'} "
+                         f"(limit {MAX_UPLOAD_BYTES // (1024 * 1024)} MB "
+                         f"per file).")
+            if remaining < 0:
+                raise HTTPException(
+                    400, "Upload too large in total "
+                         f"(limit {MAX_TOTAL_UPLOAD_BYTES // (1024 * 1024)} "
+                         "MB per job).")
+            f.write(chunk)
+    budget[0] = remaining
+    return written
+
+
+# NOTE: sync def on purpose — FastAPI runs sync endpoints in a threadpool, so
+# the (potentially hundreds of MB) upload/conversion work here never blocks
+# the event loop that serves /api/status polling for other clients.
 @app.post("/api/run")
-async def api_run(config: str = Form("__auto__"), top: int = Form(20),
-                  report_type: str = Form("goods"),
-                  period: str = Form(""),
-                  promotion: bool = Form(False),
-                  files: list[UploadFile] = File(default=None),
-                  zipfile: UploadFile | None = File(default=None)):
+def api_run(config: str = Form("__auto__"), top: int = Form(20),
+            report_type: str = Form("goods"),
+            period: str = Form(""),
+            promotion: bool = Form(False),
+            files: list[UploadFile] = File(default=None),
+            zip_upload: UploadFile | None = File(default=None, alias="zip")):
     files = files or []
-    if not files and zipfile is None:
+    if not files and zip_upload is None:
         raise HTTPException(400, "Please select files (or a zip) to upload.")
-    if top < 1:
-        raise HTTPException(400, "top must be >= 1")
+    if top < 1 or top > 100:
+        raise HTTPException(400, "top must be between 1 and 100")
+    if config and config != "__auto__" and not _CFG_ID_RE.fullmatch(config):
+        raise HTTPException(400, f"Invalid config id: {config!r}")
     if report_type not in ("goods", "services", "quarterly", "product",
                            "competitor"):
         raise HTTPException(400, "report_type must be 'goods', 'services', "
@@ -1641,14 +1514,33 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
                                  "Q3, Q4, Semi-Annual or Annual.")
 
     job_dir = _new_job_dir()
+    budget = [MAX_TOTAL_UPLOAD_BYTES]
     try:
         for up in files:
-            _save_upload(job_dir / "uploads", up)
-        if zipfile is not None:
-            zname = os.path.basename(zipfile.filename or "upload.zip")
+            name = _clip_name(up.filename or "")
+            if not name.lower().endswith(ALLOWED_EXT):
+                raise HTTPException(400,
+                                    f"Unsupported file type: {up.filename}")
+            dst = job_dir / "uploads" / name
+            if dst.exists():
+                base, ext = os.path.splitext(name)
+                i = 1
+                while dst.exists():
+                    dst = job_dir / "uploads" / f"{base}__{i}{ext}"
+                    i += 1
+            _write_upload(dst, up, budget)
+            try:
+                _convert_to_xlsx(dst)
+            except HTTPException as exc:
+                # Keep the raw file so the loader can still try it (an
+                # unneeded or unsupported extra file must not abort the
+                # whole upload set).
+                LOG.warning("Keeping raw upload %s after conversion "
+                            "failure: %s", name, exc.detail)
+        if zip_upload is not None:
+            zname = os.path.basename(zip_upload.filename or "upload.zip")
             zpath = job_dir / "uploads" / zname
-            with zpath.open("wb") as f:
-                shutil.copyfileobj(zipfile.file, f)
+            _write_upload(zpath, zip_upload, budget)
             _extract_zip(zpath, job_dir / "uploads")
 
         mode, err = _detect_mode(job_dir / "uploads", report_type)
@@ -1719,11 +1611,8 @@ async def api_run(config: str = Form("__auto__"), top: int = Form(20),
 
 @app.get("/api/download/{job_id}")
 def api_download(job_id: str):
-    job_dir = JOBS_DIR / job_id
-    manifest_path = job_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise HTTPException(404, "Job not found (or expired).")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    job_dir = _job_dir(job_id)
+    manifest = _read_manifest(job_dir)
     report = job_dir / manifest["report_name"]
     if not report.exists():
         raise HTTPException(404, "Report not found.")
@@ -1734,9 +1623,10 @@ def api_download(job_id: str):
 @app.get("/api/promotion/{job_id}")
 def api_promotion(job_id: str):
     """Download the additive export-promotion workbook (if requested)."""
-    job_dir = JOBS_DIR / job_id
-    manifest = json.loads((job_dir / "manifest.json").read_text(
-        encoding="utf-8"))
+    job_dir = _job_dir(job_id)
+    manifest = _read_manifest(job_dir)
+    if "promotion_name" not in manifest:
+        raise HTTPException(404, "This job has no export-promotion workbook.")
     promo = job_dir / manifest["promotion_name"]
     if not promo.exists():
         raise HTTPException(404, "Promotion workbook not found.")
@@ -1746,11 +1636,8 @@ def api_promotion(job_id: str):
 
 @app.get("/api/tables/{job_id}")
 def api_tables(job_id: str):
-    job_dir = JOBS_DIR / job_id
-    manifest_path = job_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise HTTPException(404, "Job not found (or expired).")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    job_dir = _job_dir(job_id)
+    manifest = _read_manifest(job_dir)
     src = job_dir / manifest["excel_dir"]
     if not src.is_dir():
         raise HTTPException(404, "Tables not found.")
@@ -1767,11 +1654,8 @@ def api_tables(job_id: str):
 @app.get("/api/product-tables/{job_id}")
 def api_product_tables(job_id: str):
     """Download the Excel deliverable of a product-profile job."""
-    job_dir = JOBS_DIR / job_id
-    manifest_path = job_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise HTTPException(404, "Job not found (or expired).")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    job_dir = _job_dir(job_id)
+    manifest = _read_manifest(job_dir)
     tables = job_dir / manifest.get("tables_name", "")
     if not tables.exists():
         raise HTTPException(404, "Excel deliverable not found.")
@@ -1783,11 +1667,8 @@ def api_product_tables(job_id: str):
 @app.get("/api/competitor-file/{job_id}/{kind}")
 def api_competitor_file(job_id: str, kind: str):
     """Download a competitor-analysis deliverable (png / xlsx / docx)."""
-    job_dir = JOBS_DIR / job_id
-    manifest_path = job_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise HTTPException(404, "Job not found (or expired).")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    job_dir = _job_dir(job_id)
+    manifest = _read_manifest(job_dir)
     if manifest.get("report_type") != "competitor":
         raise HTTPException(404, "Not a competitor-analysis job.")
     key = {"png": "png_name", "xlsx": "xlsx_name", "docx": "report_name"}.get(kind)

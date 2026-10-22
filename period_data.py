@@ -19,6 +19,8 @@ import os
 import re
 import sys
 
+from pipeline_errors import PipelineError
+
 import openpyxl
 import pandas as pd
 
@@ -94,6 +96,13 @@ def _candidate_sheets(path):
         names = wb.sheetnames
         wb.close()
         return names or [None]
+    except Exception:
+        pass
+    # Legacy binary .xls (or anything openpyxl cannot open): let pandas
+    # enumerate the sheets so each one is still read individually.
+    try:
+        with pd.ExcelFile(path) as xf:
+            return list(xf.sheet_names) or [None]
     except Exception:
         return [None]
 
@@ -183,9 +192,12 @@ def _read_one(path, sheet):
             try:
                 df = _read_xlsx(path, sheet)
             except Exception:
-                df = pd.read_excel(path, sheet_name=sheet)
+                df = pd.read_excel(path, sheet_name=0 if sheet is None else sheet)
     except Exception:
         return None
+    if isinstance(df, dict):
+        # sheet_name=None returns every sheet; keep the first usable one.
+        df = next((v for v in df.values() if v is not None and len(v)), None)
     if df is None or not len(df):
         return None
     df.columns = [str(c).strip() for c in df.columns]
@@ -305,7 +317,7 @@ def load_monthly(data_dir):
                 print("  loaded %-58s %7d rows"
                       % (os.path.basename(path) + "/" + str(sheet), len(df)))
     if not frames:
-        sys.exit(
+        raise PipelineError(
             "[ERROR] No usable monthly trade data found in '%s'.\n"
             "Expected the KNBS monthly workbook and/or the raw KRA extracts "
             "(...Exports by HS Destination... / ...Imports by HS Origin...). "
@@ -352,13 +364,13 @@ def period_spec(period, year, half=1, quarter=1, prev_year=None):
     year = int(year)
     if period == "quarter":
         if not 1 <= int(quarter) <= 4:
-            sys.exit("[ERROR] --quarter must be 1..4")
+            raise PipelineError("[ERROR] --quarter must be 1..4")
         q = int(quarter)
         months = list(range(3 * q - 2, 3 * q + 1))
         subs = [(MONTH_NAMES[m], (m,)) for m in months]
     elif period == "semi":
         if int(half) not in (1, 2):
-            sys.exit("[ERROR] --half must be 1 or 2")
+            raise PipelineError("[ERROR] --half must be 1 or 2")
         h = int(half)
         months = list(range(1, 7)) if h == 1 else list(range(7, 13))
         subs = [("Q%d" % (2 * h - 1), tuple(range(1, 4)) if h == 1 else (7, 8, 9)),
@@ -368,7 +380,7 @@ def period_spec(period, year, half=1, quarter=1, prev_year=None):
         subs = [("Q1", (1, 2, 3)), ("Q2", (4, 5, 6)),
                 ("Q3", (7, 8, 9)), ("Q4", (10, 11, 12))]
     else:
-        sys.exit("[ERROR] --period must be quarter, semi or year")
+        raise PipelineError("[ERROR] --period must be quarter, semi or year")
     span = "%s-%s" % (MONTH_NAMES[months[0]], MONTH_NAMES[months[-1]])
     span_short = "%s-%s" % (MONTH_NAMES[months[0]][:3],
                             MONTH_NAMES[months[-1]][:3])

@@ -2,6 +2,15 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Virtualenv — never commit (223 MB+)
+.venv/
+venv/
+
+# Raw local datasets / reference PDFs (not source code)
+KNBS/
+*.pdf
+!Samplefiles/**/*.pdf
+
 webapp/jobs/
 webapp/uploads/
 
@@ -60,6 +69,7 @@ RID Department Tasks*.pdf
 !Samplefiles/Product_Profiles/Coffee/**
 Samplefiles/**/~$*
 Samplefiles/**/._*
+Samplefiles/**/.cache/
 
 # policy dashboard: ingested datasets + downloaded source files (not source code)
 policydata/data/

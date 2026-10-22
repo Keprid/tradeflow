@@ -3,857 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Generate Kenya trade flow reports (goods, services, export performance, product profiles, competitor analysis) from ITC Trade Map downloads in one click.">
 <title>Trade Flow Report Generator | KEPROBA</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23111111'/%3E%3Crect x='8' y='44' width='48' height='6' fill='%23be2838'/%3E%3Crect x='8' y='54' width='48' height='4' fill='%2300a34b'/%3E%3Ctext x='32' y='40' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='bold' fill='%23fff' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-<style>
-:root {
-  --green: #00a34b;
-  --green-dark: #008f40;
-  --green-light: #e6f4ec;
-  --red: #be2838;
-  --red-dark: #9a1f2c;
-  --red-light: #fce8eb;
-  --dark-blue: #163C69;
-  --navy: #212062;
-  --orange: #F3801C;
-  --white: #fff;
-  --text: #1a1a2e;
-  --text-secondary: #4a4a68;
-  --text-muted: #8b8ba7;
-  --border: #e2e8f0;
-  --bg: #f8fafc;
-  --bg-light: #f1f5f9;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
-  --shadow-md: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
-  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.04);
-  --radius: 12px;
-  --radius-sm: 8px;
-}
-
-* { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
-
-body {
-  margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Header */
-.header {
-  background: #fff;
-  border-bottom: 3px solid var(--red);
-  padding: 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: var(--shadow);
-}
-
-.header-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0;
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 0;
-  min-height: 80px;
-}
-
-.header-emblem {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 20px;
-}
-
-.header-emblem-img {
-  height: 52px;
-  width: auto;
-  display: block;
-}
-
-.header-text {
-  flex: 1 1 auto;
-  border-left: 3px solid var(--red);
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-}
-
-.header-tagline {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--dark-blue);
-  line-height: 1.3;
-  letter-spacing: -0.02em;
-}
-
-.header-tagline .flag-red { color: var(--red); }
-.header-tagline .flag-green { color: var(--green); }
-.header-tagline .flag-black { color: #1a1a2e; }
-
-.header-tagline small {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-top: 3px;
-  letter-spacing: 0;
-}
-
-.header-meta {
-  flex: 0 0 auto;
-  text-align: right;
-  padding: 16px 24px;
-  border-left: 1px solid var(--border);
-  background: linear-gradient(135deg, var(--bg-light) 0%, #fff 100%);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-}
-
-.header-meta p {
-  margin: 0;
-  font-size: 11px;
-  color: #000;
-  line-height: 1.5;
-  font-weight: 700;
-  font-style: italic;
-}
-
-/* Main Layout */
-main {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 24px 48px;
-}
-
-/* Cards */
-.card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 28px;
-  margin-bottom: 20px;
-  box-shadow: var(--shadow);
-  transition: box-shadow 0.3s ease, transform 0.2s ease;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 20px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--dark-blue);
-  padding-bottom: 14px;
-  border-bottom: 2px solid var(--bg-light);
-}
-
-.card-title i {
-  font-size: 18px;
-  color: var(--green);
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--green-light);
-  border-radius: var(--radius-sm);
-}
-
-/* Typography */
-h1, h2, h3 {
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-label {
-  display: block;
-  font-weight: 600;
-  margin: 16px 0 8px;
-  font-size: 13px;
-  color: var(--text);
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.hint {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 8px;
-  line-height: 1.6;
-}
-
-/* Form Elements */
-select, input[type=number], input[type=text] {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-family: inherit;
-  font-weight: 500;
-  background: var(--white);
-  color: var(--text);
-  transition: all 0.2s ease;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 40px;
-}
-
-select:focus, input[type=number]:focus, input[type=text]:focus {
-  outline: none;
-  border-color: var(--green);
-  box-shadow: 0 0 0 4px rgba(0,163,75,0.1);
-  background-color: #fff;
-}
-
-input[type=file] {
-  width: 100%;
-  padding: 20px;
-  border: 2px dashed var(--border);
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--bg-light) 0%, #fff 100%);
-  font-size: 14px;
-  font-family: inherit;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: center;
-}
-
-input[type=file]:hover {
-  border-color: var(--green);
-  background: linear-gradient(135deg, var(--green-light) 0%, #fff 100%);
-  transform: translateY(-1px);
-}
-
-input[type=file]::file-selector-button {
-  margin: 0 12px 0 0;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  border: 0;
-  background: var(--green);
-  color: #fff;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-input[type=file]::file-selector-button:hover {
-  background: var(--green-dark);
-  transform: translateY(-1px);
-}
-
-/* Radio Group - Segmented Control */
-.radio-group {
-  display: flex;
-  width: 100%;
-  gap: 0;
-  margin: 8px 0 20px;
-  padding: 0;
-  background: var(--bg-light);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.radio-option {
-  flex: 1 1 0;
-  min-width: 0;
-  position: relative;
-}
-
-.radio-option input[type="radio"] {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.radio-option label {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 0;
-  background: transparent;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  margin: 0;
-  transition: all 0.2s ease;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  border: none;
-  border-right: 1px solid var(--border);
-  position: relative;
-}
-
-.radio-option:last-child label {
-  border-right: none;
-}
-
-.radio-option label i {
-  font-size: 14px;
-  color: var(--text-muted);
-  width: 18px;
-  text-align: center;
-  transition: color 0.2s ease;
-}
-
-.radio-option input[type="radio"]:checked + label {
-  background: #fff;
-  color: var(--green);
-  box-shadow: inset 0 -3px 0 var(--green);
-}
-
-.radio-option input[type="radio"]:checked + label i {
-  color: var(--green);
-}
-
-.radio-option label:hover {
-  color: var(--text);
-  background: rgba(0,163,75,0.04);
-}
-
-.radio-option input[type="radio"]:focus-visible + label {
-  outline: 2px solid var(--green);
-  outline-offset: -2px;
-}
-
-/* Export Performance: review-period picker */
-#export-period-wrap .radio-group {
-  margin: 8px 0 0;
-}
-
-#export-period-wrap .radio-option label {
-  flex-direction: column;
-  gap: 1px;
-  padding: 9px 6px;
-  font-size: 13px;
-  white-space: normal;
-  text-align: center;
-}
-
-#export-period-wrap .radio-option label .sub {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-.req-star {
-  color: #c00000;
-}
-
-.inline-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  margin: 0;
-  color: var(--text);
-}
-
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 28px;
-  height: 48px;
-  font-size: 15px;
-  font-weight: 600;
-  font-family: inherit;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.25s ease;
-  box-shadow: var(--shadow);
-  position: relative;
-  overflow: hidden;
-}
-
-.btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s ease;
-}
-
-.btn:hover::before {
-  left: 100%;
-}
-
-.btn-primary {
-  color: var(--white);
-  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.btn-primary:active {
-  transform: translateY(0);
-}
-
-.btn-secondary {
-  color: var(--white);
-  background: linear-gradient(135deg, var(--red) 0%, var(--red-dark) 100%);
-}
-
-.btn-secondary:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-.btn:disabled::before {
-  display: none;
-}
-
-/* Layout */
-.row {
-  display: flex;
-  gap: 20px;
-}
-
-.row > div {
-  flex: 1;
-}
-
-/* Log Card */
-.log-card {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border-color: #334155;
-  position: relative;
-  overflow: hidden;
-  scroll-margin-top: 100px;
-}
-
-.log-card .card-title {
-  color: var(--green);
-  border-bottom-color: #334155;
-}
-
-.log-card .card-title i {
-  color: var(--green);
-  background: rgba(0,163,75,0.15);
-}
-
-.log-card .card-title::before {
-  background: var(--green);
-}
-
-#log {
-  background: #0f172a;
-  color: #e2e8f0;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
-  font-size: 13px;
-  padding: 20px;
-  border-radius: var(--radius-sm);
-  min-height: 160px;
-  max-height: 400px;
-  overflow: auto;
-  white-space: pre-wrap;
-  line-height: 1.7;
-  border: 1px solid #334155;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-}
-
-#log .ok { color: #4ade80; font-weight: 500; }
-#log .err { color: #f87171; font-weight: 500; }
-#log .warn { color: #fbbf24; font-weight: 500; }
-
-#log > div:not(.log-empty) { animation: lineIn 0.22s ease both; }
-
-@keyframes lineIn {
-  from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.log-empty { color: #64748b; }
-.log-empty i { margin-right: 10px; color: #475569; }
-
-/* Result */
-.result {
-  border-top: 1px solid var(--border);
-  margin-top: 20px;
-  padding-top: 20px;
-  display: none;
-  animation: fadeIn 0.4s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.result-meta {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-}
-
-.result-meta i {
-  color: var(--green);
-  font-size: 16px;
-}
-
-.result-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.result a {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--white);
-  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
-  text-decoration: none;
-  padding: 12px 24px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-weight: 600;
-  box-shadow: var(--shadow);
-  transition: all 0.25s ease;
-}
-
-.result a:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.result a.btn-secondary-link {
-  background: linear-gradient(135deg, var(--red) 0%, var(--red-dark) 100%);
-}
-
-.result a.btn-secondary-link:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-/* Error */
-.error-msg {
-  color: var(--red);
-  font-weight: 500;
-  padding: 14px 18px;
-  background: var(--red-light);
-  border-radius: var(--radius-sm);
-  border-left: 4px solid var(--red);
-  margin-top: 16px;
-  font-size: 14px;
-  display: none;
-  animation: shake 0.4s ease;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
-}
-
-/* Info boxes */
-.info-box {
-  display: none;
-  margin-top: 16px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, var(--bg-light) 0%, #fff 100%);
-  border-radius: var(--radius-sm);
-  border-left: 4px solid var(--dark-blue);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.info-box b {
-  color: var(--dark-blue);
-  font-weight: 600;
-}
-
-/* File summary chips */
-.file-summary { display: none; margin-top: 12px; }
-.file-summary.show { display: block; animation: fadeIn 0.3s ease; }
-
-.file-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-
-.file-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--green-light);
-  border: 1px solid rgba(0,163,75,0.25);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--green-dark);
-  max-width: 100%;
-}
-
-.file-chip i { font-size: 11px; flex: 0 0 auto; }
-.file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* "Click Generate Report" call-to-action */
-.run-cta {
-  display: none;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, var(--green-light) 0%, #fff 100%);
-  border: 1.5px dashed var(--green);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--green-dark);
-}
-
-.run-cta.show { display: flex; animation: ctaIn 0.35s cubic-bezier(0.18, 1.25, 0.4, 1) both; }
-
-.run-cta .cta-hand {
-  font-size: 20px;
-  color: var(--green);
-  animation: pointDown 1s ease-in-out infinite;
-  flex: 0 0 auto;
-}
-
-@keyframes pointDown {
-  0%, 100% { transform: translateY(-2px); }
-  50% { transform: translateY(4px); }
-}
-
-@keyframes ctaIn {
-  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-
-/* Button attention pulse */
-.btn-attention { animation: pulseGlow 1.6s ease-in-out infinite; }
-
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0,163,75,0.45), var(--shadow); }
-  50% { box-shadow: 0 0 0 14px rgba(0,163,75,0), var(--shadow); }
-}
-
-/* Generation progress bar */
-.progress-wrap { display: none; margin-top: 16px; }
-.progress-wrap.show { display: block; animation: fadeIn 0.3s ease; }
-
-.progress-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  font-weight: 500;
-  color: #cbd5e1;
-  margin-bottom: 8px;
-}
-
-.progress-label .stage i { color: var(--green); margin-right: 8px; }
-.progress-label .elapsed {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
-  font-size: 12px;
-  color: #94a3b8;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 999px;
-  padding: 2px 10px;
-}
-
-.progress-track {
-  height: 8px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--green-dark), var(--green), #86efac);
-  box-shadow: 0 0 10px rgba(0,163,75,0.5);
-  animation: crawl 1.8s ease-in-out infinite alternate;
-}
-
-@keyframes crawl {
-  from { margin-left: -2%; width: 28%; }
-  to { margin-left: 74%; width: 28%; }
-}
-
-/* Result pop */
-.result.showing { animation: popIn 0.45s cubic-bezier(0.18, 1.25, 0.4, 1) both; }
-
-@keyframes popIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* Confetti */
-.confetti-piece {
-  position: absolute;
-  top: -16px;
-  width: 8px;
-  height: 14px;
-  opacity: 0.95;
-  pointer-events: none;
-  z-index: 5;
-  animation: confettiFall linear forwards;
-}
-
-@keyframes confettiFall {
-  to { transform: translateY(360px) rotate(720deg); opacity: 0; }
-}
-
-/* Toast notifications */
-.toast-container {
-  position: fixed;
-  top: 96px;
-  right: 20px;
-  z-index: 300;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: min(360px, calc(100vw - 40px));
-}
-
-.toast {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 18px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-lg);
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  animation: toastIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both;
-}
-
-.toast.leaving { animation: toastOut 0.3s ease both; }
-
-.toast::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-}
-
-.toast-success { border-color: rgba(0,163,75,0.35); }
-.toast-success::before { background: var(--green); }
-.toast-success .toast-icon { color: var(--green); }
-
-.toast-error { border-color: rgba(190,40,56,0.35); }
-.toast-error::before { background: var(--red); }
-.toast-error .toast-icon { color: var(--red); }
-
-.toast-icon { font-size: 18px; margin-top: 2px; flex: 0 0 auto; }
-
-.toast-body b { display: block; font-size: 13px; color: var(--text); }
-.toast-body span { display: block; font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-top: 2px; }
-
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(120%); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes toastOut {
-  to { opacity: 0; transform: translateX(120%); }
-}
-
-@media (max-width: 768px) {
-  .toast-container { top: auto; bottom: 16px; right: 16px; left: 16px; width: auto; }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .row { flex-direction: column; gap: 16px; }
-  .header-inner { flex-direction: column; text-align: center; gap: 12px; padding: 12px; min-height: auto; }
-  .header-emblem { padding: 8px; }
-  .header-emblem-img { height: 44px; }
-  .header-text { border-left: none; padding: 12px; border-top: 2px solid var(--red); justify-content: center; }
-  .header-meta { border-left: none; padding: 12px; text-align: center; }
-  main { padding: 20px 16px 32px; }
-  .card { padding: 20px; }
-  .btn { width: 100%; justify-content: center; }
-  .result-actions { flex-direction: column; }
-  .result a { width: 100%; justify-content: center; }
-  .radio-group { flex-wrap: wrap; }
-  .radio-option { flex: 1 1 50%; }
-  .radio-option label { font-size: 13px; padding: 10px 12px; }
-}
-
-@media (max-width: 480px) {
-  .header-tagline { font-size: 17px; }
-  .header-tagline small { font-size: 12px; }
-  .card { padding: 18px; }
-  .radio-option { flex: 1 1 100%; }
-  .radio-option label { font-size: 13px; padding: 12px; }
-}
-</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      integrity="sha384-3B6NwesSXE7YJlcLI9RpRqGf2p/EgVH8BgoKTaUrmKNDkHPStTQ3EyoYjCGXaOTS"
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+
+<noscript>
+  <div class="noscript-msg">
+    This application needs JavaScript. Please enable it in your browser and reload the page.
+  </div>
+</noscript>
 
 <header class="header">
   <div class="header-inner">
@@ -861,46 +28,48 @@ input[type=file]::file-selector-button:hover {
       <img class="header-emblem-img" src="/static/keproba_letterhead.png" alt="KEPROBA Letterhead">
     </div>
     <div class="header-text">
-      <div class="header-tagline"><span class="flag-green">Trade</span> <span class="flag-black">Intelligence</span> <span class="flag-red">at Your Fingertips</span><small>Generate comprehensive trade flow reports with one click</small></div>
-    </div>
-    <div class="header-meta">
-      <p>KEPROBA</p>
-      <p>&copy; Research &amp; Innovation (RI)</p>
-      <p>All rights reserved</p>
+      <div class="header-tagline"><span class="flag-black">Trade Intelligence</span> <span class="flag-red">at Your Fingertips</span><small>Upload your ITC files &mdash; get a Word report and Excel tables back</small></div>
     </div>
   </div>
 </header>
 
 <main>
   <div class="card">
-    <div class="card-title"><i class="fas fa-sliders-h"></i> Analysis Configuration</div>
+    <div class="card-title"><i class="fas fa-sliders-h"></i> Step 1 &mdash; Choose the analysis</div>
 
-    <label>Analysis Type</label>
-    <div class="radio-group">
-      <div class="radio-option">
-        <input type="radio" name="report_type" value="goods" checked id="rt-goods">
-        <label for="rt-goods"><i class="fas fa-box"></i> Goods Trade Flow</label>
-      </div>
-      <div class="radio-option">
-        <input type="radio" name="report_type" value="services" id="rt-services">
-        <label for="rt-services"><i class="fas fa-concierge-bell"></i> Services Trade Flow</label>
-      </div>
+    <fieldset class="group">
+      <legend>Analysis type</legend>
+      <div class="radio-group">
       <div class="radio-option">
         <input type="radio" name="report_type" value="quarterly" id="rt-quarterly">
         <label for="rt-quarterly"><i class="fas fa-chart-line"></i> Export Performance</label>
+      </div>
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="goods" checked id="rt-goods">
+        <label for="rt-goods"><i class="fas fa-box"></i> Trade Brief</label>
+      </div>
+      <div class="radio-option">
+        <input type="radio" name="report_type" value="competitor" id="rt-competitor">
+        <label for="rt-competitor"><i class="fas fa-chess"></i> Competitor Analysis</label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="product" id="rt-product">
         <label for="rt-product"><i class="fas fa-boxes"></i> Product Profile</label>
       </div>
       <div class="radio-option">
-        <input type="radio" name="report_type" value="competitor" id="rt-competitor">
-        <label for="rt-competitor"><i class="fas fa-chess"></i> Competitor Analysis</label>
+        <input type="radio" name="report_type" value="services" id="rt-services">
+        <label for="rt-services"><i class="fas fa-concierge-bell"></i> Services Brief</label>
       </div>
-    </div>
+      </div>
+    </fieldset>
 
     <div id="cfg-wrapper" style="display:none;" aria-hidden="true">
+      <label for="cfg">Country configuration</label>
       <select id="cfg"><option value="">Loading configs...</option></select>
+      <div class="hint" id="cfg-hint">
+        <i class="fas fa-circle-info" style="color:var(--red);"></i>
+        &nbsp;<b>Auto-detect</b> reads the country and report year from your files. Pick a country only if the detection picks the wrong one &mdash; the run stops if the data does not match the config you choose.
+      </div>
     </div>
 
     <div id="product-cfg-wrapper" style="display:none;" aria-hidden="true">
@@ -908,33 +77,35 @@ input[type=file]::file-selector-button:hover {
       <select id="product-cfg"><option value="">Loading profiles...</option></select>
     </div>
 
-    <div id="goods-partner-wrap" class="info-box">
-      <i class="fas fa-id-card" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Partner (Goods):</b> enter the market (e.g. <i>Saudi Arabia</i>, <i>UAE</i>, <i>Uganda</i>)
-      to prepare its ITC Trade Map download checklist and a matching config.
-      <div class="row" style="margin-top:10px;gap:8px;">
-        <input type="text" id="partner" placeholder="e.g. Saudi Arabia"
+    <div id="goods-partner-wrap" style="margin-top:8px;">
+      <label for="partner">Partner market <span style="font-weight:500;color:var(--text-muted);">(optional &mdash; Trade Brief)</span></label>
+      <div class="row" style="margin-top:8px;gap:8px;">
+        <input type="text" id="partner" placeholder="e.g. Saudi Arabia, UAE, Uganda"
                style="flex:1;min-width:0;" value="">
         <button id="prep-checklist" class="btn btn-secondary" type="button"
                 style="flex:0 0 auto;padding:8px 12px;">
-          <i class="fas fa-list-check"></i> Prep checklist
+          <i class="fas fa-list-check"></i> Build checklist
         </button>
+      </div>
+      <div class="hint" id="partner-hint">
+        <i class="fas fa-circle-info" style="color:var(--red);"></i>
+        &nbsp;Enter a market to get the exact ITC Trade Map download checklist and a matching country config for it. Leave empty and the country is read from the files you upload.
       </div>
       <div id="checklist" style="display:none;margin-top:12px;"></div>
     </div>
 
     <div id="services-info" class="info-box">
-      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Services Mode:</b> Config is automatically set to <b>services_world</b> (global services trade).
+      <i class="fas fa-info-circle" style="color:var(--red);"></i>
+      &nbsp;<b>Services Brief:</b> the configuration is set automatically to <b>services_world</b> (global services trade).
     </div>
 
     <div id="quarterly-info" class="info-box">
-      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Export Performance Mode:</b> Upload the raw monthly extracts &mdash; the <b>KNBS</b> workbook (<i>KNBS Data for the Economic Survey&hellip;</i>) and/or the KRA files (<i>&hellip;Exports by HS Destination&hellip;</i> / <i>&hellip;Imports by HS Origin&hellip;</i>), up to four files or a .zip. Every sheet of every file is read individually; pivot and summary sheets are skipped. The newest year in the data is the review year, compared with the same months one year earlier. Top N controls rows per market/product table (markets default to 25).
+      <i class="fas fa-info-circle" style="color:var(--red);"></i>
+      &nbsp;<b>Export Performance:</b> the <b>newest year</b> in the data becomes the review year and is compared with the <b>same months one year earlier</b>. Every sheet is read individually; pivot and summary sheets are skipped. Market tables default to 25 rows.
     </div>
 
     <div id="export-period-wrap" class="info-box" style="display:none;" aria-hidden="true">
-      <i class="fas fa-calendar-day" style="color:var(--dark-blue);"></i>
+      <i class="fas fa-calendar-day" style="color:var(--red);"></i>
       &nbsp;<b>Review period <span class="req-star">*</span>:</b> choose the months the report covers &mdash; no default is preselected. The comparison is always the same months one year earlier.
       <div class="radio-group period-group" role="radiogroup" aria-label="Review period">
         <div class="radio-option">
@@ -969,59 +140,39 @@ input[type=file]::file-selector-button:hover {
     </div>
 
     <div id="product-profile-wrap" class="info-box">
-      <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Product Profile Mode:</b> Upload the <b>ITC matrix files</b> for a product family (or a <b>.zip</b> containing them). The product family is <b>auto-detected</b> from the files; pick a specific profile (e.g. coffee, crafts) only if you prefer. A Word report plus an editable Excel deliverable are generated.
+      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      &nbsp;<b>Product Profile:</b> the product family is <b>auto-detected</b> from the matrix files &mdash; choose a specific profile below only if you prefer one. Output is a Word report plus an editable Excel deliverable.
     </div>
 
     <div id="competitor-wrap" class="info-box" style="display:none;" aria-hidden="true">
-      <i class="fas fa-circle-info" style="color:var(--dark-blue);"></i>
-      &nbsp;<b>Competitor Analysis Mode:</b> Run this <b>separately, after the goods trade flow</b> &mdash; that first run tells you which products matter. Then download, <b>for each product</b>, the ITC Trade Map <i>&ldquo;List of supplying markets for a product imported by &lt;partner&gt;&rdquo;</i> file and upload them all (or a <b>.zip</b>). Expected names like <code>nigerias-imports-from-world-by-exporter_0902.xlsx</code>. Output: <b>COMPETITOR ANALYSIS</b> as .png (paste-ready), .docx and .xlsx &mdash; products ranked by import value, top exporters with value &amp; share, Kenya highlighted in red. The tariff column is left empty.
+      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      &nbsp;<b>Competitor Analysis:</b> run this <b>after the goods report</b> &mdash; that first run tells you which products matter. Output is <b>COMPETITOR ANALYSIS</b> as .png (paste-ready), .docx and .xlsx: products ranked by import value, top exporters with value &amp; share, Kenya highlighted in red. The tariff column is left empty.
     </div>
 
-    <div class="row">
-      <div>
-        <label for="top">Top N Rows Per Table</label>
-        <input type="number" id="top" min="1" max="50" value="20">
-        <div class="hint">Product tables (2, 4, 5, 6) keep this many rows; exporter tables (1, 3) always show 25.</div>
-      </div>
-      <div>
-        <label for="files">Upload Files</label>
-        <input type="file" id="files" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.csv,.zip">
-        <div id="file-summary" class="file-summary"></div>
-      </div>
-    </div>
+  </div>
 
-    <div class="row" style="margin-top:4px;">
-      <div style="display:flex;align-items:center;gap:10px;" id="promotion-wrap">
-        <input type="checkbox" id="promotion" style="width:auto;">
-        <label for="promotion" style="margin:0;">
-          Also build <b>Export Promotion workbook</b> (additive price &amp;
-          positioning analysis, goods report only)
-        </label>
-      </div>
-    </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-cloud-arrow-up"></i> Step 2 &mdash; Upload your files</div>
 
-    <div class="hint" id="upload-hint" style="margin-top:16px;">
-      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
+    <div class="hint" id="upload-hint" style="margin-top:0;">
+      <i class="fas fa-info-circle" style="color:var(--red);"></i>
       &nbsp;
       Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: <b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. <b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.
     </div>
 
-    <div id="run-cta" class="run-cta" role="status">
-      <i class="fas fa-hand-point-down cta-hand"></i>
-      <span>Files loaded &mdash; now click&nbsp;<b>Generate Report</b>&nbsp;below!</span>
+    <div class="dropzone" id="dropzone" style="margin-top:10px;">
+      <label for="files">Upload files</label>
+      <input type="file" id="files" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.csv,.zip">
+      <div class="hint" style="margin-top:8px;">
+        <i class="fas fa-folder-open" style="color:var(--red);"></i>
+        &nbsp;Click to browse, or drag &amp; drop files onto this panel.
+      </div>
+      <div id="file-summary" class="file-summary"></div>
     </div>
 
-    <button id="run" class="btn btn-primary" type="button" style="margin-top:20px;">
-      <i class="fas fa-play"></i> Generate Report
-    </button>
-    <div class="error-msg" id="error-msg"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><i class="fas fa-flask"></i> Or try a bundled sample dataset</div>
-    <div class="row" style="gap:8px;">
-      <select id="sample" style="flex:1;min-width:0;">
+    <div class="sample-row">
+      <span class="sample-label"><i class="fas fa-flask"></i> No files handy?</span>
+      <select id="sample" aria-label="Bundled sample dataset">
         <option value="">Select a sample dataset&hellip;</option>
       </select>
       <button id="load-sample" class="btn btn-secondary" type="button"
@@ -1030,26 +181,53 @@ input[type=file]::file-selector-button:hover {
       </button>
     </div>
     <div class="hint" style="margin-top:10px;">
-      <i class="fas fa-info-circle" style="color:var(--dark-blue);"></i>
-      &nbsp;Sample files are pre-grouped by feature: <b>Goods</b> (US goods
-      files), <b>Services</b> (services files), <b>Export Performance</b> (KRA
-      / KNBS extracts)
-      and <b>Product</b> (crafts / coffee matrices). Loading one fills the upload
-      box with the matching files and selects that analysis type &mdash; then
-      just click <b>Generate Report</b>.
+      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      &nbsp;Bundled sets cover <b>Trade Brief</b>, <b>Services Brief</b>, <b>Export Performance</b> and <b>Product Profile</b>. Loading one selects its analysis type and fills the upload box above.
     </div>
     <div id="sample-summary" class="file-summary"></div>
   </div>
 
+  <div class="card">
+    <div class="card-title"><i class="fas fa-gear"></i> Step 3 &mdash; Options and generate</div>
+
+    <div class="row">
+      <div id="top-wrap">
+        <label for="top">Top N rows per table</label>
+        <input type="number" id="top" min="1" max="50" value="20">
+        <div class="hint">Product tables (2, 4, 5, 6) keep this many rows; exporter tables (1, 3) always show 25.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;" id="promotion-wrap">
+        <input type="checkbox" id="promotion" style="width:auto;">
+        <label for="promotion" style="margin:0;">
+          Also build the <b>Export Promotion workbook</b> (additive price &amp;
+          positioning analysis, goods report only)
+        </label>
+      </div>
+    </div>
+
+    <div id="run-cta" class="run-cta" role="status">
+      <i class="fas fa-hand-point-down cta-hand"></i>
+      <span>Files loaded &mdash; check the options above, then click&nbsp;<b>Generate Report</b>.</span>
+    </div>
+
+    <button id="run" class="btn btn-primary" type="button" style="margin-top:14px;">
+      <i class="fas fa-play"></i> Generate Report
+    </button>
+    <div class="error-msg" id="error-msg" role="alert"></div>
+  </div>
+
   <div class="card log-card">
-    <div class="card-title"><i class="fas fa-terminal"></i> Progress</div>
-    <div id="log"><div class="log-empty"><i class="fas fa-inbox"></i>Waiting for files &mdash; pick your Excel files above, then hit Generate Report.</div></div>
+    <div class="card-title"><i class="fas fa-terminal"></i> Progress and results</div>
+    <div id="log" role="log" aria-live="polite" aria-busy="false"><div class="log-empty"><i class="fas fa-inbox"></i>No run yet &mdash; upload your files in step 2, then choose Generate Report.</div></div>
     <div id="progress-wrap" class="progress-wrap">
       <div class="progress-label">
         <span class="stage"><i class="fas fa-spinner fa-spin"></i><span id="progress-stage-text">Uploading files&hellip;</span></span>
         <span class="elapsed" id="progress-elapsed">0s</span>
       </div>
-      <div class="progress-track"><div class="progress-fill"></div></div>
+      <div class="progress-track" role="progressbar" aria-label="Report generation progress"
+           aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
     </div>
     <div class="result" id="result">
       <div class="result-meta" id="result-meta"></div>
@@ -1062,585 +240,13 @@ input[type=file]::file-selector-button:hover {
   </div>
 </main>
 
+<footer class="site-footer">
+  <p>KEPROBA &copy; Research &amp; Innovation (RI)</p>
+  <p>All rights reserved</p>
+</footer>
+
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-<script>
-  const $ = id => document.getElementById(id);
-  const logEl = $('log');
-  const errorMsg = $('error-msg');
-  const hint = $('upload-hint');
-  const cfgSelect = $('cfg');
-  const cfgWrapper = $('cfg-wrapper');
-  const servicesInfo = $('services-info');
-  const quarterlyInfo = $('quarterly-info');
-  const exportPeriodWrap = $('export-period-wrap');
-  const productInfo = $('product-profile-wrap');
-  const competitorInfo = $('competitor-wrap');
-  const productCfgWrapper = $('product-cfg-wrapper');
-  const productCfgSelect = $('product-cfg');
-  const filesInput = $('files');
-  const runBtn = $('run');
-  const runCta = $('run-cta');
-  const fileSummary = $('file-summary');
-  const progressWrap = $('progress-wrap');
-  const progressStageText = $('progress-stage-text');
-  const progressElapsed = $('progress-elapsed');
-  const toastContainer = $('toast-container');
-  const partnerWrap = $('goods-partner-wrap');
-  const partnerInput = $('partner');
-  const prepBtn = $('prep-checklist');
-  const checklistBox = $('checklist');
-  const promotionWrap = $('promotion-wrap');
-  const sampleSelect = $('sample');
-  const loadSampleBtn = $('load-sample');
-  const sampleSummary = $('sample-summary');
-
-  const STAGES = [
-    'Uploading files\u2026',
-    'Reading spreadsheets\u2026',
-    'Auto-detecting country from data\u2026',
-    'Computing trade statistics\u2026',
-    'Building tables & figures\u2026',
-    'Formatting the Word report\u2026',
-    'Polishing final touches\u2026'
-  ];
-  let stageTimer = null;
-  let elapsedTimer = null;
-
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const shortenName = n => n.length > 26 ? n.slice(0, 15) + '\u2026' + n.slice(-8) : n;
-  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
-
-  function appendLog(text, cls) {
-    const emptyEl = logEl.querySelector('.log-empty');
-    if (emptyEl) emptyEl.remove();
-    const line = document.createElement('div');
-    line.textContent = text;
-    if (cls) line.className = cls;
-    logEl.appendChild(line);
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  function showError(msg) {
-    errorMsg.textContent = msg;
-    errorMsg.style.display = 'block';
-  }
-
-  function clearError() {
-    errorMsg.style.display = 'none';
-  }
-
-  function showToast(type, title, body) {
-    const t = document.createElement('div');
-    t.className = 'toast toast-' + type;
-    const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
-    t.innerHTML = '<i class="fas ' + icon + ' toast-icon"></i>' +
-      '<div class="toast-body"><b>' + esc(title) + '</b><span>' + esc(body || '') + '</span></div>';
-    const dismiss = () => {
-      if (!t.parentNode) return;
-      t.classList.add('leaving');
-      setTimeout(() => t.remove(), 320);
-    };
-    if (type === 'success') {
-      t.addEventListener('click', () => {
-        document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        dismiss();
-      });
-    } else {
-      t.addEventListener('click', dismiss);
-    }
-    toastContainer.appendChild(t);
-    setTimeout(dismiss, 7000);
-  }
-
-  function flashTitle(msg) {
-    const orig = document.title;
-    let flip = false, n = 0;
-    const timer = setInterval(() => {
-      document.title = flip ? orig : msg;
-      flip = !flip;
-      if (++n >= 8) { clearInterval(timer); document.title = orig; }
-    }, 900);
-  }
-
-  function confetti() {
-    const card = document.querySelector('.log-card');
-    if (!card || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const colors = ['#00a34b', '#be2838', '#F3801C', '#212062', '#4ade80', '#ffffff'];
-    for (let i = 0; i < 36; i++) {
-      const p = document.createElement('div');
-      p.className = 'confetti-piece';
-      p.style.left = Math.random() * card.clientWidth + 'px';
-      p.style.background = colors[i % colors.length];
-      p.style.width = (6 + Math.random() * 5) + 'px';
-      p.style.height = (10 + Math.random() * 6) + 'px';
-      p.style.animationDuration = (1.2 + Math.random() * 1.1) + 's';
-      p.style.animationDelay = (Math.random() * 0.35) + 's';
-      if (Math.random() < 0.4) p.style.borderRadius = '50%';
-      card.appendChild(p);
-      setTimeout(() => p.remove(), 3200);
-    }
-  }
-
-  function startProgress() {
-    progressWrap.classList.add('show');
-    let si = 0;
-    progressStageText.textContent = STAGES[0];
-    stageTimer = setInterval(() => {
-      si = (si + 1) % STAGES.length;
-      progressStageText.textContent = STAGES[si];
-    }, 2600);
-    const t0 = Date.now();
-    progressElapsed.textContent = '0s';
-    elapsedTimer = setInterval(() => {
-      progressElapsed.textContent = Math.floor((Date.now() - t0) / 1000) + 's';
-    }, 1000);
-  }
-
-  function stopProgress() {
-    clearInterval(stageTimer);
-    clearInterval(elapsedTimer);
-    stageTimer = elapsedTimer = null;
-    progressWrap.classList.remove('show');
-  }
-
-  filesInput.addEventListener('change', () => {
-    clearError();
-    const files = [...filesInput.files];
-    if (!files.length) {
-      fileSummary.classList.remove('show');
-      runCta.classList.remove('show');
-      runBtn.classList.remove('btn-attention');
-      return;
-    }
-    const totalSize = files.reduce((s, f) => s + f.size, 0);
-    let chips = '<span class="file-chip"><i class="fas fa-check-circle"></i>&nbsp;' +
-      files.length + ' file' + (files.length === 1 ? '' : 's') + ' &middot; ' + fmtSize(totalSize) + '</span>';
-    chips += files.slice(0, 4).map(f =>
-      '<span class="file-chip" title="' + esc(f.name) + '"><i class="fas fa-file-excel"></i><span>' + esc(shortenName(f.name)) + '</span></span>'
-    ).join('');
-    if (files.length > 4) chips += '<span class="file-chip">+' + (files.length - 4) + ' more</span>';
-    fileSummary.innerHTML = '<div class="file-chips">' + chips + '</div>';
-    fileSummary.classList.add('show');
-    runCta.classList.add('show');
-    runBtn.classList.add('btn-attention');
-  });
-
-  async function loadConfigs() {
-    try {
-      const r = await fetch('/api/configs');
-      const cfgs = await r.json();
-      const sel = $('cfg');
-      sel.innerHTML = '';
-      for (const c of cfgs) {
-        const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = c.year ? `${c.name} (year ${c.year})` : c.name;
-        sel.appendChild(o);
-      }
-      if (!cfgs.length) appendLog('No country configs found in config/.', 'err');
-      sel.value = '__auto__';
-    } catch (e) {
-      appendLog('Could not load configs: ' + e, 'err');
-    }
-  }
-
-  let sampleGroups = [];
-  let sampleFiles = [];
-
-  async function loadSamples() {
-    try {
-      const r = await fetch('/api/samples');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      sampleGroups = await r.json();
-      sampleSelect.innerHTML = '<option value="">Select a sample dataset&hellip;</option>';
-      for (const g of sampleGroups) {
-        const o = document.createElement('option');
-        o.value = g.id;
-        o.textContent = g.label + ' \u2014 ' + g.description + ' (' + g.files.length + ' files)';
-        sampleSelect.appendChild(o);
-      }
-      if (!sampleGroups.length) {
-        appendLog('No bundled sample datasets found on this server.', 'err');
-      }
-    } catch (e) {
-      appendLog('Could not load bundled sample datasets: ' + e, 'err');
-    }
-  }
-
-  loadSampleBtn.addEventListener('click', async () => {
-    const gid = sampleSelect.value;
-    if (!gid) {
-      showToast('error', 'No sample selected', 'Pick a bundled sample dataset first.');
-      return;
-    }
-    if (!sampleGroups.length) {
-      showError('Sample list not loaded yet \u2014 retry in a moment.');
-      return;
-    }
-    const g = sampleGroups.find(x => x.id === gid);
-    const btn = loadSampleBtn;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading&hellip;';
-    clearError();
-    try {
-      // Pre-select the analysis type this sample belongs to, so e.g. goods
-      // samples only ever feed the goods pipeline.
-      const radios = document.querySelectorAll('input[name="report_type"]');
-      let matched = false;
-      radios.forEach(r => {
-        if (r.value === g.report_type) {
-          r.checked = true;
-          r.dispatchEvent(new Event('change'));
-          matched = true;
-        }
-      });
-      if (!matched && radios.length) {
-        radios[0].checked = true;
-        radios[0].dispatchEvent(new Event('change'));
-      }
-      // Apply the recommended config when the relevant dropdown has it.
-      const cfgSel = g.report_type === 'product' ? productCfgSelect : cfgSelect;
-      if (g.config && [...cfgSel.options].some(o => o.value === g.config)) {
-        cfgSel.value = g.config;
-      }
-
-      // Stream every sample file from the server into the upload queue.
-      const dt = new DataTransfer();
-      for (const fn of g.files) {
-        const r = await fetch('/api/sample-file/' + encodeURIComponent(g.id) + '/' + encodeURIComponent(fn));
-        if (!r.ok) throw new Error(fn + ' \u2014 server answered ' + r.status);
-        const blob = await r.blob();
-        dt.items.add(new File([blob], fn, { type: blob.type || 'application/octet-stream' }));
-      }
-      sampleFiles = [...dt.files];
-      filesInput.files = dt.files;
-      filesInput.dispatchEvent(new Event('change'));
-      if (g.files.length) {
-        sampleSummary.innerHTML = '<div class="file-chips">' +
-          g.files.map(f => '<span class="file-chip" title="' + esc(f) +
-            '"><i class="fas fa-file-excel"></i><span>' + esc(shortenName(f)) +
-            '</span></span>').join('') + '</div>';
-        sampleSummary.classList.add('show');
-      }
-      showToast('success', 'Sample loaded', g.label + ' \u2014 ' + g.files.length +
-        ' files ready. Click Generate Report.');
-    } catch (e) {
-      const msg = String(e);
-      showError(msg);
-      showToast('error', 'Could not load sample', msg);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-download"></i> Load sample';
-    }
-  });
-
-  async function loadProductProfiles() {
-    try {
-      const r = await fetch('/api/product-profiles');
-      const profiles = await r.json();
-      const sel = $('product-cfg');
-      sel.innerHTML = '';
-      const auto = document.createElement('option');
-      auto.value = '__auto__';
-      auto.textContent = 'Auto-detect from files';
-      sel.appendChild(auto);
-      for (const c of profiles) {
-        const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = c.name;
-        sel.appendChild(o);
-      }
-      sel.value = '__auto__';
-      if (!profiles.length) appendLog('No product profiles found in config/.', 'err');
-    } catch (e) {
-      appendLog('Could not load product profiles: ' + e, 'err');
-    }
-  }
-
-  prepBtn.addEventListener('click', async () => {
-    const p = (partnerInput.value || '').trim();
-    if (!p) {
-      appendLog('Enter a partner first, e.g. Saudi Arabia.', 'err');
-      showToast('error', 'Partner required', 'Type a market name, e.g. Saudi Arabia.');
-      return;
-    }
-    prepBtn.disabled = true;
-    prepBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing\u2026';
-    try {
-      const r = await fetch('/api/goods/partner-setup?partner=' + encodeURIComponent(p));
-      const data = await r.json();
-      if (!r.ok) { throw new Error(data.detail || data.ok); }
-
-      const created = data.config.created ? ' (config created)' : ' (config reused)';
-      let html = '<div style="font-size:13px;line-height:1.6;">' +
-        '<b style="color:var(--green);">Checklist ready for ' + esc(data.partner) + '</b> &mdash; ' +
-        'config <b>config/' + esc(data.config.id) + '.json</b>' + created + ' (report year ' + data.config.year + ').<br>' +
-        '<i class="fas fa-circle-info" style="color:var(--dark-blue);"></i> &nbsp;<span style="opacity:.9">' +
-        esc(data.note) + '</span></div>';
-      html += '<ol style="margin:10px 0 0 18px;font-size:13px;line-height:1.55;">';
-      for (const it of data.checklist) {
-        const pats = it.patterns.map(esc).join(' &nbsp;or&nbsp; ');
-        html += '<li><b>' + esc(it.short) + '</b><div style="opacity:.85">' +
-          '<i class="fas fa-magnifying-glass" style="color:var(--dark-blue);"></i> ' + esc(it.query) +
-          '<div class="hint" style="font-size:12px;"><b>Filename:</b> <code>' + pats + '</code></div>' +
-          '</div></li>';
-      }
-      html += '</ol>';
-      checklistBox.innerHTML = html;
-      checklistBox.style.display = 'block';
-      appendLog('Prepared ITC checklist for ' + data.partner + ' (config/' + data.config.id + '.json) ' +
-        (data.config.created ? 'created' : 'reused') + '.');
-      showToast('success', 'Checklist ready', 'Download the 6 Trade Map files, then upload them together.');
-    } catch (e) {
-      appendLog('Prep checklist failed: ' + e, 'err');
-      showToast('error', 'Could not prepare checklist', String(e));
-    } finally {
-      prepBtn.disabled = false;
-      prepBtn.innerHTML = '<i class="fas fa-list-check"></i> Prep checklist';
-    }
-  });
-
-  document.querySelectorAll('input[name="report_type"]').forEach(r => {
-    r.addEventListener('change', () => {
-      clearError();
-      if (r.value === 'quarterly') {
-        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
-          'Upload the <b>raw monthly extracts</b> &mdash; the <b>KNBS</b> workbook and/or the <b>KRA</b> ' +
-          '&hellip;<b>Exports by HS Destination&hellip;</b> / &hellip;<b>Imports by HS Origin&hellip;</b> files ' +
-          '(up to 4 files, or a .zip) &mdash; then pick the <b>review period</b> below. ' +
-          'Every sheet is read individually; pivot and summary sheets are ignored. ' +
-          '<b>.xls</b> files are converted automatically.';
-        cfgWrapper.style.display = 'none';
-        servicesInfo.style.display = 'none';
-        quarterlyInfo.style.display = 'block';
-        exportPeriodWrap.style.display = 'block';
-        partnerWrap.style.display = 'none';
-        promotionWrap.style.display = 'none';
-        productInfo.style.display = 'none';
-        competitorInfo.style.display = 'none';
-        productCfgWrapper.style.display = 'none';
-      } else if (r.value === 'services') {
-        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
-          'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them). ' +
-          'Expected files contain keywords like "exported_services", "importers_for", "services_exported_by_Kenya", etc. ' +
-          '<b>.xls</b> files are converted automatically.';
-        cfgSelect.value = 'services_world';
-        cfgWrapper.style.display = 'none';
-        servicesInfo.style.display = 'block';
-        quarterlyInfo.style.display = 'none';
-        exportPeriodWrap.style.display = 'none';
-        partnerWrap.style.display = 'none';
-        promotionWrap.style.display = 'none';
-        productInfo.style.display = 'none';
-        competitorInfo.style.display = 'none';
-        productCfgWrapper.style.display = 'none';
-      } else if (r.value === 'product') {
-        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
-          'Upload the <b>ITC matrix downloads</b> for a product family (or a <b>.zip</b> containing them). ' +
-          'Expected filenames contain keywords like "exporting_economies", "kenyas_exports_to_world_by_product", etc. ' +
-          '<b>.xls</b> files are converted automatically.';
-        cfgSelect.value = '__auto__';
-        cfgWrapper.style.display = 'none';
-        servicesInfo.style.display = 'none';
-        quarterlyInfo.style.display = 'none';
-        exportPeriodWrap.style.display = 'none';
-        partnerWrap.style.display = 'none';
-        promotionWrap.style.display = 'none';
-        productInfo.style.display = 'block';
-        competitorInfo.style.display = 'none';
-        productCfgWrapper.style.display = 'block';
-      } else if (r.value === 'competitor') {
-        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
-          'Run this <b>after the goods trade flow</b>. Upload the per-product ITC Trade Map ' +
-          '<b>&ldquo;List of supplying markets for a product imported by &lt;partner&gt;&rdquo;</b> files, ' +
-          'one per product (names like <code>nigerias-imports-from-world-by-exporter_0902.xlsx</code>), or a <b>.zip</b>. ' +
-          'Produces <b>COMPETITOR ANALYSIS</b> as .png / .docx / .xlsx.';
-        cfgSelect.value = '__auto__';
-        cfgWrapper.style.display = 'none';
-        servicesInfo.style.display = 'none';
-        quarterlyInfo.style.display = 'none';
-        exportPeriodWrap.style.display = 'none';
-        partnerWrap.style.display = 'none';
-        promotionWrap.style.display = 'none';
-        productInfo.style.display = 'none';
-        competitorInfo.style.display = 'block';
-        productCfgWrapper.style.display = 'none';
-      } else {
-        hint.innerHTML = '<i class="fas fa-info-circle" style="color:var(--dark-blue);"></i> &nbsp;' +
-          'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
-          '<b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. ' +
-          '<b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.';
-        cfgSelect.value = '__auto__';
-        cfgWrapper.style.display = 'none';
-        servicesInfo.style.display = 'none';
-        quarterlyInfo.style.display = 'none';
-        exportPeriodWrap.style.display = 'none';
-        partnerWrap.style.display = 'block';
-        promotionWrap.style.display = 'flex';
-        productInfo.style.display = 'none';
-        competitorInfo.style.display = 'none';
-        productCfgWrapper.style.display = 'none';
-      }
-    });
-  });
-
-  // Review-period picker: the half-year sub-picker only applies to Semi-Annual.
-  document.querySelectorAll('input[name="export_period"]').forEach(r => {
-    r.addEventListener('change', () => {
-      $('semi-half-wrap').style.display = (r.value === 'semi') ? 'flex' : 'none';
-    });
-  });
-
-  $('run').addEventListener('click', async () => {
-    clearError();
-    let files = $('files').files;
-    if (!files.length && sampleFiles.length) {
-      const dt = new DataTransfer();
-      sampleFiles.forEach(f => dt.items.add(f));
-      files = $('files').files = dt.files;
-    }
-    if (!files.length) {
-      showError('Please select files before generating the report.');
-      appendLog('Please choose files first.', 'err');
-      return;
-    }
-
-    const fd = new FormData();
-    const rt = document.querySelector('input[name="report_type"]:checked').value;
-    fd.append('config', rt === 'product' ? $('product-cfg').value : $('cfg').value);
-    fd.append('top', $('top').value);
-    fd.append('report_type', rt);
-    fd.append('promotion', $('promotion').checked ? 'true' : 'false');
-    let periodVal = '';
-    if (rt === 'quarterly') {
-      // No default on purpose: a silent full-year run when only one quarter
-      // was wanted is exactly what the picker exists to prevent.
-      const pr = document.querySelector('input[name="export_period"]:checked');
-      if (!pr) {
-        showError('Please choose a review period: Q1-Q4, Semi-Annual or Annual.');
-        appendLog('Please choose a review period first.', 'err');
-        return;
-      }
-      periodVal = pr.value;
-      if (periodVal === 'semi') {
-        periodVal = 'semi' +
-          document.querySelector('input[name="export_half"]:checked').value;
-      }
-    }
-    fd.append('period', periodVal);
-    let zips = 0, others = 0;
-    for (const f of files) {
-      if (f.name.toLowerCase().endsWith('.zip')) { zips++; fd.append('zipfile', f); }
-      else { others++; fd.append('files', f); }
-    }
-
-    const btn = $('run');
-    btn.disabled = true;
-    btn.classList.remove('btn-attention');
-    runCta.classList.remove('show');
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-    logEl.innerHTML = '';
-    appendLog(`Uploading ${others} file(s), ${zips} zip(s)...`);
-    startProgress();
-
-    try {
-      const r = await fetch('/api/run', { method: 'POST', body: fd });
-      let data;
-      try { data = await r.json(); }
-      catch (err) {
-        appendLog('ERROR: the server answered with a non-JSON response (' + r.status + ').'
-          + ' Reload this page and try again.', 'err');
-        showToast('error', 'Server error', 'Reload this page and try again.');
-        return;
-      }
-      if (!r.ok) {
-        appendLog('ERROR: ' + (data.detail || r.status), 'err');
-        showError(data.detail || 'Request failed with status ' + r.status);
-        showToast('error', 'Generation failed', data.detail || 'Request failed with status ' + r.status);
-        return;
-      }
-
-      // The server accepted the upload and builds the report in the
-      // background; follow progress by polling the job status.
-      appendLog(`Job accepted (${data.job_id}) &mdash; building in the background...`);
-      const final = await new Promise(resolve => {
-        let shown = 0;
-        const timer = setInterval(async () => {
-          let s = null;
-          try { s = await (await fetch(data.status_url)).json(); }
-          catch (e) { return; }          // transient hiccup: keep polling
-          const lines = s.log || [];
-          for (; shown < lines.length; shown++) appendLog(lines[shown], 'ok');
-          if (s.state === 'done' || s.state === 'error') {
-            clearInterval(timer);
-            resolve(s);
-          }
-        }, 2000);
-      });
-
-      if (final.state === 'error') {
-        appendLog('ERROR: ' + (final.detail || 'unknown error'), 'err');
-        showError(final.detail || 'The job failed.');
-        showToast('error', 'Generation failed', final.detail || 'The job failed.');
-        return;
-      }
-      appendLog('Done.', 'ok');
-      const isProduct = final.mode === 'product' || final.mode === 'crafts';
-      const isCompetitor = final.mode === 'competitor';
-      const isExport = (final.mode || '').startsWith('quarterly');
-      $('result-meta').innerHTML = '<i class="fas fa-check-circle"></i> ' +
-        `${isCompetitor ? 'Competitor analysis'
-          : (isProduct ? 'Product profile'
-          : (isExport ? 'Export performance (raw monthly extracts)'
-          : (final.mode === 'raw' ? 'Built from raw ITC downloads' : 'Ready-made tables')))}` +
-        ` &middot; job ${final.job_id}`;
-      $('dl-report').href = final.report_url;
-      $('dl-report').innerHTML = isCompetitor
-        ? '<i class="fas fa-file-word"></i> Download Table (.docx)'
-        : '<i class="fas fa-file-word"></i> Download Word Report (.docx)';
-      $('dl-tables').href = isCompetitor ? (final.png_url || '#')
-        : (isProduct ? (final.product_tables_url || '#') : final.tables_url);
-      $('dl-tables').innerHTML = isCompetitor
-        ? '<i class="fas fa-image"></i> Download Table Picture (.png)'
-        : (isProduct
-          ? '<i class="fas fa-file-excel"></i> Download Excel Deliverable'
-          : '<i class="fas fa-file-archive"></i> Download Tables (.zip)');
-      const dlPromo = $('dl-promotion');
-      if (isCompetitor && final.xlsx_url) {
-        dlPromo.href = final.xlsx_url;
-        dlPromo.innerHTML = '<i class="fas fa-file-excel"></i> Download Table (.xlsx)';
-        dlPromo.style.display = 'flex';
-      } else if (final.promotion_url) {
-        dlPromo.href = final.promotion_url;
-        dlPromo.innerHTML = '<i class="fas fa-file-excel"></i> Download Promotion Workbook (.xlsx)';
-        dlPromo.style.display = 'flex';
-      } else {
-        dlPromo.style.display = 'none';
-      }
-      $('result').style.display = 'block';
-      $('result').classList.add('showing');
-      confetti();
-      showToast('success', 'Your report is ready!', 'Word report and Excel deliverable are waiting below — click here to jump to them.');
-      flashTitle('\u2714 Report ready!');
-      setTimeout(() => {
-        document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 400);
-    } catch (e) {
-      appendLog('ERROR: ' + e + ' — the server did not respond. Reload this page'
-        + ' and try again. If it keeps happening, restart the app and reload.', 'err');
-      showError('Server did not respond. Please check the connection and try again.');
-      showToast('error', 'Server did not respond', 'Please check the connection and try again.');
-    } finally {
-      stopProgress();
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-play"></i> Generate Report';
-    }
-  });
-
-  loadConfigs();
-  loadProductProfiles();
-  loadSamples();
-</script>
+<script src="/static/app.js" defer></script>
 </body>
 </html>

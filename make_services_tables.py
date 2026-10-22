@@ -33,7 +33,8 @@ import re
 import shutil
 import unicodedata
 import sys
-import zipfile
+
+from pipeline_errors import PipelineError
 
 import matplotlib
 matplotlib.use("Agg")
@@ -42,8 +43,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 
 import openpyxl
-from lxml import etree
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from charts import draw_share_pie, new_fig, finish
@@ -51,30 +51,32 @@ from country_names import display_name, short_product_name, title_case
 from xlsx_compat import HTMLTableParser, convert_to_xlsx, is_spreadsheet
 
 # ---------------------------------------------------------------------------
-# Constants / styles (shared with make_tables.py)
+# Constants / styles (shared with make_tables.py -> xlsx_tools)
 # ---------------------------------------------------------------------------
-# Professional color palette (muted, modern tones)
-FONT = "Century Gothic"
-FONT_SIZE = 10
-HEADER_FONT_SIZE = 10
+from xlsx_tools import (                       # noqa: F401
+    BORDER, BAND_FILL, DATA_BORDER, FMT_GROWTH, FMT_SHARE, FMT_VALUE,
+    FMT_VALUE_INT, FONT, FONT_SIZE, FONT_GRAY, HEADER_BORDER,
+    HEADER_FONT_SIZE,
+    HDR_FILL, HDR_FONT_COLOR, KENYA_FILL, MEDIUM, ROW_FILL_EVEN, ROW_FILL_ODD,
+    THIN, TOTAL_BORDER,
+    _cell_ref, _finalize, _inject_cached_values, _missing_cached_refs,
+    _put_formula, _put_formula_sheet, _save_workbook, _sheet_order,
+    get_row_fill, merge, put, put_share, put_text, put_val, set_widths,
+    style_cell, style_header, to_float,
+)
 
 TOP_EXPORTERS = 25
-
-# Header styles - deep navy with white text
-HDR_FILL = PatternFill(fill_type="solid", fgColor="1F3864")
-HDR_FONT_COLOR = "FFFFFF"
-
-# Alternating row fills (very subtle gray tones)
-ROW_FILL_EVEN = PatternFill(fill_type="solid", fgColor="F2F2F2")
-ROW_FILL_ODD = None  # No fill for odd rows (white)
-
-# Kenya highlight (soft gold)
-KENYA_FILL = PatternFill(fill_type="solid", fgColor="FFF2CC")
 
 # Red highlight for the focus country (Kenya) in the development-status tables
 # (always shown, even off top-N).
 DEV_PIN_FILL = PatternFill(fill_type="solid", fgColor="C00000")
 DEV_PIN_TEXT = "FFC7CE"
+
+# Standard column widths for the market / product style tables.
+WIDTHS_MKT = {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
+              "G": 12, "H": 12, "I": 12, "J": 12}
+WIDTHS_PRD = {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
+              "G": 12, "H": 12, "I": 12, "J": 12, "K": 12, "L": 12}
 
 # Focus country that must always appear in the dev-status tables (below top-N
 # if needed), normalized via _norm_country().
@@ -118,9 +120,6 @@ def _norm_country(name):
     """Normalise a country name for stable comparison (handles 'ü' -> 'u')."""
     return (name or "").strip().lower().replace("ü", "u").replace("Ü", "u")
 
-# Band/summary row (light blue-gray)
-BAND_FILL = PatternFill(fill_type="solid", fgColor="D6DCE4")
-
 # Development status fills
 DEV_FILL = PatternFill(fill_type="solid", fgColor="BDD7EE")      # Developed - soft blue
 DEVEL_FILL = PatternFill(fill_type="solid", fgColor="C6EFCE")    # Developing - soft green
@@ -136,22 +135,6 @@ REGION_FILLS = {
     "Other": PatternFill(fill_type="solid", fgColor="F2F2F2"),
 }
 
-# Border styles - thin bottom only for headers, no side borders
-THIN = Side(style="thin", color="B4C6E7")  # Light blue-gray
-MEDIUM = Side(style="medium", color="1F3864")  # Navy accent
-HEADER_BORDER = Border(bottom=MEDIUM)
-DATA_BORDER = Border(bottom=Side(style="thin", color="D6DCE4"))
-TOTAL_BORDER = Border(top=Side(style="thin", color="808080"),
-                      bottom=Side(style="double", color="808080"))
-
-# Legacy border (kept for compatibility)
-BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-
-# Number formats
-FMT_VALUE = "#,##0.0"
-FMT_VALUE_INT = "#,##0"
-FMT_SHARE = "0.0%"
-FMT_GROWTH = "0.0%"
 FMT_CAGR = "0.0%"
 FMT_RCA = "0.00"
 
@@ -444,110 +427,8 @@ def _dev_fill(status):
 
 
 # ---------------------------------------------------------------------------
-# Formula caching (from make_tables.py)
-# ---------------------------------------------------------------------------
-def _sheet_order(path):
-    with zipfile.ZipFile(path) as zin:
-        xml = zin.read("xl/workbook.xml").decode("utf-8", "ignore")
-    return re.findall(r'<sheet[^>]*name="([^"]+)"', xml)
-
-
-def _inject_cached_values(path, cache):
-    """Add cached <v> results next to <f> formulas so data_only=True works."""
-    if isinstance(cache, dict):
-        per_sheet = {k: {r: v for r, v in m.items() if v is not None}
-                     for k, m in cache.items()}
-    else:
-        per_sheet = {"Sheet1": {r: v for r, v in cache if v is not None}}
-    if not any(per_sheet.values()):
-        return
-    with zipfile.ZipFile(path) as zin:
-        names = zin.namelist()
-        blobs = {n: zin.read(n) for n in names}
-    ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-    order = _sheet_order(path)
-    patched = 0
-    for i, sheet in enumerate(order):
-        refs = per_sheet.get(sheet)
-        if not refs:
-            continue
-        fname = f"xl/worksheets/sheet{i + 1}.xml"
-        if fname not in blobs:
-            continue
-        root = etree.fromstring(blobs[fname])
-        for cell in root.iter("{%s}c" % ns):
-            ref = cell.get("r")
-            if ref not in refs:
-                continue
-            if cell.find("{%s}f" % ns) is None:
-                continue
-            v = cell.find("{%s}v" % ns)
-            if v is None:
-                v = etree.SubElement(cell, "{%s}v" % ns)
-            v.text = repr(refs[ref])
-        blobs[fname] = etree.tostring(root, xml_declaration=True,
-                                      encoding="UTF-8")
-        patched += 1
-    if not patched:
-        return
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
-        for n in names:
-            zout.writestr(n, blobs[n])
-
-
-def _save_workbook(wb, path, cache):
-    """Save the workbook, patch in cached formula values, and fall back to
-    plain values if anything goes wrong so the pipeline never breaks."""
-    try:
-        wb.calculation.fullCalcOnLoad = True
-    except Exception:
-        pass
-    wb.save(path)
-    if not cache:
-        return
-    try:
-        _inject_cached_values(path, {wb.sheetnames[0]: {r: v for r, v in cache
-                                                          if v is not None}})
-        wb2 = openpyxl.load_workbook(path, data_only=True)
-        ws2 = wb2.active
-        bad = []
-        for ref, val in cache:
-            if val is not None and ws2[ref].value is None:
-                bad.append(ref)
-        if bad:
-            raise RuntimeError(f"cached values missing for {bad}")
-    except Exception:
-        wb3 = openpyxl.load_workbook(path)
-        ws3 = wb3.active
-        for ref, val in cache:
-            if val is not None:
-                ws3[ref] = val
-        wb3.save(path)
-
-
-def _finalize(ws, path, cache):
-    """Convenience wrapper for _save_workbook with a single worksheet."""
-    _save_workbook(ws.parent, path, cache)
-
-
-# ---------------------------------------------------------------------------
 # Small helpers
 # ---------------------------------------------------------------------------
-def to_float(v):
-    """Convert a raw cell value to float; None for blanks / '...' / garbage."""
-    if v is None:
-        return None
-    if isinstance(v, str):
-        v = v.strip().replace(",", "")
-        if v in ("", "...", "..", "-"):
-            return None
-    try:
-        f = float(v)
-        return f if f == f else None
-    except (TypeError, ValueError):
-        return None
-
-
 def _parse_years_from_header(header_row):
     """Extract year integers from a header row like
     ['Code', 'Service label', 'Exported value in 2020', ...]."""
@@ -700,7 +581,7 @@ def find_service_files(excel_dir):
         found_summary = ", ".join(
             f"{k}=[{', '.join(os.path.basename(p) for p in v)}]"
             for k, v in sorted(found.items()))
-        sys.exit(
+        raise PipelineError(
             "[ERROR] Missing required service source files in '%s'.\n"
             "Found %d candidate file(s): %s\n"
             "Missing %d required file(s):\n%s"
@@ -1740,100 +1621,6 @@ def share(v, total_v):
     if v is None or total_v is None or total_v == 0:
         return None
     return v / total_v
-
-
-# ---------------------------------------------------------------------------
-# Worksheet styling helpers (shared with make_tables.py)
-# ---------------------------------------------------------------------------
-def set_widths(ws, widths):
-    for col, w in widths.items():
-        ws.column_dimensions[col].width = w
-
-
-def style_cell(cell, bold=False, size=FONT_SIZE, fill=None, numfmt=None,
-               wrap=False, align="center", border_style="data", italic=False):
-    """Apply professional styling to a cell.
-    
-    border_style: 'header', 'data', 'total', or 'none'
-    """
-    cell.font = Font(name=FONT, size=size, bold=bold, italic=italic,
-                     color="000000" if not bold else "1F3864")
-    
-    # Apply appropriate border
-    if border_style == "header":
-        cell.border = HEADER_BORDER
-    elif border_style == "total":
-        cell.border = TOTAL_BORDER
-    elif border_style == "none":
-        cell.border = Border()
-    else:
-        cell.border = DATA_BORDER
-    
-    if fill is not None:
-        cell.fill = fill
-    if numfmt is not None:
-        cell.number_format = numfmt
-    cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap,
-                               indent=1 if align == "left" else 0)
-
-
-def style_header(cell, text, size=HEADER_FONT_SIZE, fill=HDR_FILL, 
-                 font_color=HDR_FONT_COLOR, align="center", wrap=True):
-    """Style a header cell with professional dark header."""
-    cell.value = text
-    cell.font = Font(name=FONT, size=size, bold=True, color=font_color)
-    cell.fill = fill
-    cell.border = HEADER_BORDER
-    cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap)
-
-
-def get_row_fill(row_index):
-    """Get alternating row fill for data rows (0-indexed)."""
-    return ROW_FILL_EVEN if row_index % 2 == 0 else ROW_FILL_ODD
-
-
-def put(ws, row, col, value, **kw):
-    cell = ws.cell(row=row, column=col, value=value)
-    style_cell(cell, **kw)
-    return cell
-
-
-def _put_formula(ws, cache, row, col, formula, cached, bold=False, fill=None,
-                 numfmt=None):
-    """Write an Excel formula and register the numeric result for caching."""
-    put(ws, row, col, formula, bold=bold, fill=fill, numfmt=numfmt)
-    cache.append((_cell_ref(row, col), cached))
-
-
-def put_text(ws, row, col, text, bold=False, size=FONT_SIZE, fill=None, wrap=False,
-             align="left", use_row_fill=True, italic=False):
-    """Write text with optional alternating row fill."""
-    if fill is None and use_row_fill:
-        fill = get_row_fill(row)
-    return put(ws, row, col, text, bold=bold, size=size, fill=fill,
-               wrap=wrap, align=align, italic=italic)
-
-
-def put_val(ws, row, col, value, bold=False, fill=None, fmt=FMT_VALUE, use_row_fill=True):
-    """Write numeric value with optional alternating row fill."""
-    if fill is None and use_row_fill:
-        fill = get_row_fill(row)
-    return put(ws, row, col, value, bold=bold, fill=fill, numfmt=fmt)
-
-
-def put_share(ws, row, col, value, bold=False, fill=None, use_row_fill=True):
-    """Write share percentage with optional alternating row fill."""
-    if fill is None and use_row_fill:
-        fill = get_row_fill(row)
-    return put(ws, row, col, value, bold=bold, fill=fill, numfmt=FMT_SHARE)
-
-
-def merge(ws, r1, c1, r2, c2):
-    ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
-
-
-def _cell_ref(row, col):
-    return f"{get_column_letter(col)}{row}"
 
 
 # ---------------------------------------------------------------------------
@@ -3314,6 +3101,9 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     # ---- Table 14: Global service exports by category ---------------------
     n_years_g = len(years_gexp)
     shown_gexp = rank_and_top(items_gexp, top_n)
+    # Growth/CAGR feed the live formulas written by write_product_table (the
+    # standalone workbook and the combined "All Service Tables.xlsx" sheet).
+    calc_growth_rates(shown_gexp, years_gexp)
     ao_gexp = all_other_vals(total_gexp, shown_gexp, n_years_g)
     t_latest_gexp = total_gexp["vals"][-1] if total_gexp else None
     for it in shown_gexp:
@@ -3637,14 +3427,12 @@ def generate_service_tables(excel_dir, out_dir, top_n):
 
     # Table 14: Global service exports by category (feeds editable Figures 4/5)
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Table 14"
-    cache = []
-    write_product_table(ws, d_gexp,
+    cache = write_product_table(ws, d_gexp,
                         "Global Service Exports by Category\nValue in USD Billion",
                         unit_row=True,
                         row1_label="Table 14:",
                         row1_title="Global Service Exports by Category")
-    set_widths(ws, widths_prd)
-    cache_all["Table 14"] = dict(cache)
+    set_widths(ws, WIDTHS_PRD)
     out["t14_gexp"] = os.path.join(out_dir, "Table 14 Global Service Exports by Category.xlsx")
     _finalize(ws, out["t14_gexp"], cache)
 
@@ -3658,7 +3446,7 @@ def generate_service_tables(excel_dir, out_dir, top_n):
         note_row = 8
         ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=2 + n_bal)
         cell = ws.cell(note_row, 1, comm_note)
-        cell.font = Font(name=FONT, size=9, italic=True, color=FONT_GRAY if "FONT_GRAY" in globals() else "595959")
+        cell.font = Font(name=FONT, size=9, italic=True, color=FONT_GRAY)
         ws.row_dimensions[note_row].height = 28
     out["balance"] = bal_path
     _finalize(ws, out["balance"], cache)
@@ -3700,15 +3488,13 @@ def generate_service_tables(excel_dir, out_dir, top_n):
     # ---- Combined workbook: all sheets in one file -----------------------
     wb_all = openpyxl.Workbook()
     wb_all.remove(wb_all.active)
-    widths_mkt = {"A": 7, "B": 32, "C": 12, "D": 12, "E": 12, "F": 12,
-                  "G": 12, "H": 12, "I": 12, "J": 12}
-    widths_prd = {"A": 7, "B": 9, "C": 45, "D": 12, "E": 12, "F": 12,
-                  "G": 12, "H": 12, "I": 12, "J": 12, "K": 12, "L": 12}
+    widths_mkt = WIDTHS_MKT
+    widths_prd = WIDTHS_PRD
     cache_all = {}
 
     for s in ("Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6",
               "Table 7", "Table 8", "Table 9", "Table 10", "Table 11", "Table 12",
-              "Table 13", "Figure 1"):
+              "Table 13", "Table 14", "Figure 1"):
         wb_all.create_sheet(s)
 
     ws = wb_all["Table 1"]; c = write_market_table(ws, d1, "Exporters",
@@ -3797,6 +3583,13 @@ def generate_service_tables(excel_dir, out_dir, top_n):
                                 row1_title="Kenya vs Peer Countries: Service Exports")
     cache_all["Table 13"] = dict(c)
 
+    ws = wb_all["Table 14"]; c = write_product_table(ws, d_gexp,
+                        "Global Service Exports by Category\nValue in USD Billion",
+                        unit_row=True,
+                        row1_label="Table 14:",
+                        row1_title="Global Service Exports by Category")
+    set_widths(ws, widths_prd); cache_all["Table 14"] = dict(c)
+
     ws = wb_all["Figure 1"]; c = []
     write_balance(ws, bal_years, exports_full, imports_full, cache=c)
     set_widths(ws, BALANCE_WIDTHS); cache_all["Figure 1"] = dict(c)
@@ -3840,7 +3633,7 @@ def main():
 
     try:
         out, (rep, partner) = generate_service_tables(args.excel_dir, args.out_dir, args.top)
-    except SystemExit:
+    except (SystemExit, PipelineError):
         raise
     except Exception as e:
         sys.exit(f"[ERROR] Failed to generate service tables: {e}")
@@ -3855,4 +3648,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PipelineError as e:
+        sys.exit(str(e))

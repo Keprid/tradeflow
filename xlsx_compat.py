@@ -96,7 +96,7 @@ class HTMLTableParser(html.parser.HTMLParser):
 
     def handle_endtag(self, tag):
         if tag in ("td", "th") and self._in_cell:
-            self._row.append("".join(self._data).strip())
+            self._row.append("".join(self._data).replace("\xa0", " ").strip())
             self._in_cell = False
             self._data = []
         elif tag == "tr" and self._row is not None:
@@ -127,6 +127,14 @@ def _write_html_as_xlsx(src, out):
         for c, v in enumerate(row, start=1):
             if v != "":
                 ws.cell(row=r, column=c, value=v)
+    # Keep the ITC "Product group: <Category>" label (the numbered craft
+    # files carry the category only in this page text, never in the
+    # filename), so the crafts loader can still identify the family after
+    # the HTML -> xlsx conversion discards the rest of the page.
+    m = re.search(r"Product group\s*:\s*([^<]+)", text)
+    if m:
+        ws.cell(row=1, column=20,
+                value="Product group: %s" % m.group(1).strip())
     wb.save(str(out))
 
 

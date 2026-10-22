@@ -31,7 +31,7 @@ exit /b 1
 :found
 
 rem ---- install any missing packages -------------------------------
-%PY% -c "import openpyxl, docx, matplotlib, fastapi, uvicorn" >nul 2>nul
+%PY% -c "import openpyxl, docx, matplotlib, fastapi, uvicorn, multipart, xlrd, pyxlsb, pandas, numpy, lxml" >nul 2>nul
 if not errorlevel 1 (
     echo Dependencies already installed.
     exit /b 0

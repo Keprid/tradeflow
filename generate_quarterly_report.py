@@ -36,6 +36,8 @@ import argparse
 import os
 import re
 import sys
+
+from pipeline_errors import PipelineError
 from datetime import date
 
 import matplotlib
@@ -136,7 +138,7 @@ def find_workbooks(excel_dir):
     missing = [k for k in ("exports", "imports") if k not in found]
     if missing:
         names = ", ".join(sorted(os.listdir(excel_dir)))
-        sys.exit("[ERROR] Missing %s workbook(s) in '%s'.\nFiles present: %s"
+        raise PipelineError("[ERROR] Missing %s workbook(s) in '%s'.\nFiles present: %s"
                  % ("/".join(missing), excel_dir, names))
     return found
 
@@ -414,7 +416,7 @@ class QuarterAnalysis:
             for name, t in (("Table 1", self.t1), ("Table 2", self.t2),
                             ("Annex 1", self.a1), ("Annex 2", self.a2)):
                 if t is None:
-                    sys.exit("[ERROR] Could not locate %s in the quarterly "
+                    raise PipelineError("[ERROR] Could not locate %s in the quarterly "
                              "workbooks." % name)
             comparison = bool(self.t1.get("comparison")
                               and self.a1.get("comparison"))
@@ -1572,4 +1574,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PipelineError as e:
+        sys.exit(str(e))

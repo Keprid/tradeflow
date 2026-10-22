@@ -62,6 +62,8 @@ import gc
 import os
 import sys
 
+from pipeline_errors import PipelineError
+
 import numpy as np
 import openpyxl
 import pandas as pd
@@ -71,7 +73,7 @@ from openpyxl.utils import get_column_letter
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
-from make_tables import _put_formula, _cell_ref, _save_workbook  # noqa: E402
+from xlsx_tools import _cell_ref, _put_formula, _save_workbook  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -132,7 +134,7 @@ def find_kra_files(excel_dir):
             % (k, "Exports by HS Destination" if k == "exports"
                else "Imports by HS Origin")
             for k in missing)
-        sys.exit("[ERROR] Missing KRA raw file(s) in '%s'.\n"
+        raise PipelineError("[ERROR] Missing KRA raw file(s) in '%s'.\n"
                  "Files present: %s\nExpected:\n%s" % (excel_dir, names, hints))
     return found
 
@@ -148,7 +150,7 @@ def load_side(paths, side):
     dupes = merged.duplicated(subset=key + ["Value"]).sum()
     exact = merged.duplicated(subset=key).sum()
     if exact and not dupes:
-        sys.exit(
+        raise PipelineError(
             "[ERROR] Conflicting extracts for %s: several files contain "
             "rows for the same Year/Month/Partner/Product with different "
             "values (%d rows). Check that each file covers a distinct "
@@ -181,7 +183,7 @@ def load_kra(path, side):
                               ("partner", col_name), ("product", col_desc),
                               ("value", col_val)) if c is None]
     if missing:
-        sys.exit("[ERROR] %s: could not locate column(s) %s.\nFound: %s"
+        raise PipelineError("[ERROR] %s: could not locate column(s) %s.\nFound: %s"
                  % (os.path.basename(path), ", ".join(missing),
                     ", ".join(df.columns)))
 
@@ -240,7 +242,7 @@ def detect_quarter(frames):
     years_i = set(frames["imports"]["Year"].dropna().astype(int))
     years = sorted(years_e & years_i) or sorted(years_e | years_i)
     if len(months) < 2:
-        sys.exit("[ERROR] The extracts share fewer than two months; "
+        raise PipelineError("[ERROR] The extracts share fewer than two months; "
                  "cannot define a review period. "
                  "Exports months: %s, imports months: %s"
                  % (sorted(months_e), sorted(months_i)))
@@ -1007,4 +1009,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PipelineError as e:
+        sys.exit(str(e))

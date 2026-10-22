@@ -27,7 +27,7 @@ fi
 
 # ---- install any missing packages ----------------------------------
 echo "Checking dependencies..."
-if ! "$PY" -c "import openpyxl, docx, matplotlib, fastapi, uvicorn" >/dev/null 2>&1; then
+if ! "$PY" -c "import openpyxl, docx, matplotlib, fastapi, uvicorn, multipart, xlrd, pyxlsb, pandas, numpy, lxml" >/dev/null 2>&1; then
     echo "Installing Python dependencies (first run only)..."
     "$PY" -m pip install -r requirements.txt || {
         echo "ERROR: could not install the required Python packages."
