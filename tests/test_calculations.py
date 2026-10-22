@@ -21,7 +21,7 @@ import make_quarterly_tables as mqt
 import make_services_tables as mst
 import make_tables
 from generate_report import parse_trade_balance
-from period_data import period_spec
+from period_data import _read_one, data_sheets, period_spec
 from pipeline_errors import PipelineError
 from xlsx_tools import _finalize
 
@@ -330,3 +330,54 @@ def test_period_spec_quarter_semi_year():
         period_spec("semi", 2026, half=3)
     with pytest.raises(PipelineError):
         period_spec("fortnight", 2026)
+
+
+# ---------------------------------------------------------------------------
+# KNBS Flow handling: total exports = domestic exports + re-exports
+# ---------------------------------------------------------------------------
+def _write_knbs_csv(path, rows):
+    path.write_text(
+        "Year,Month,Partner,Partner.1,HS_C,Value,Flow\n"
+        + "\n".join(",".join(str(c) for c in r) for r in rows) + "\n",
+        encoding="utf-8")
+    return str(path)
+
+
+def test_knbs_flow_totals_exports_plus_reexports(tmp_path):
+    csv = _write_knbs_csv(tmp_path / "knbs.csv", [
+        (2026, 4, "FRANCE", "France", "0901", 2_000_000_000, "Domestic exports"),
+        (2026, 4, "FRANCE", "France", "0901", 1_000_000_000, "Re-exports"),
+        (2026, 5, "USA", "United States", "6203", 3_000_000_000, "Domestic exports"),
+        (2026, 5, "USA", "United States", "6203", 500_000_000, "Re-exports"),
+        (2026, 4, "CHINA", "China", "8471", 7_000_000_000, "Imports"),
+    ])
+    m = _read_one(csv, None)
+    # both export flows share Side="Exports"; only imports stay separate
+    sides = sorted(m["Side"].unique())
+    assert sides == ["Exports", "Imports"]
+
+    spec = period_spec("quarter", 2026, quarter=2)   # April-June
+    sub = m[m["Month"].isin(spec["months"])]
+    total_exports = sub[sub["Side"] == "Exports"]["Value"].sum()
+    total_imports = sub[sub["Side"] == "Imports"]["Value"].sum()
+    assert total_exports == pytest.approx(6.5)       # 2+1 domestic+re-exp + 3+0.5
+    assert total_imports == pytest.approx(7.0)
+
+    # the workbook DATA sheets carry the same combined totals per month
+    sheets = data_sheets(sub)
+    dp = sheets["DATA PARTNER"]
+    apr_france = dp[(dp["Month"] == 4) & (dp["Partner"] == "FRANCE")
+                    & (dp["Side"] == "Exports")]
+    assert float(apr_france["Value"].iloc[0]) == pytest.approx(3.0)
+
+
+def test_knbs_flow_case_insensitive_mapping(tmp_path):
+    csv = _write_knbs_csv(tmp_path / "case.csv", [
+        (2026, 4, "X", "X", "01", 1_000_000_000, "domestic exports"),
+        (2026, 4, "X", "X", "01", 2_000_000_000, "RE-EXPORTS"),
+        (2026, 4, "X", "X", "01", 4_000_000_000, "IMPORTS"),
+    ])
+    m = _read_one(csv, None)
+    counts = m.groupby("Side")["Value"].sum().to_dict()
+    assert counts["Exports"] == pytest.approx(3.0)
+    assert counts["Imports"] == pytest.approx(4.0)
