@@ -838,10 +838,9 @@ def _check_reporter_matches_config(cfg, excel_dir):
     if _norm(detected) != _norm(expected):
         raise HTTPException(
             400,
-            f"Country mismatch: the uploaded data is for '{detected}' but you "
-            f"selected the '{expected}' configuration. Choose the matching "
-            f"country in the dropdown (or pick 'Auto-detect country from "
-            f"data') and try again.")
+            f"Country mismatch: the uploaded data is for '{detected}' but the "
+            f"'{expected}' configuration was requested. Use 'auto' to detect "
+            f"the country from the data.")
 
 
 def _resolve_cfg(excel_dir, cfg_id, logs):
@@ -863,9 +862,8 @@ def _resolve_cfg(excel_dir, cfg_id, logs):
     if not detected:
         raise HTTPException(
             400,
-            "Could not detect the country from the uploaded data. Pick a "
-            "country from the Country configuration dropdown (or upload the "
-            "standard Table 1 with a country title).")
+            "Could not detect the country from the uploaded data. Upload "
+            "the standard Table 1 (its title must name the country).")
     for p in sorted(CONFIG_DIR.glob("*.json")):
         if p.name == "config_template.json":
             continue

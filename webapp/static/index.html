@@ -63,29 +63,19 @@
       </div>
     </fieldset>
 
-    <div id="cfg-wrapper" style="display:none;" aria-hidden="true">
-      <label for="cfg">Country configuration</label>
-      <select id="cfg"><option value="">Loading configs...</option></select>
-    </div>
-
     <div id="product-cfg-wrapper" style="display:none;" aria-hidden="true">
       <label for="product-cfg">Product Profile</label>
       <select id="product-cfg"><option value="">Loading profiles...</option></select>
     </div>
 
-    <div id="services-info" class="info-box">
-      <i class="fas fa-info-circle" style="color:var(--red);"></i>
-      &nbsp;<b>Services Brief:</b> the configuration is set automatically to <b>services_world</b> (global services trade).
-    </div>
-
     <div id="quarterly-info" class="info-box">
-      <i class="fas fa-info-circle" style="color:var(--red);"></i>
-      &nbsp;<b>Export Performance:</b> the <b>newest year</b> in the data becomes the review year and is compared with the <b>same months one year earlier</b>. Every sheet is read individually; pivot and summary sheets are skipped. Market tables default to 25 rows.
+      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      &nbsp;<b>Export Performance:</b> newest year vs the same months one year earlier.
     </div>
 
     <div id="export-period-wrap" class="info-box" style="display:none;" aria-hidden="true">
       <i class="fas fa-calendar-day" style="color:var(--red);"></i>
-      &nbsp;<b>Review period <span class="req-star">*</span>:</b> choose the months the report covers &mdash; no default is preselected. The comparison is always the same months one year earlier.
+      &nbsp;<b>Review period <span class="req-star">*</span>:</b> compared with the same months one year earlier.
       <div class="radio-group period-group" role="radiogroup" aria-label="Review period">
         <div class="radio-option">
           <input type="radio" name="export_period" value="q1" id="ep-q1">
@@ -120,12 +110,12 @@
 
     <div id="product-profile-wrap" class="info-box">
       <i class="fas fa-circle-info" style="color:var(--red);"></i>
-      &nbsp;<b>Product Profile:</b> the product family is <b>auto-detected</b> from the matrix files &mdash; choose a specific profile below only if you prefer one. Output is a Word report plus an editable Excel deliverable.
+      &nbsp;<b>Product Profile:</b> family is auto-detected from the files &mdash; pick a profile below only to override.
     </div>
 
     <div id="competitor-wrap" class="info-box" style="display:none;" aria-hidden="true">
       <i class="fas fa-circle-info" style="color:var(--red);"></i>
-      &nbsp;<b>Competitor Analysis:</b> run this <b>after the goods report</b> &mdash; that first run tells you which products matter. Output is <b>COMPETITOR ANALYSIS</b> as .png (paste-ready), .docx and .xlsx: products ranked by import value, top exporters with value &amp; share, Kenya highlighted in red. The tariff column is left empty.
+      &nbsp;<b>Competitor Analysis:</b> run after the goods report.
     </div>
 
   </div>
@@ -134,18 +124,14 @@
     <div class="card-title"><i class="fas fa-cloud-arrow-up"></i> Step 2 &mdash; Upload your files</div>
 
     <div class="hint" id="upload-hint" style="margin-top:0;">
-      <i class="fas fa-info-circle" style="color:var(--red);"></i>
+      <i class="fas fa-circle-info" style="color:var(--red);"></i>
       &nbsp;
-      Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: <b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. <b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically.
+      Upload the <b>six ITC downloads</b> or a <b>.zip</b> &mdash; or the ready-made <b>Table 1&ndash;6 + Figure 1</b> workbook.
     </div>
 
     <div class="dropzone" id="dropzone" style="margin-top:10px;">
       <label for="files">Upload files</label>
       <input type="file" id="files" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.csv,.zip">
-      <div class="hint" style="margin-top:8px;">
-        <i class="fas fa-folder-open" style="color:var(--red);"></i>
-        &nbsp;Click to browse, or drag &amp; drop files onto this panel.
-      </div>
       <div id="file-summary" class="file-summary"></div>
     </div>
 
@@ -154,14 +140,13 @@
       <select id="sample" aria-label="Bundled sample dataset">
         <option value="">Select a sample dataset&hellip;</option>
       </select>
-      <button id="load-sample" class="btn btn-secondary" type="button"
-              style="flex:0 0 auto;padding:8px 12px;">
+      <button id="load-sample" class="btn btn-secondary btn-compact" type="button">
         <i class="fas fa-download"></i> Load sample
       </button>
     </div>
     <div class="hint" style="margin-top:10px;">
       <i class="fas fa-circle-info" style="color:var(--red);"></i>
-      &nbsp;Bundled sets cover <b>Trade Brief</b>, <b>Services Brief</b>, <b>Export Performance</b> and <b>Product Profile</b>. Loading one selects its analysis type and fills the upload box above.
+      &nbsp;Bundled demo datasets &mdash; loading one picks its analysis type.
     </div>
     <div id="sample-summary" class="file-summary"></div>
   </div>
@@ -173,7 +158,7 @@
       <div id="top-wrap">
         <label for="top">Top N rows per table</label>
         <input type="number" id="top" min="1" max="50" value="20">
-        <div class="hint">Product tables (2, 4, 5, 6) keep this many rows; exporter tables (1, 3) always show 25.</div>
+        <div class="hint">Applies to tables 2, 4&ndash;6; exporter tables show 25.</div>
       </div>
     </div>
 

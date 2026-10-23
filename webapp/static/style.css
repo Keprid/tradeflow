@@ -49,16 +49,6 @@ noscript .noscript-msg {
   font-weight: 600;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* Header */
 .header {
   background: #fff;
@@ -113,7 +103,6 @@ noscript .noscript-msg {
 }
 
 .header-tagline .flag-red { color: var(--red); }
-.header-tagline .flag-green { color: var(--green); }
 .header-tagline .flag-black { color: var(--black); }
 
 .header-tagline small {
@@ -210,8 +199,6 @@ label {
   margin-top: 6px;
   line-height: 1.55;
 }
-
-.icon-dark { color: var(--black); }
 
 /* Form Elements */
 select, input[type=number], input[type=text] {
@@ -318,11 +305,6 @@ input[type=file]::file-selector-button:focus-visible {
   box-shadow: 0 0 0 4px var(--green);
 }
 
-/* Drop zone: the dashed panel accepts a click AND a drag-and-drop. */
-.dropzone {
-  position: relative;
-}
-
 .dropzone.is-over input[type=file] {
   border-color: var(--green);
   background: linear-gradient(135deg, var(--green-light) 0%, #fff 100%);
@@ -369,13 +351,6 @@ fieldset.group > legend {
   background: var(--green-light);
 }
 
-.chip-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
 .file-chip .chip-x {
   border: 0;
   background: transparent;
@@ -409,14 +384,6 @@ fieldset.group > legend {
 }
 
 .sample-row select { width: auto; min-width: 220px; flex: 1 1 220px; }
-
-/* Checklist output */
-#checklist {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 16px;
-  background: var(--bg);
-}
 
 /* Radio Group - Segmented Control */
 .radio-group {
@@ -666,28 +633,6 @@ fieldset.group > legend {
   flex: 1;
 }
 
-.row-gap-sm { gap: 8px; }
-.mt-4 { margin-top: 4px; }
-.mt-10 { margin-top: 10px; }
-.mt-16 { margin-top: 16px; }
-.mt-20 { margin-top: 20px; }
-
-.partner-row {
-  margin-top: 10px;
-  gap: 8px;
-}
-
-.partner-row input { flex: 1; min-width: 0; }
-
-.semi-half-wrap {
-  display: none;
-  margin-top: 8px;
-  gap: 18px;
-  align-items: center;
-}
-
-.semi-half-wrap.show { display: flex; }
-
 /* Log Card */
 .log-card {
   background: linear-gradient(135deg, #161616 0%, #0d0d0d 100%);
@@ -836,9 +781,6 @@ fieldset.group > legend {
   75% { transform: translateX(4px); }
 }
 
-/* Form dropdowns: hidden until the matching analysis type is active */
-#cfg-wrapper,
-#product-cfg-wrapper { display: none; }
 
 /* Info boxes */
 .info-box {
@@ -1092,7 +1034,6 @@ fieldset.group > legend {
   .radio-group { flex-wrap: wrap; }
   .radio-option { flex: 1 1 50%; }
   .radio-option label { font-size: 13px; padding: 10px 12px; }
-  .semi-half-wrap.show { flex-wrap: wrap; gap: 10px; }
 }
 
 @media (max-width: 480px) {

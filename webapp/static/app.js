@@ -6,9 +6,6 @@
   const logEl = $('log');
   const errorMsg = $('error-msg');
   const hint = $('upload-hint');
-  const cfgSelect = $('cfg');
-  const cfgWrapper = $('cfg-wrapper');
-  const servicesInfo = $('services-info');
   const quarterlyInfo = $('quarterly-info');
   const exportPeriodWrap = $('export-period-wrap');
   const productInfo = $('product-profile-wrap');
@@ -213,9 +210,7 @@
   }
 
   const PANELS = {
-    cfgWrapper: () => cfgWrapper,
     productCfgWrapper: () => productCfgWrapper,
-    servicesInfo: () => servicesInfo,
     quarterlyInfo: () => quarterlyInfo,
     exportPeriodWrap: () => exportPeriodWrap,
     productInfo: () => productInfo,
@@ -231,34 +226,23 @@
 
   const MODE_HINTS = {
     goods:
-      '<i class="fas fa-info-circle" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
-      'Upload the <b>six raw ITC downloads</b> (or a <b>.zip</b> containing them), <i>or</i> the seven ready-made tables: ' +
-      '<b>Table 1&ndash;6</b> + <b>Figure 1 Trade Balance.xlsx</b>. ' +
-      '<b>.xls</b>, <b>.xlsb</b> and <b>.csv</b> files are converted automatically. ' +
-      'Leave the country dropdown on <b>Auto-detect</b> unless the data could not be detected.',
+      '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
+      'Upload the <b>six ITC downloads</b> or a <b>.zip</b> &mdash; or the ready-made <b>Table 1&ndash;6 + Figure 1</b> workbook. ' +
+      '<b>.xls</b> / <b>.xlsb</b> / <b>.csv</b> convert automatically.',
     services:
-      '<i class="fas fa-info-circle" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
-      'Upload the <b>seven raw ITC services files</b> (or a <b>.zip</b> containing them), ' +
-      'e.g. <b>exported_services</b>, <b>importers_for</b>, <b>services_exported_by_Kenya</b> &hellip; ' +
-      '<b>.xls</b> files are converted automatically.',
+      '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
+      'Upload the <b>seven ITC services files</b> or a <b>.zip</b> (.xls converts automatically).',
     quarterly:
-      '<i class="fas fa-info-circle" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
-      'Upload the <b>raw monthly extracts</b> &mdash; the <b>KNBS</b> workbook and/or the <b>KRA</b> ' +
-      '&hellip;<b>Exports by HS Destination&hellip;</b> / &hellip;<b>Imports by HS Origin&hellip;</b> files ' +
-      '(up to 4 files, or a .zip) &mdash; then pick the <b>review period</b> below. ' +
-      'Every sheet is read individually; pivot and summary sheets are ignored. ' +
-      '<b>.xls</b> files are converted automatically.',
+      '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
+      'Upload the <b>KNBS workbook</b> and/or <b>KRA</b> exports/imports extracts (up to 4 files or a <b>.zip</b>), ' +
+      'then pick a <b>review period</b>.',
     product:
-      '<i class="fas fa-info-circle" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
-      'Upload the <b>ITC matrix downloads</b> for a product family (or a <b>.zip</b> containing them). ' +
-      'Expected filenames contain keywords like "exporting_economies", "kenyas_exports_to_world_by_product", etc. ' +
-      '<b>.xls</b> files are converted automatically.',
+      '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
+      'Upload the <b>product-family matrix files</b> or a <b>.zip</b> &mdash; the family is auto-detected from the filenames.',
     competitor:
-      '<i class="fas fa-info-circle" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
-      'Run this <b>after the goods trade flow</b>. Upload the per-product ITC Trade Map ' +
-      '<b>&ldquo;List of supplying markets for a product imported by &lt;partner&gt;&rdquo;</b> files, ' +
-      'one per product (names like <code>nigerias-imports-from-world-by-exporter_0902.xlsx</code>), or a <b>.zip</b>. ' +
-      'Produces <b>COMPETITOR ANALYSIS</b> as .png / .docx / .xlsx.',
+      '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
+      'Run after the goods report. Upload the per-product <b>&ldquo;List of supplying markets&rdquo;</b> files (or a <b>.zip</b>) ' +
+      '&rarr; .png / .docx / .xlsx.',
   };
 
   function applyReportType(rt) {
@@ -272,18 +256,14 @@
       refreshLogEmpty();
     }
     if (rt === 'goods') {
-      cfgSelect.value = '__auto__';
-      setPanels({ cfgWrapper: true, topWrap: true });
+      setPanels({ topWrap: true });
     } else if (rt === 'services') {
-      cfgSelect.value = 'services_world';
-      setPanels({ servicesInfo: true, topWrap: true });
+      setPanels({ topWrap: true });
     } else if (rt === 'quarterly') {
       setPanels({ quarterlyInfo: true, exportPeriodWrap: true, topWrap: true });
     } else if (rt === 'product') {
-      cfgSelect.value = '__auto__';
       setPanels({ productInfo: true, productCfgWrapper: true, topWrap: true });
     } else if (rt === 'competitor') {
-      cfgSelect.value = '__auto__';
       setPanels({ competitorInfo: true });
     }
     // Keep the semi-annual half picker consistent with the selected period.
@@ -394,37 +374,8 @@
   }
 
   // -------------------------------------------------------------------------
-  // Config / profile / sample loading (with real error states)
+  // Profile / sample loading (with real error states)
   // -------------------------------------------------------------------------
-  async function loadConfigs() {
-    try {
-      const r = await fetch('/api/configs');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const cfgs = await r.json();
-      cfgSelect.innerHTML = '';
-      for (const c of cfgs) {
-        const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = c.year ? `${c.name} (year ${c.year})` : c.name;
-        cfgSelect.appendChild(o);
-      }
-      if (!cfgs.length) {
-        const o = document.createElement('option');
-        o.value = '';
-        o.textContent = 'No country configs found in config/';
-        cfgSelect.appendChild(o);
-      }
-      cfgSelect.value = '__auto__';
-    } catch (e) {
-      cfgSelect.innerHTML = '';
-      const o = document.createElement('option');
-      o.value = '';
-      o.textContent = 'Could not load country configs — reload to retry';
-      cfgSelect.appendChild(o);
-      showToast('error', 'Could not load configs', String(e));
-    }
-  }
-
   async function loadProductProfiles() {
     try {
       const r = await fetch('/api/product-profiles');
@@ -518,10 +469,10 @@
         radios[0].checked = true;
         applyReportType(radios[0].value);
       }
-      // Apply the recommended config when the relevant dropdown has it.
-      const cfgSel = g.report_type === 'product' ? productCfgSelect : cfgSelect;
-      if (g.config && [...cfgSel.options].some(o => o.value === g.config)) {
-        cfgSel.value = g.config;
+      // Apply the recommended profile for product samples.
+      if (g.report_type === 'product' && g.config &&
+          [...productCfgSelect.options].some(o => o.value === g.config)) {
+        productCfgSelect.value = g.config;
       }
 
       // Stream every sample file from the server into the upload queue.
@@ -687,7 +638,8 @@
     }
 
     const fd = new FormData();
-    fd.append('config', rt === 'product' ? productCfgSelect.value : cfgSelect.value);
+    fd.append('config', rt === 'product' ? productCfgSelect.value
+      : (rt === 'services' ? 'services_world' : '__auto__'));
     fd.append('top', parseInt($('top').value, 10) || 10);
     fd.append('report_type', rt);
     let periodVal = '';
@@ -814,7 +766,6 @@
   const initialRadio = document.querySelector('input[name="report_type"]:checked');
   if (initialRadio) initialRadio.dispatchEvent(new Event('change', { bubbles: true }));
   else applyReportType('goods');
-  loadConfigs();
   loadProductProfiles();
   loadSamples();
 })();
