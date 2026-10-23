@@ -346,7 +346,7 @@ fieldset.group > legend {
   padding: 0;
 }
 
-/* Small quiet button (checklist actions, "Clear files", copy, download). */
+/* Small quiet button ("Clear files", copy, download). */
 .btn-quiet {
   display: inline-flex;
   align-items: center;
@@ -416,13 +416,6 @@ fieldset.group > legend {
   border-radius: var(--radius-sm);
   padding: 16px;
   background: var(--bg);
-}
-
-.checklist-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
 }
 
 /* Radio Group - Segmented Control */
@@ -685,15 +678,6 @@ fieldset.group > legend {
 }
 
 .partner-row input { flex: 1; min-width: 0; }
-
-.promotion-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.promotion-row input[type=checkbox] { width: auto; }
-.promotion-row label { margin: 0; font-weight: 500; }
 
 .semi-half-wrap {
   display: none;

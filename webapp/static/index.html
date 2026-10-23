@@ -66,32 +66,11 @@
     <div id="cfg-wrapper" style="display:none;" aria-hidden="true">
       <label for="cfg">Country configuration</label>
       <select id="cfg"><option value="">Loading configs...</option></select>
-      <div class="hint" id="cfg-hint">
-        <i class="fas fa-circle-info" style="color:var(--red);"></i>
-        &nbsp;<b>Auto-detect</b> reads the country and report year from your files. Pick a country only if the detection picks the wrong one &mdash; the run stops if the data does not match the config you choose.
-      </div>
     </div>
 
     <div id="product-cfg-wrapper" style="display:none;" aria-hidden="true">
       <label for="product-cfg">Product Profile</label>
       <select id="product-cfg"><option value="">Loading profiles...</option></select>
-    </div>
-
-    <div id="goods-partner-wrap" style="margin-top:8px;">
-      <label for="partner">Partner market <span style="font-weight:500;color:var(--text-muted);">(optional &mdash; Trade Brief)</span></label>
-      <div class="row" style="margin-top:8px;gap:8px;">
-        <input type="text" id="partner" placeholder="e.g. Saudi Arabia, UAE, Uganda"
-               style="flex:1;min-width:0;" value="">
-        <button id="prep-checklist" class="btn btn-secondary" type="button"
-                style="flex:0 0 auto;padding:8px 12px;">
-          <i class="fas fa-list-check"></i> Build checklist
-        </button>
-      </div>
-      <div class="hint" id="partner-hint">
-        <i class="fas fa-circle-info" style="color:var(--red);"></i>
-        &nbsp;Enter a market to get the exact ITC Trade Map download checklist and a matching country config for it. Leave empty and the country is read from the files you upload.
-      </div>
-      <div id="checklist" style="display:none;margin-top:12px;"></div>
     </div>
 
     <div id="services-info" class="info-box">
@@ -196,13 +175,6 @@
         <input type="number" id="top" min="1" max="50" value="20">
         <div class="hint">Product tables (2, 4, 5, 6) keep this many rows; exporter tables (1, 3) always show 25.</div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;" id="promotion-wrap">
-        <input type="checkbox" id="promotion" style="width:auto;">
-        <label for="promotion" style="margin:0;">
-          Also build the <b>Export Promotion workbook</b> (additive price &amp;
-          positioning analysis, goods report only)
-        </label>
-      </div>
     </div>
 
     <div id="run-cta" class="run-cta" role="status">
@@ -234,7 +206,7 @@
       <div class="result-actions">
         <a id="dl-report" href="#"><i class="fas fa-file-word"></i> Download Word Report (.docx)</a>
         <a id="dl-tables" href="#" class="btn-secondary-link"><i class="fas fa-file-archive"></i> Download Tables (.zip)</a>
-        <a id="dl-promotion" href="#" class="btn-secondary-link" style="display:none;"><i class="fas fa-file-excel"></i> Download Promotion Workbook (.xlsx)</a>
+        <a id="dl-xlsx" href="#" class="btn-secondary-link" style="display:none;"><i class="fas fa-file-excel"></i> Download Table (.xlsx)</a>
       </div>
     </div>
   </div>

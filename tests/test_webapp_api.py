@@ -46,10 +46,6 @@ def test_download_traversal_rejected():
     assert c.get(f"/api/download/{JOB0}").status_code == 404
 
 
-def test_promotion_missing_manifest_is_404_not_500():
-    assert c.get(f"/api/promotion/{JOB0}").status_code == 404
-
-
 def test_tables_and_product_tables_404():
     assert c.get(f"/api/tables/{JOB0}").status_code == 404
     assert c.get(f"/api/product-tables/{JOB0}").status_code == 404

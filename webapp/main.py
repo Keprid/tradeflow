@@ -96,61 +96,6 @@ def _clip_name(name, cap=_MAX_UPLOAD_NAME_CHARS):
     stem, ext = os.path.splitext(name)
     return stem[: cap - len(ext)] + ext
 
-# The six raw ITC Trade Map downloads the Goods pipeline needs, in the order
-# make_tables expects (table1..table6).  Trade Map has no public API (it is an
-# Angular SPA), so "auto-fetch" means: we describe the exact per-partner query
-# to run and the file-naming patterns auto-detection will pick up once the
-# analyst downloads each workbook.
-ITC_GOODS_QUERIES = [
-    {
-        "role": "table1",
-        "query": "Imports from World, by Market, for {partner} "
-                 "(all products, top supplying markets)",
-        "short": "Partner's imports from world - by market",
-        "patterns": ("imports-from-world-by-exporter",
-                     "list_of_supplying_markets_for_a_product_imported_by_{p}"),
-    },
-    {
-        "role": "table2",
-        "query": "Imports from World, by Product, for {partner} "
-                 "(all products imported by {partner})",
-        "short": "Partner's imports from world - by product",
-        "patterns": ("imports-from-world-by-product",
-                     "list_of_products_imported_by_{p}"),
-    },
-    {
-        "role": "table3",
-        "query": "Exports to World, by Market, for {partner} "
-                 "(all products, top importing markets)",
-        "short": "Partner's exports to world - by market",
-        "patterns": ("exports-to-world-by-importer",
-                     "list_of_importing_markets_for_a_product_exported_by_{p}"),
-    },
-    {
-        "role": "table4",
-        "query": "Exports to World, by Product, for {partner} "
-                 "(all products exported by {partner})",
-        "short": "Partner's exports to world - by product",
-        "patterns": ("exports-to-world-by-product",
-                     "list_of_products_exported_by_{p}"),
-    },
-    {
-        "role": "table5",
-        "query": "Bilateral trade between Kenya and {partner} - Kenya's "
-                 "EXPORTS to {partner}, by product",
-        "short": "Kenya's exports to {partner} - by product (bilateral)",
-        "patterns": ("kenyas-exports-to-{p}-by-product",
-                     "bilateral_trade_between_kenya_and_{p}"),
-    },
-    {
-        "role": "table6",
-        "query": "Bilateral trade between Kenya and {partner} - Kenya's "
-                 "IMPORTS from {partner}, by product",
-        "short": "Kenya's imports from {partner} - by product (bilateral)",
-        "patterns": ("kenyas-imports-from-{p}-by-product",
-                     "bilateral_trade_between_kenya_and_{p}"),
-    },
-]
 RAW_KEYWORDS = ("imports-from-world", "exports-to-world",
                 "kenyas-imports-from", "kenyas-exports-to")
 # classic ("previous") Trade Map download names -- same data, other naming
@@ -477,86 +422,6 @@ def api_product_profiles():
             "name": cfg.get("title") or cfg.get("family_title") or p.stem,
         })
     return out
-
-
-def _partner_slug(name):
-    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
-
-
-def _build_goods_checklist(partner):
-    """Return the six ITC download steps for a partner (see ITC_GOODS_QUERIES)."""
-    slug = _partner_slug(partner)
-    items = []
-    for q in ITC_GOODS_QUERIES:
-        p = re.sub(r"[^a-z0-9]+", "_", (partner or "").lower()).strip("_")
-        items.append({
-            "role": q["role"],
-            "query": q["query"].format(partner=partner),
-            "short": q["short"].format(partner=partner),
-            "patterns": [pat.format(p=p) for pat in q["patterns"]],
-        })
-    return items
-
-
-@app.get("/api/goods/partner-setup")
-def api_goods_partner_setup(partner: str = "", year: int = 0):
-    """Prep a Goods flow for a partner by name (e.g. 'Saudi Arabia').
-
-    Because ITC Trade Map has no public API (it is an Angular SPA), this does
-    not download anything.  Instead it returns: (1) a ready-to-use config for
-    the partner (created from the name, or the existing one reused) and (2) the
-    exact six Trade Map queries to run plus the file-name patterns auto-detection
-    expects of the downloaded workbooks.  Remaining requirement is a manual
-    download from trademap.org."""
-
-    partner = (partner or "").strip()
-    if not partner:
-        raise HTTPException(400, "Partner name is required (e.g. 'Saudi Arabia').")
-
-    slug = _partner_slug(partner)
-    cfg_path = CONFIG_DIR / f"{slug}.json"
-    created = False
-    if not cfg_path.exists():
-        try:
-            cfg, s = make_config.build_config_from_name(
-                partner, year or None)
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
-                            encoding="utf-8")
-        created = True
-
-    cfg = gr.load_config(str(cfg_path))
-    checklist = _build_goods_checklist(partner)
-
-    # Best-effort: which of the six files already exist in the sample-data dir.
-    sample_dir = BASE_DIR / "sample_data"
-    found = {}
-    if sample_dir.is_dir():
-        lowlist = [f.lower().replace(" ", "_") for f in os.listdir(sample_dir)]
-        for it in checklist:
-            hit = next(
-                (f for f in lowlist
-                 if any(pat in f and _partner_slug(partner) not in f
-                        for pat in it["patterns"])
-                 or any(pat.format(p=_partner_slug(partner)) in f
-                        for pat in it["patterns"])),
-                None)
-            found[it["role"]] = bool(hit)
-
-    return {
-        "ok": True,
-        "partner": cfg["country"]["name"],
-        "config": {"id": slug, "path": str(cfg_path), "created": created,
-                   "year": cfg["report"].get("year", 0)},
-        "checklist": checklist,
-        "sample_found": found,
-        "note": (
-            "ITC Trade Map has no public API. Run each query below in the "
-            "Trade Map web app, download the workbook, then upload them together "
-            "for the Trade Brief. Filenames matching the patterns below are "
-            "auto-detected and the partner config is reused automatically."),
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -1020,7 +885,7 @@ def _resolve_cfg(excel_dir, cfg_id, logs):
     return gr.load_config(gr.cfg_path), new_id
 
 
-def _run_pipeline(job_dir, cfg_id, top_n, mode, logs, promotion=False):
+def _run_pipeline(job_dir, cfg_id, top_n, mode, logs):
     uploads = job_dir / "uploads"
     tables = job_dir / "tables"
     charts = job_dir / "charts"
@@ -1063,18 +928,6 @@ def _run_pipeline(job_dir, cfg_id, top_n, mode, logs, promotion=False):
         "excel_dir": os.path.relpath(excel_dir, job_dir),
         "config": cfg_id,
     }
-    if promotion:
-        promo_name = (os.path.splitext(report_name)[0]
-                      + " Export Promotion.xlsx")
-        promo_path = job_dir / promo_name
-        try:
-            import export_promotion_analysis
-            export_promotion_analysis.build_from_dir(
-                cfg, excel_dir, str(promo_path), extra_dirs=[str(uploads)])
-            manifest["promotion_name"] = promo_name
-            logs.append(f"Export promotion workbook saved as {promo_name}")
-        except Exception as exc:
-            logs.append(f"Warning: promotion workbook skipped: {exc}")
     (job_dir / "manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8")
     return report_path, manifest
@@ -1453,8 +1306,6 @@ def api_status(job_id: str):
             resp["png_url"] = f"/api/competitor-file/{job_id}/png"
             resp["xlsx_url"] = f"/api/competitor-file/{job_id}/xlsx"
             resp.pop("tables_url", None)
-        if m.get("promotion_name"):
-            resp["promotion_url"] = f"/api/promotion/{job_id}"
         return resp
     try:
         started = json.loads((job_dir / "meta.json").read_text())["started"]
@@ -1504,7 +1355,6 @@ def _write_upload(dst, upload, budget):
 def api_run(config: str = Form("__auto__"), top: int = Form(20),
             report_type: str = Form("goods"),
             period: str = Form(""),
-            promotion: bool = Form(False),
             files: list[UploadFile] = File(default=None),
             zip_upload: UploadFile | None = File(default=None, alias="zip")):
     files = files or []
@@ -1595,7 +1445,7 @@ def api_run(config: str = Form("__auto__"), top: int = Form(20),
                 job_dir, logs)
         else:
             job_fn = lambda logs: _run_pipeline(             # noqa: E731
-                job_dir, config, top, mode, logs, promotion=promotion)
+                job_dir, config, top, mode, logs)
 
         # The heavy build runs in a background thread; the request answers
         # immediately and the page polls /api/status/<job>. Long synchronous
@@ -1629,20 +1479,6 @@ def api_download(job_id: str):
         raise HTTPException(404, "Report not found.")
     return FileResponse(str(report), filename=report.name,
                         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
-
-@app.get("/api/promotion/{job_id}")
-def api_promotion(job_id: str):
-    """Download the additive export-promotion workbook (if requested)."""
-    job_dir = _job_dir(job_id)
-    manifest = _read_manifest(job_dir)
-    if "promotion_name" not in manifest:
-        raise HTTPException(404, "This job has no export-promotion workbook.")
-    promo = job_dir / manifest["promotion_name"]
-    if not promo.exists():
-        raise HTTPException(404, "Promotion workbook not found.")
-    return FileResponse(str(promo), filename=promo.name,
-                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.get("/api/tables/{job_id}")

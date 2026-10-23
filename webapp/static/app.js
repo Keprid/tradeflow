@@ -24,11 +24,6 @@
   const progressElapsed = $('progress-elapsed');
   const progressFill = $('progress-fill');
   const toastContainer = $('toast-container');
-  const partnerWrap = $('goods-partner-wrap');
-  const partnerInput = $('partner');
-  const prepBtn = $('prep-checklist');
-  const checklistBox = $('checklist');
-  const promotionWrap = $('promotion-wrap');
   const topWrap = $('top-wrap');
   const dropzone = $('dropzone');
   const sampleSelect = $('sample');
@@ -41,8 +36,6 @@
 
   let elapsedTimer = null;
   let currentFiles = [];             // mirrors filesInput.files, removable
-  let checklistText = '';
-  let checklistFileName = 'itc-checklist.txt';
 
   const LOG_EMPTY_HTML =
     '<div class="log-empty"><i class="fas fa-inbox" aria-hidden="true"></i>' +
@@ -101,7 +94,7 @@
     r.style.display = 'none';
     r.classList.remove('showing');
     $('result-meta').innerHTML = '';
-    $('dl-promotion').style.display = 'none';
+    $('dl-xlsx').style.display = 'none';
   }
 
   function showToast(type, title, body) {
@@ -206,7 +199,6 @@
     if (/Building report|Building services report/i.test(t)) return 'Building the Word report…';
     if (/Building product profile|Building crafts/i.test(t)) return 'Building the product profile…';
     if (/tables written|workbooks written/i.test(t)) return 'Tables written — building the report…';
-    if (/promotion workbook/i.test(t)) return 'Building the promotion workbook…';
     if (/Report ready/i.test(t)) return 'Report ready!';
     return null;
   }
@@ -220,20 +212,12 @@
     else el.setAttribute('aria-hidden', 'true');
   }
 
-  function showPanelFlex(el, visible) {
-    el.style.display = visible ? 'flex' : 'none';
-    if (visible) el.removeAttribute('aria-hidden');
-    else el.setAttribute('aria-hidden', 'true');
-  }
-
   const PANELS = {
     cfgWrapper: () => cfgWrapper,
     productCfgWrapper: () => productCfgWrapper,
     servicesInfo: () => servicesInfo,
     quarterlyInfo: () => quarterlyInfo,
     exportPeriodWrap: () => exportPeriodWrap,
-    partnerWrap: () => partnerWrap,
-    promotionWrap: () => promotionWrap,
     productInfo: () => productInfo,
     competitorInfo: () => competitorInfo,
     topWrap: () => topWrap,
@@ -241,9 +225,7 @@
 
   function setPanels(state) {
     for (const [k, get] of Object.entries(PANELS)) {
-      const want = !!state[k];
-      if (k === 'promotionWrap') showPanelFlex(get(), want);
-      else showPanel(get(), want);
+      showPanel(get(), !!state[k]);
     }
   }
 
@@ -291,7 +273,7 @@
     }
     if (rt === 'goods') {
       cfgSelect.value = '__auto__';
-      setPanels({ cfgWrapper: true, partnerWrap: true, promotionWrap: true, topWrap: true });
+      setPanels({ cfgWrapper: true, topWrap: true });
     } else if (rt === 'services') {
       cfgSelect.value = 'services_world';
       setPanels({ servicesInfo: true, topWrap: true });
@@ -304,7 +286,6 @@
       cfgSelect.value = '__auto__';
       setPanels({ competitorInfo: true });
     }
-    if (rt !== 'goods') $('promotion').checked = false;
     // Keep the semi-annual half picker consistent with the selected period.
     const semi = document.querySelector('input[name="export_period"]:checked');
     const wrap = $('semi-half-wrap');
@@ -570,102 +551,6 @@
     }
   });
 
-  // -------------------------------------------------------------------------
-  // Goods partner checklist
-  // -------------------------------------------------------------------------
-  prepBtn.addEventListener('click', async () => {
-    const p = (partnerInput.value || '').trim();
-    if (!p) {
-      showError('Enter a partner first, e.g. Saudi Arabia.');
-      showToast('error', 'Partner required', 'Type a market name, e.g. Saudi Arabia.');
-      return;
-    }
-    prepBtn.disabled = true;
-    prepBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Building…';
-    try {
-      const r = await fetch('/api/goods/partner-setup?partner=' + encodeURIComponent(p));
-      const data = await r.json();
-      if (!r.ok) { throw new Error(normalizeDetail(data.detail) || 'Request failed'); }
-
-      const created = data.config.created ? ' (config created)' : ' (config reused)';
-      let html = '<div style="font-size:13px;line-height:1.6;">' +
-        '<b style="color:var(--green);">Checklist ready for ' + esc(data.partner) + '</b> &mdash; ' +
-        'config <b>config/' + esc(data.config.id) + '.json</b>' + created + ' (report year ' + data.config.year + ').<br>' +
-        '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;<span style="opacity:.9">' +
-        esc(data.note) + '</span></div>';
-      html += '<ol style="margin:10px 0 0 18px;font-size:13px;line-height:1.55;">';
-      const plain = [
-        'ITC Trade Map checklist for ' + data.partner + ' — config/' + data.config.id + '.json' + created,
-        data.note,
-        '',
-      ];
-      for (const it of data.checklist) {
-        const pats = it.patterns.map(esc).join(' &nbsp;or&nbsp; ');
-        html += '<li><b>' + esc(it.short) + '</b><div style="opacity:.85">' +
-          '<i class="fas fa-magnifying-glass" style="color:var(--red);" aria-hidden="true"></i> ' + esc(it.query) +
-          '<div class="hint" style="font-size:12px;"><b>Filename:</b> <code>' + pats + '</code></div>' +
-          '</div></li>';
-        plain.push('• ' + it.short + ' — ' + it.query + '\n  Filename: ' + it.patterns.join(' or '));
-      }
-      html += '</ol>';
-      html += '<div class="checklist-actions">' +
-        '<button type="button" class="btn-quiet" id="copy-checklist">' +
-        '<i class="fas fa-copy" aria-hidden="true"></i> Copy checklist</button>' +
-        '<button type="button" class="btn-quiet" id="download-checklist">' +
-        '<i class="fas fa-download" aria-hidden="true"></i> Download .txt</button></div>';
-      checklistBox.innerHTML = html;
-      checklistBox.style.display = 'block';
-      checklistText = plain.join('\n');
-      checklistFileName = data.partner.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() +
-        '-itc-checklist.txt';
-      appendLog('Built ITC checklist for ' + data.partner + ' (config/' + data.config.id + '.json) ' +
-        (data.config.created ? 'created' : 'reused') + '.');
-      // Refresh the country dropdown so a newly created config is selectable.
-      loadConfigs().then(() => { cfgSelect.value = data.config.id; });
-      showToast('success', 'Checklist ready', 'Copy it, or download it as a .txt file, then fetch the Trade Map files.');
-    } catch (e) {
-      showError(String(e));
-      appendLog('Build checklist failed: ' + e, 'err');
-      showToast('error', 'Could not build checklist', String(e));
-    } finally {
-      prepBtn.disabled = false;
-      prepBtn.innerHTML = '<i class="fas fa-list-check" aria-hidden="true"></i> Build checklist';
-    }
-  });
-
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text);
-    }
-    return new Promise((resolve, reject) => {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); resolve(); } catch (e) { reject(e); }
-      ta.remove();
-    });
-  }
-
-  checklistBox.addEventListener('click', e => {
-    if (e.target.closest('#copy-checklist')) {
-      if (!checklistText) return;
-      copyText(checklistText).then(() =>
-        showToast('success', 'Checklist copied', 'Paste it into a message, note or email.')
-      ).catch(() => showToast('error', 'Copy failed', 'Select the text and copy it manually.'));
-    } else if (e.target.closest('#download-checklist')) {
-      if (!checklistText) return;
-      const blob = new Blob([checklistText], { type: 'text/plain;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = checklistFileName;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    }
-  });
 
   // -------------------------------------------------------------------------
   // Report-type switching + review-period picker
@@ -805,7 +690,6 @@
     fd.append('config', rt === 'product' ? productCfgSelect.value : cfgSelect.value);
     fd.append('top', parseInt($('top').value, 10) || 10);
     fd.append('report_type', rt);
-    fd.append('promotion', $('promotion').checked ? 'true' : 'false');
     let periodVal = '';
     if (rt === 'quarterly') {
       // No default on purpose: a silent full-year run when only one quarter
@@ -898,17 +782,13 @@
         : (isProduct
           ? '<i class="fas fa-file-excel" aria-hidden="true"></i> Download Excel Deliverable'
           : '<i class="fas fa-file-archive" aria-hidden="true"></i> Download Tables (.zip)');
-      const dlPromo = $('dl-promotion');
+      const dlXlsx = $('dl-xlsx');
       if (isCompetitor && final.xlsx_url) {
-        dlPromo.href = final.xlsx_url;
-        dlPromo.innerHTML = '<i class="fas fa-file-excel" aria-hidden="true"></i> Download Table (.xlsx)';
-        dlPromo.style.display = 'inline-flex';
-      } else if (final.promotion_url) {
-        dlPromo.href = final.promotion_url;
-        dlPromo.innerHTML = '<i class="fas fa-file-excel" aria-hidden="true"></i> Download Promotion Workbook (.xlsx)';
-        dlPromo.style.display = 'inline-flex';
+        dlXlsx.href = final.xlsx_url;
+        dlXlsx.innerHTML = '<i class="fas fa-file-excel" aria-hidden="true"></i> Download Table (.xlsx)';
+        dlXlsx.style.display = 'inline-flex';
       } else {
-        dlPromo.style.display = 'none';
+        dlXlsx.style.display = 'none';
       }
       $('result').style.display = 'block';
       $('result').classList.add('showing');
