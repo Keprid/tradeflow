@@ -326,6 +326,33 @@ default `output/.tmp`).
 `make_tables.py` options: `--excel-dir` (default `sourcefiles`), `--out-dir`
 (default `output/tables`), `--top` (rows kept per table, default 20).
 
+## Competitor analysis (per product or per Kenya export market)
+
+`generate_competitor_analysis.py` reads ITC Trade Map "List of supplying
+markets for a product imported by <market>" downloads and writes a
+paste-ready `.png`, an editable `.docx` and an `.xlsx`. The layout is detected
+from the files:
+
+- **per product** - one importing market, several HS products (e.g. the
+  `TEKTAT/` set);
+- **per Kenya export market** - one HS product line, several importing markets
+  (e.g. the cut-flowers set in `Samplefiles/Competitor Analysis/CA files/`,
+  where every file ends `_0603.xlsx`). Only markets where Kenya exported the
+  product are kept.
+
+```bash
+python3 generate_competitor_analysis.py --data TEKTAT --out TEKTAT
+python3 generate_competitor_analysis.py \
+    --data "Samplefiles/Competitor Analysis/CA files" --out output/cut-flowers
+```
+
+In the per-market layout, the countries shown are the destinations Kenya
+supplies, ranked by Kenya's exports to them; each block lists the market's top
+5 exporters (Kenya's competitors) with value and share. Kenya is always
+included in red. In the per-product layout, products are ranked by import
+value. Use `--year`, `--top` or `--mode auto|product|country` to override the
+defaults.
+
 ## Free hosting (Render.com)
 
 The web app runs on Render's free tier (it sleeps after ~15 min idle and

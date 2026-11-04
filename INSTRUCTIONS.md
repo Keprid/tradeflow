@@ -300,36 +300,53 @@ period (three months, two quarters, or four quarters).
 This step is **deliberately not bundled** into the goods report: you only
 know *which* products to analyse once the first Kenya–partner trade flow has
 been generated (its Table 5/6 show the products that matter). Run it as a
-separate step whenever the per-product downloads are ready — days later is
-fine.
+separate step whenever the supplying-market downloads are ready — days later
+is fine.
 
-1. Run the goods trade flow first and note the products to analyse.
-2. For **each product**, download from ITC Trade Map the "List of supplying
-   markets for a product imported by <partner>" file (imports of that HS
-   code by exporter). Save them in one folder, e.g. `TEKTAT/`, keeping the
-   Trade Map names (`<partner>-imports-from-world-by-exporter_<HS>.xlsx`).
+1. Run the goods trade flow first and note the products/markets to analyse.
+2. Download from ITC Trade Map the "List of supplying markets for a product
+   imported by <market>" files (imports of that HS code by exporter) and save
+   them in one folder, keeping the Trade Map names
+   (`<market>-imports-from-world-by-exporter_<HS>.xlsx`). Two data shapes are
+   supported and detected automatically:
+   - **per product** - one importing market and several HS products
+     (e.g. `TEKTAT/` with `saudi-arabias-imports-from-world-by-exporter_0603.xlsx`,
+     `..._0602.xlsx`, ...); or
+   - **per Kenya export market** - one HS product line and several importing
+     markets (e.g. the cut-flowers set in
+     `Samplefiles/Competitor Analysis/CA files/`, where every file ends
+     `_0603.xlsx` and the reporter changes). Only markets where Kenya exported
+     the product are kept.
 3. Generate the competitor analysis:
 
 ```
 python generate_competitor_analysis.py --data TEKTAT --out TEKTAT
+python generate_competitor_analysis.py \
+    --data "Samplefiles/Competitor Analysis/CA files" --out output/cut-flowers
 ```
 
 or double-click **`run_competitor.bat`** (Windows; optional arguments:
 `run_competitor.bat <data_folder> <out_folder>`).
 
-Products are ranked by the partner's import value; each shows its top 5
-exporters with value and share. **Kenya's row is always shown in red** —
-when she is outside the top 5 her row carries her true rank. Three
-deliverables are written:
+In the single-market layout the products are ranked by import value. In the
+single-product layout the countries shown are the destinations Kenya supplies,
+ranked by **Kenya's exports to them** (the same order as the lead export-
+destination table), not by the market's total imports. Each block shows the
+market's top 5 exporters - Kenya's competitors - with value and share.
+**Kenya's row is always shown in red** - when she is outside the top 5 her row
+carries her true rank. Three deliverables are written:
 
 - `COMPETITOR ANALYSIS.png` – paste-ready table picture (the report embeds
   its tables as pictures)
 - `COMPETITOR ANALYSIS.docx` – editable Word table
 - `COMPETITOR ANALYSIS.xlsx` – editable Excel workbook
 
-The "Tariff Applied %" column is left empty (the Trade Map value-only
-download carries no tariff). Options: `--year YYYY` (default: latest year in
-the files), `--top N` (exporters per product, default 5).
+In the per-product layout the "Tariff Applied %" column is left empty (the
+Trade Map value-only download carries no tariff); the per-market layout
+follows the sample picture and omits that column. Options: `--year YYYY`
+(default: latest year in the files, which may differ by market), `--top N`
+(exporters per block, default 5) and `--mode auto|product|country` to force a
+layout when a set is ambiguous.
 
 ---
 
@@ -421,7 +438,8 @@ make_tables.py             Builds the six Table 1-6 workbooks from raw ITC files
 make_config.py             Auto-generates config/<country>.json from the data
 generate_report.py         Reads the tables and writes the Word report
 generate_competitor_analysis.py  Standalone competitor analysis (per-product
-                           supplying-markets downloads) - see section 6c
+                           or per-importing-market supplying-markets downloads)
+                           - see section 6c
 webapp/                    FastAPI web app (main.py + static/index.html)
 config/saudi_arabia.json   Working configuration (Saudi Arabia)
 config/uae.json            Configuration for the United Arab Emirates

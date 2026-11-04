@@ -191,7 +191,9 @@
     if (/Mode: raw ITC/i.test(t)) return 'Reading raw ITC spreadsheets…';
     if (/Mode: raw ITC services/i.test(t)) return 'Reading services spreadsheets…';
     if (/Mode: Export Performance/i.test(t)) return 'Reading monthly extracts…';
-    if (/Mode: per-product/i.test(t)) return 'Reading supplying-markets files…';
+    if (/Mode: (per-product|supplying-market)/i.test(t)) return 'Reading supplying-markets files…';
+    if (/Layout: per (importing market|Kenya export market)/i.test(t)) return 'Reading supplying-markets files by Kenya export market…';
+    if (/Layout: per product/i.test(t)) return 'Reading supplying-markets files by product…';
     if (/Country detected/i.test(t)) return 'Country detected — loading config…';
     if (/Building report|Building services report/i.test(t)) return 'Building the Word report…';
     if (/Building product profile|Building crafts/i.test(t)) return 'Building the product profile…';
@@ -241,7 +243,8 @@
       'Upload the <b>product-family matrix files</b> or a <b>.zip</b> &mdash; the family is auto-detected from the filenames.',
     competitor:
       '<i class="fas fa-circle-info" style="color:var(--red);" aria-hidden="true"></i> &nbsp;' +
-      'Run after the goods report. Upload the per-product <b>&ldquo;List of supplying markets&rdquo;</b> files (or a <b>.zip</b>) ' +
+      'Run after the goods report. Upload the <b>&ldquo;List of supplying markets&rdquo;</b> files (or a <b>.zip</b>) &mdash; ' +
+      'one file per product or one file per Kenya export market is detected automatically ' +
       '&rarr; .png / .docx / .xlsx.',
   };
 

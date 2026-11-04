@@ -67,6 +67,8 @@ RID Department Tasks*.pdf
 !Samplefiles/Product_Profiles/crafts/**
 !Samplefiles/Product_Profiles/Coffee/
 !Samplefiles/Product_Profiles/Coffee/**
+!Samplefiles/Competitor Analysis/
+!Samplefiles/Competitor Analysis/**
 Samplefiles/**/~$*
 Samplefiles/**/._*
 Samplefiles/**/.cache/

@@ -627,22 +627,23 @@ def _detect_mode(uploads_dir, report_type="goods"):
             f"Uploaded files: {uploaded}\n"
             f"Expected filenames containing any of: {kw_list}")
     if report_type == "competitor":
-        # Explicitly selected: need the per-product supplying-markets
-        # downloads ("...-imports-from-world-by-exporter_<HS>.xlsx").
+        # Explicitly selected: need ITC supplying-markets downloads
+        # ("...-imports-from-world-by-exporter_<HS>.xlsx"), either one file
+        # per product or one file per market Kenya supplies.
         if any(gca.is_supplier_download(n) for n in names):
             return "competitor", ""
         uploaded = ", ".join(sorted(names))
         return None, (
             f"Could not recognise the competitor-analysis upload set.\n"
             f"Uploaded files: {uploaded}\n"
-            f"Expected per-product supplying-market downloads named like "
+            f"Expected supplying-market downloads named like "
             f"'<partner>-imports-from-world-by-exporter_<HS>.xlsx' (ITC "
             f"Trade Map: List of supplying markets for a product imported "
-            f"by <partner>, one file per product).")
+            f"by <partner>; one file per product or one file per market).")
     # Competitor files are recognised even without an explicit selection
     # (they would otherwise look like a goods "raw" set): when every workbook
-    # is a per-product supplying-markets download the set is a competitor
-    # analysis, not a goods report.
+    # is a supplying-markets download the set is a competitor analysis, not a
+    # goods report.
     if names and all(gca.is_supplier_download(n) for n in names):
         return "competitor", ""
     # The raw services files are recognised by their own distinctive keywords,
@@ -1096,30 +1097,53 @@ def _run_crafts_pipeline(job_dir, cfg_id, top_n, logs):
 
 
 def _run_competitor_pipeline(job_dir, logs):
-    """Standalone competitor analysis from per-product supplying-markets
-    downloads. Independent of the goods flow on purpose: the products to
-    analyse are only known after a first trade-flow run."""
+    """Standalone competitor analysis from supplying-markets downloads.
+
+    The layout is chosen from the uploaded data: one workbook per HS product
+    for a single importing market (per-product), or one workbook per Kenya
+    export market for a single HS product line (per-market).  Independent of
+    the goods flow on purpose: the products/markets to analyse are only known
+    after a first trade-flow run."""
     uploads = job_dir / "uploads"
-    logs.append("Mode: per-product supplying-market downloads -> "
-                "building competitor analysis ...")
+    logs.append("Mode: supplying-market downloads -> building competitor "
+                "analysis ...")
     try:
         result = gca.generate(str(uploads), str(job_dir))
     except SystemExit as e:
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(400, f"Competitor analysis failed: {e}")
-    products = result["products"]
-    logs.append("Products analysed: %d (review year %s)"
-                % (len(products), result["year"]))
-    for p in products:
-        logs.append("  %d. HS %s - imported %s"
-                    % (p["rank"], p["code"],
-                       "{:,.0f}".format(p["world"]) if p["world"] is not None
-                       else "n/a"))
+    analysis_mode = result.get("mode", "product")
+    product = result.get("product") or {}
+    if analysis_mode == "country":
+        markets = result["markets"]
+        logs.append("Layout: per Kenya export market (HS %s) - %d markets "
+                    "(review year %s)"
+                    % (product.get("code", ""), len(markets), result["year"]))
+        for m in markets:
+            logs.append("  %d. %s - Kenya exports %s (%.1f%%); market imports %s"
+                        % (m["rank"], m["country"],
+                           "{:,.0f}".format(m["kenya_value"])
+                           if m["kenya_value"] is not None else "n/a",
+                           (m["kenya_share"] or 0.0) * 100.0,
+                           "{:,.0f}".format(m["world"])
+                           if m["world"] is not None else "n/a"))
+    else:
+        products = result["products"]
+        logs.append("Layout: per product - %d products (review year %s)"
+                    % (len(products), result["year"]))
+        for p in products:
+            logs.append("  %d. HS %s - imported %s"
+                        % (p["rank"], p["code"],
+                           "{:,.0f}".format(p["world"])
+                           if p["world"] is not None else "n/a"))
     report_name = os.path.basename(result["docx"])
     manifest = {
         "mode": "competitor",
         "report_type": "competitor",
+        "analysis_mode": analysis_mode,
+        "product_code": product.get("code"),
+        "product_label": product.get("label"),
         "report_name": report_name,
         "png_name": os.path.basename(result["png"]),
         "xlsx_name": os.path.basename(result["xlsx"]),
