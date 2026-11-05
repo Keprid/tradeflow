@@ -177,9 +177,13 @@
     progressFill.style.width = Math.max(2, Math.round(15 * frac)) + '%';
   }
 
-  function setBuildProgress(frac) {
+  function setBuildProgress(frac, state) {
     // 0..1 within the build phase (remaining 85%)
-    progressFill.style.width = Math.round(15 + 85 * Math.min(1, Math.max(0, frac))) + '%';
+    const base = Math.round(15 + 85 * Math.min(1, Math.max(0, frac)));
+    progressFill.style.width = base + '%';
+    progressFill.classList.remove('uploading', 'building', 'complete');
+    if (state === 'building') progressFill.classList.add('building');
+    else if (state === 'complete') progressFill.classList.add('complete');
   }
 
   function stopProgress() {
@@ -606,7 +610,8 @@
           const stage = stageForLogLine(lines[shown]);
           if (stage) setStage(stage);
           const frac = fractionForLogLine(lines[shown]);
-          if (frac != null) setBuildProgress(frac);
+          const state = stageForLogLine(lines[shown]);
+          if (frac != null) setBuildProgress(frac, state);
           if (onLogLine) onLogLine(lines[shown]);
         }
         if (s.state === 'done' || s.state === 'error') {

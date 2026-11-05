@@ -72,6 +72,14 @@ noscript .noscript-msg {
   min-height: 56px;
 }
 
+.header-icon {
+  flex-shrink: 0;
+}
+
+.header-icon img {
+  height: 32px;
+}
+
 .header-emblem {
   padding: 8px;
 }
@@ -117,6 +125,16 @@ noscript .noscript-msg {
   color: var(--text-secondary);
   margin-top: 3px;
   letter-spacing: 0;
+}
+
+.header-tagline .header-tagline-icon {
+  display: inline-block;
+  float: right;
+  margin-top: -20px;
+  margin-right: -20px;
+  padding: 0 4px;
+  height: 16px;
+  opacity: 0.8;
 }
 
 /* Muted credit strip at the bottom of the page (was crammed into the header). */
@@ -394,6 +412,8 @@ fieldset.group > legend {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px dashed var(--border);
+  background: var(--bg-light);
+  border-radius: var(--radius) 0 0 var(--radius);
 }
 
 .sample-row .sample-label {
@@ -435,14 +455,13 @@ fieldset.group > legend {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 16px;
-  border-radius: 0;
+  padding: 12px 8px;
   background: transparent;
   cursor: pointer;
   font-weight: 600;
   font-size: 14px;
   margin: 0;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: all 0.2s ease;
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-secondary);
@@ -450,10 +469,17 @@ fieldset.group > legend {
   border: none;
   border-right: 1px solid var(--border);
   position: relative;
+  border-radius: 0;
 }
 
-.radio-option:last-child label {
-  border-right: none;
+.radio-option label::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border-radius: 0;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  z-index: 0;
 }
 
 .radio-option label i {
@@ -462,12 +488,23 @@ fieldset.group > legend {
   width: 18px;
   text-align: center;
   transition: color 0.2s ease;
+  z-index: 1;
+}
+
+.radio-option label span {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.radio-option:last-child label {
+  border-right: none;
 }
 
 .radio-option input[type="radio"]:checked + label {
-  background: #fff;
+  background: var(--white);
   color: var(--green);
   box-shadow: inset 0 -3px 0 var(--green);
+  border-right-color: var(--green);
 }
 
 .radio-option input[type="radio"]:checked + label i {
@@ -475,13 +512,23 @@ fieldset.group > legend {
 }
 
 .radio-option label:hover {
-  color: var(--text);
-  background: rgba(0,163,75,0.04);
+  background: var(--green-light);
+  color: var(--green-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.radio-option label:hover i {
+  color: var(--green-dark);
 }
 
 .radio-option input[type="radio"]:focus-visible + label {
   outline: 2px solid var(--green);
   outline-offset: -2px;
+}
+
+.radio-option input[type="radio"]:focus-visible + label i {
+  color: var(--green);
 }
 
 /* Analysis type is locked while a report is being generated. */
@@ -719,6 +766,13 @@ fieldset.group > legend {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.result.showing { animation: popIn 0.45s cubic-bezier(0.18, 1.25, 0.4, 1) both; }
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .result-meta {
   font-size: 13px;
   color: var(--text-muted);
@@ -780,6 +834,85 @@ fieldset.group > legend {
   box-shadow: var(--shadow);
 }
 
+.toast-container {
+  position: fixed;
+  top: 96px;
+  right: 20px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 40px));
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  animation: toastIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+}
+
+.toast:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.toast.leaving { animation: toastOut 0.3s ease both; }
+
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.toast-success { border-color: rgba(0,163,75,0.35); }
+.toast-success::before { background: var(--green); }
+.toast-success .toast-icon { color: var(--green); }
+
+.toast-error { border-color: rgba(190,40,56,0.35); }
+.toast-error::before { background: var(--red); }
+.toast-error .toast-icon { color: var(--red); }
+
+.toast-icon { font-size: 18px; margin-top: 2px; flex: 0 0 auto; }
+
+.toast-body { flex: 1; }
+.toast-body b { display: block; font-size: 13px; color: var(--text); }
+.toast-body span { display: block; font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-top: 2px; }
+
+.toast-dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 14px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.toast-dismiss:hover { color: var(--text); }
+.toast-dismiss:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(120%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  to { opacity: 0; transform: translateX(120%); }
+}
+
 /* Error */
 .error-msg {
   color: var(--red);
@@ -823,6 +956,18 @@ fieldset.group > legend {
 /* File summary chips */
 .file-summary { display: none; margin-top: 12px; }
 .file-summary.show { display: block; animation: fadeIn 0.3s ease; }
+
+.sample-summary {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--bg-light);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.sample-summary.show { display: block; animation: fadeIn 0.3s ease; }
 
 .file-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -895,7 +1040,7 @@ fieldset.group > legend {
   align-items: center;
   font-size: 13px;
   font-weight: 500;
-  color: #ccc;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
@@ -903,17 +1048,17 @@ fieldset.group > legend {
 .progress-label .elapsed {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
   font-size: 12px;
-  color: #ccc;
-  background: #1a1a1a;
-  border: 1px solid #444;
+  color: var(--text-muted);
+  background: var(--bg-light);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 2px 10px;
 }
 
 .progress-track {
   height: 8px;
-  background: #333;
-  border: 1px solid #444;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -922,8 +1067,9 @@ fieldset.group > legend {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--green-dark), var(--green), var(--green-light));
-  box-shadow: 0 0 10px rgba(0,163,75,0.5);
+  box-shadow: 0 0 10px rgba(0,163,75,0.4);
   animation: crawl 1.8s ease-in-out infinite alternate;
+  transition: width 0.15s ease;
 }
 
 .progress-fill.uploading {
@@ -933,9 +1079,24 @@ fieldset.group > legend {
   margin-left: 0;
 }
 
+.progress-fill.building {
+  background: linear-gradient(90deg, var(--red), var(--red-dark), var(--red-light));
+  box-shadow: 0 0 10px rgba(190,40,56,0.4);
+}
+
+.progress-fill.complete {
+  background: linear-gradient(90deg, var(--green), var(--green-dark), var(--green-light));
+  box-shadow: 0 0 10px rgba(0,163,75,0.5);
+}
+
 @keyframes crawl {
   from { margin-left: -2%; width: 28%; }
   to { margin-left: 74%; width: 28%; }
+}
+
+@keyframes barShift {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 /* Result pop */
