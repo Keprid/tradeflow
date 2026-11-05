@@ -70,9 +70,10 @@ JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
 # Lightweight usage counters (footer widget).  Kept in a small JSON file next
 # to the jobs directory; set TRADEFLOW_STATS_FILE to move it onto persistent
 # storage (e.g. a mounted disk on the host).
-STATS_FILE = Path(os.environ.get("TRADEFLOW_STATS_FILE",
-                                 WEBAPP_DIR / "stats.json"))
+STATS_FILE = Path(os.environ.get("TRADEFLOW_STATS_FILE", "").strip()
+                  or (WEBAPP_DIR / "stats.json"))
 _STATS_LOCK = threading.Lock()
+_STATS_MEMORY = {"visitors": 0, "reports": 0}
 _VISITOR_COOKIE = "tf_visitor"
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
@@ -223,6 +224,16 @@ async def _lifespan(app: FastAPI):
 app = FastAPI(title="Trade Flow Report Generator", lifespan=_lifespan)
 
 
+@app.middleware("http")
+async def _revalidate_static(request: Request, call_next):
+    """Make browsers revalidate /static assets so a deploy is picked up
+    without a hard refresh (they still get a cheap 304 when unchanged)."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Job storage helpers
 # ---------------------------------------------------------------------------
@@ -281,13 +292,16 @@ def _cleanup_old_jobs():
 def _read_stats():
     try:
         data = json.loads(STATS_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        data = {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        # No readable file (first run, read-only disk, ...): fall back to the
+        # per-process totals so the counter still works within this instance.
+        return dict(_STATS_MEMORY)
     try:
         visitors = int(data.get("visitors", 0) or 0)
         reports = int(data.get("reports", 0) or 0)
     except (AttributeError, TypeError, ValueError):
         visitors = reports = 0
+    _STATS_MEMORY.update(visitors=visitors, reports=reports)
     return {"visitors": visitors, "reports": reports}
 
 
@@ -297,13 +311,15 @@ def _bump_stats(visitors=0, reports=0):
         stats = _read_stats()
         stats["visitors"] += visitors
         stats["reports"] += reports
-        STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = STATS_FILE.with_name(STATS_FILE.name + ".tmp")
+        _STATS_MEMORY.update(stats)
         try:
+            STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = STATS_FILE.with_name(STATS_FILE.name + ".tmp")
             tmp.write_text(json.dumps(stats), encoding="utf-8")
             os.replace(tmp, STATS_FILE)
-        except OSError:
-            # A counter must never break a report run or a page load.
+        except (OSError, ValueError):
+            # A counter must never break a report run or a page load.  The
+            # in-memory totals above still serve this process.
             LOG.warning("Could not persist usage stats to %s", STATS_FILE)
         return stats
 
@@ -432,6 +448,7 @@ def api_stats(request: Request):
     is_new_visitor = not request.cookies.get(_VISITOR_COOKIE)
     stats = _bump_stats(visitors=1 if is_new_visitor else 0)
     resp = JSONResponse(stats)
+    resp.headers["Cache-Control"] = "no-store"
     if is_new_visitor:
         resp.set_cookie(_VISITOR_COOKIE, uuid.uuid4().hex,
                         max_age=365 * 24 * 3600, httponly=True,
