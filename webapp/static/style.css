@@ -4,7 +4,6 @@
   --green: #006600;
   --green-dark: #005a33;
   --green-light: #d4edda;
-  --keproba-red: #BB0000;
   --red: #be2838;
   --red-dark: #9a1f2c;
   --red-light: #fce8eb;
@@ -66,30 +65,36 @@ noscript .noscript-msg {
   margin: 0 auto;
   padding: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  gap: 0;
-  min-height: 80px;
+  gap: 12px;
+  min-height: 56px;
 }
 
 .header-emblem {
-  padding: 12px 0;
+  padding: 8px;
 }
 
 .header-emblem-img {
-  height: 52px;
-  margin: 0 auto;
-  display: block;
+  height: 44px;
 }
 
 .header-text {
-  flex: 1 1 auto;
   border-left: none;
-  border-top: 2px solid var(--red);
-  padding: 16px 24px 0;
-  display: block;
+  border-top: none;
+  padding: 8px 0;
+  display: flex;
+  align-items: center;
+}
+
+.header-tagline {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--black);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
   text-align: center;
 }
 

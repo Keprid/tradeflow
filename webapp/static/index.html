@@ -35,30 +35,30 @@
 
 <main>
   <div class="card">
-    <div class="card-title"><i class="fas fa-sliders-h"></i> Step 1 &mdash; Choose the analysis</div>
+    <div class="card-title"><i class="fas fa-sliders-h" aria-label="Choose analysis type"></i> Step 1 &mdash; Choose the analysis</div>
 
     <fieldset class="group">
       <legend>Analysis type</legend>
       <div class="radio-group">
       <div class="radio-option">
         <input type="radio" name="report_type" value="quarterly" id="rt-quarterly">
-        <label for="rt-quarterly"><i class="fas fa-chart-line"></i> Export Performance</label>
+        <label for="rt-quarterly"><i class="fas fa-chart-line" aria-label="View report analytics"></i> Export Performance</label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="goods" checked id="rt-goods">
-        <label for="rt-goods"><i class="fas fa-box"></i> Trade Brief</label>
+        <label for="rt-goods"><i class="fas fa-box" aria-label="Product profile mode"></i> Trade Brief</label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="competitor" id="rt-competitor">
-        <label for="rt-competitor"><i class="fas fa-chess"></i> Competitor Analysis</label>
+        <label for="rt-competitor"><i class="fas fa-chess" aria-label="Competitor analysis mode"></i> Competitor Analysis</label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="product" id="rt-product">
-        <label for="rt-product"><i class="fas fa-boxes"></i> Product Profile</label>
+        <label for="rt-product"><i class="fas fa-boxes" aria-label="Multiple products mode"></i> Product Profile</label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="services" id="rt-services">
-        <label for="rt-services"><i class="fas fa-concierge-bell"></i> Services Brief</label>
+        <label for="rt-services"><i class="fas fa-concierge-bell" aria-label="Export support"></i> Services Brief</label>
       </div>
       </div>
     </fieldset>
@@ -69,12 +69,12 @@
     </div>
 
     <div id="quarterly-info" class="info-box">
-      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
       &nbsp;<b>Export Performance:</b> newest year vs the same months one year earlier.
     </div>
 
     <div id="export-period-wrap" class="info-box" style="display:none;" aria-hidden="true">
-      <i class="fas fa-calendar-day" style="color:var(--red);"></i>
+      <i class="fas fa-calendar-day" aria-label="Review period" style="color:var(--red);"></i>
       &nbsp;<b>Review period <span class="req-star">*</span>:</b> compared with the same months one year earlier.
       <div class="radio-group period-group" role="radiogroup" aria-label="Review period">
         <div class="radio-option">
@@ -109,12 +109,12 @@
     </div>
 
     <div id="product-profile-wrap" class="info-box">
-      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
       &nbsp;<b>Product Profile:</b> family is auto-detected from the files &mdash; pick a profile below only to override.
     </div>
 
     <div id="competitor-wrap" class="info-box" style="display:none;" aria-hidden="true">
-      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
       &nbsp;<b>Competitor Analysis:</b> run after the goods report &mdash; the layout (per product or per Kenya export market) is detected from the uploads.
     </div>
 
@@ -124,7 +124,7 @@
     <div class="card-title"><i class="fas fa-cloud-arrow-up"></i> Step 2 &mdash; Upload your files</div>
 
     <div class="hint" id="upload-hint" style="margin-top:0;">
-      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
       &nbsp;
       Upload the <b>six ITC downloads</b> or a <b>.zip</b> &mdash; or the ready-made <b>Table 1&ndash;6 + Figure 1</b> workbook.
     </div>
@@ -136,16 +136,16 @@
     </div>
 
     <div class="sample-row">
-      <span class="sample-label"><i class="fas fa-flask"></i> No files handy?</span>
+      <span class="sample-label"><i class="fas fa-flask" aria-label="Chemical analysis"></i> No files handy?</span>
       <select id="sample" aria-label="Bundled sample dataset">
         <option value="">Select a sample dataset&hellip;</option>
       </select>
       <button id="load-sample" class="btn btn-secondary btn-compact" type="button">
-        <i class="fas fa-download"></i> Load sample
+        <i class="fas fa-download" aria-label="Download report"></i> Load sample
       </button>
     </div>
     <div class="hint" style="margin-top:10px;">
-      <i class="fas fa-circle-info" style="color:var(--red);"></i>
+      <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
       &nbsp;Bundled demo datasets &mdash; loading one picks its analysis type.
     </div>
     <div id="sample-summary" class="file-summary"></div>
@@ -163,22 +163,22 @@
     </div>
 
     <div id="run-cta" class="run-cta" role="status">
-      <i class="fas fa-hand-point-down cta-hand"></i>
+      <i class="fas fa-hand-point-down cta-hand" aria-label="Select options"></i>
       <span>Files loaded &mdash; check the options above, then click&nbsp;<b>Generate Report</b>.</span>
     </div>
 
     <button id="run" class="btn btn-primary" type="button" style="margin-top:14px;">
-      <i class="fas fa-play"></i> Generate Report
+      <i class="fas fa-play" aria-label="Generate report"></i> Generate Report
     </button>
     <div class="error-msg" id="error-msg" role="alert"></div>
   </div>
 
   <div class="card log-card">
-    <div class="card-title"><i class="fas fa-terminal"></i> Progress and results</div>
-    <div id="log" role="log" aria-live="polite" aria-busy="false"><div class="log-empty"><i class="fas fa-inbox"></i>No run yet &mdash; upload your files in step 2, then choose Generate Report.</div></div>
+    <div class="card-title"><i class="fas fa-terminal" aria-label="Advanced settings"></i> Progress and results</div>
+    <div id="log" role="log" aria-live="polite" aria-busy="false"><div class="log-empty"><i class="fas fa-inbox" aria-label="File upload"></i>No run yet &mdash; upload your files in step 2, then choose Generate Report.</div></div>
     <div id="progress-wrap" class="progress-wrap">
       <div class="progress-label">
-        <span class="stage"><i class="fas fa-spinner fa-spin"></i><span id="progress-stage-text">Uploading files&hellip;</span></span>
+        <span class="stage"><i class="fas fa-spinner fa-spin" aria-label="Processing progress"></i><span id="progress-stage-text">Uploading files&hellip;</span></span>
         <span class="elapsed" id="progress-elapsed">0s</span>
       </div>
       <div class="progress-track" role="progressbar" aria-label="Report generation progress"
@@ -189,9 +189,9 @@
     <div class="result" id="result">
       <div class="result-meta" id="result-meta"></div>
       <div class="result-actions">
-        <a id="dl-report" href="#"><i class="fas fa-file-word"></i> Download Word Report (.docx)</a>
-        <a id="dl-tables" href="#" class="btn-secondary-link"><i class="fas fa-file-archive"></i> Download Tables (.zip)</a>
-        <a id="dl-xlsx" href="#" class="btn-secondary-link" style="display:none;"><i class="fas fa-file-excel"></i> Download Table (.xlsx)</a>
+        <a id="dl-report" href="#"><i class="fas fa-file-word" aria-label="Word document output"></i> Download Word Report (.docx)</a>
+        <a id="dl-tables" href="#" class="btn-secondary-link"><i class="fas fa-file-archive" aria-label="Excel tables output"></i> Download Tables (.zip)</a>
+        <a id="dl-xlsx" href="#" class="btn-secondary-link" style="display:none;"><i class="fas fa-file-excel" aria-label="Excel output"></i> Download Table (.xlsx)</a>
       </div>
     </div>
   </div>
