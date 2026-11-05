@@ -13,6 +13,8 @@ KNBS/
 
 webapp/jobs/
 webapp/uploads/
+webapp/stats.json
+webapp/stats.json.tmp
 
 output/
 output_*/

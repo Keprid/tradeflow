@@ -136,6 +136,20 @@ noscript .noscript-msg {
   line-height: 1.5;
 }
 
+.site-footer .site-counter {
+  flex-basis: 100%;
+  font-size: 10px;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+
+.site-counter .counter-sep {
+  margin: 0 2px;
+}
+
 /* Main Layout */
 main {
   max-width: 1200px;

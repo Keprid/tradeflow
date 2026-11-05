@@ -26,6 +26,9 @@
   const sampleSelect = $('sample');
   const loadSampleBtn = $('load-sample');
   const sampleSummary = $('sample-summary');
+  const siteCounter = $('site-counter');
+  const statVisitors = $('stat-visitors');
+  const statReports = $('stat-reports');
 
   const POLL_INTERVAL_MS = 2000;
   const POLL_MAX_FAILURES = 5;       // consecutive fetch errors tolerated
@@ -129,6 +132,24 @@
     }
     toastContainer.appendChild(t);
     setTimeout(dismiss, 10000);
+  }
+
+  // -------------------------------------------------------------------------
+  // Footer usage counter (cosmetic — failures are silent)
+  // -------------------------------------------------------------------------
+  const fmtCount = n => Number(n || 0).toLocaleString();
+
+  async function refreshStats() {
+    try {
+      const r = await fetch('/api/stats');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const s = await r.json();
+      statVisitors.textContent = fmtCount(s.visitors);
+      statReports.textContent = fmtCount(s.reports);
+      siteCounter.hidden = false;
+    } catch (e) {
+      // Never surface a counter failure to the user.
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -748,6 +769,7 @@
       $('result').style.display = 'block';
       $('result').classList.add('showing');
       showToast('success', 'Your report is ready!', 'The download links are waiting below — click here to jump to them.');
+      refreshStats();
       setTimeout(() => {
         document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 400);
@@ -771,4 +793,5 @@
   else applyReportType('goods');
   loadProductProfiles();
   loadSamples();
+  refreshStats();
 })();

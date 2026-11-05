@@ -33,7 +33,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import openpyxl
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -66,6 +66,14 @@ JOBS_DIR = WEBAPP_DIR / "jobs"
 CONFIG_DIR = BASE_DIR / "config"
 SAMPLE_DIR = BASE_DIR / "Samplefiles"
 JOB_TTL_SECONDS = 24 * 3600              # old jobs are cleaned up after 1 day
+
+# Lightweight usage counters (footer widget).  Kept in a small JSON file next
+# to the jobs directory; set TRADEFLOW_STATS_FILE to move it onto persistent
+# storage (e.g. a mounted disk on the host).
+STATS_FILE = Path(os.environ.get("TRADEFLOW_STATS_FILE",
+                                 WEBAPP_DIR / "stats.json"))
+_STATS_LOCK = threading.Lock()
+_VISITOR_COOKIE = "tf_visitor"
 
 ALLOWED_EXT = (".xlsx", ".xlsm", ".xls", ".xlsb", ".csv")
 
@@ -270,6 +278,36 @@ def _cleanup_old_jobs():
                 pass
 
 
+def _read_stats():
+    try:
+        data = json.loads(STATS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    try:
+        visitors = int(data.get("visitors", 0) or 0)
+        reports = int(data.get("reports", 0) or 0)
+    except (AttributeError, TypeError, ValueError):
+        visitors = reports = 0
+    return {"visitors": visitors, "reports": reports}
+
+
+def _bump_stats(visitors=0, reports=0):
+    """Atomically add to the usage counters and return the new totals."""
+    with _STATS_LOCK:
+        stats = _read_stats()
+        stats["visitors"] += visitors
+        stats["reports"] += reports
+        STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = STATS_FILE.with_name(STATS_FILE.name + ".tmp")
+        try:
+            tmp.write_text(json.dumps(stats), encoding="utf-8")
+            os.replace(tmp, STATS_FILE)
+        except OSError:
+            # A counter must never break a report run or a page load.
+            LOG.warning("Could not persist usage stats to %s", STATS_FILE)
+        return stats
+
+
 def _extract_zip(zpath, dest):
     """Extract a zip safely (no path traversal), then flatten spreadsheets."""
     try:
@@ -386,6 +424,19 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/api/stats")
+def api_stats(request: Request):
+    """Return usage counters, counting a visitor once per browser cookie."""
+    is_new_visitor = not request.cookies.get(_VISITOR_COOKIE)
+    stats = _bump_stats(visitors=1 if is_new_visitor else 0)
+    resp = JSONResponse(stats)
+    if is_new_visitor:
+        resp.set_cookie(_VISITOR_COOKIE, uuid.uuid4().hex,
+                        max_age=365 * 24 * 3600, httponly=True,
+                        samesite="lax")
+    return resp
 
 
 @app.get("/api/configs")
@@ -690,10 +741,37 @@ def _product_profile_configs():
             yield p, cfg
 
 
+def _anchor_specificity(entries, anchor):
+    """Digit depth of the config's ``include_codes`` that covers ``anchor``.
+
+    0 when the config does not cover the anchor product code at all, otherwise
+    the length in digits of the longest entry that is a parent of the anchor:
+    a heading-level config ("0603" -> 4) is more specific than a chapter
+    basket ("06" -> 2).  Entries deeper than the anchor - a "Roses" config
+    listing "060311" under an HS 0603 download - score 0, because they cover
+    only part of the product that was actually downloaded.
+    """
+    if not anchor or not entries:
+        return 0
+    digits = gpp.ProfileData._norm_code(anchor)
+    tester = gpp.ProfileData.__new__(gpp.ProfileData)
+    tester.include_codes = list(entries)
+    if not tester._code_ok(digits):
+        return 0
+    best = 0
+    for spec in entries:
+        spec = str(spec or "").strip()
+        for part in (spec.split("-") if "-" in spec else [spec]):
+            p = gpp.ProfileData._norm_code(part)
+            if p and digits.startswith(p) and len(p) > best:
+                best = len(p)
+    return best
+
+
 def _autodetect_product_profile(uploads, configs):
     """Pick the product-profile config whose family matches what was uploaded.
 
-    Two independent signals are used, in order:
+    Three independent signals are used, in order:
 
     1. *Filename family.*  Classic Trade Map downloads name the family in the
        file itself ("... for the selected product (Meat and edible meat
@@ -712,6 +790,15 @@ def _autodetect_product_profile(uploads, configs):
        equals the sum of the other codes) are excluded, and a config that
        claims far more HS chapters than the upload actually contains is
        penalised, so a catch-all config cannot shadow a specific one.
+
+    3. *Anchor specificity.*  Value coverage alone cannot see the downloaded
+       product itself: the anchor code is excluded from signal 2 (it is the
+       selection aggregate), so a single-product upload is judged only on the
+       neighbouring headings Trade Map returned with it.  A chapter basket
+       therefore wins on those incidental rows - an HS 0603 cut-flowers
+       download is claimed by Horticulture because 0602 live plants fall in
+       the same chapter.  When the anchor is a plain HS code, the config whose
+       ``include_codes`` cover it most specifically takes precedence.
 
     Returns ``(config_path, cfg)`` for the best match, or None when neither
     signal resolves to a config covering the uploaded family.
@@ -743,14 +830,24 @@ def _autodetect_product_profile(uploads, configs):
         anchor_path = gpp._find_file(str(uploads), probe)
         if anchor_path is not None:
             break
+    anchor_raw = ""
     if anchor_path is not None:
         _, anchor_rows = gpp.load_matrix(anchor_path)
         counts = {}
+        raws = {}
         for r in anchor_rows:
             c = gpp.ProfileData._norm_code(r["product"])
             counts[c] = counts.get(c, 0) + 1
+            raws.setdefault(c, str(r.get("product") or "").strip())
         if counts:
-            anchor_codes.add(max(counts, key=counts.get))
+            top = max(counts, key=counts.get)
+            anchor_codes.add(top)
+            anchor_raw = raws.get(top, "")
+    # A single-product download anchors on one HS code ("0603"); a group
+    # download anchors on a selection label ("06-08", "coffee one"), whose
+    # digits concatenate into a code that means nothing.  Only a plain HS code
+    # can identify the downloaded product, so anything else is dropped here.
+    anchor = anchor_raw if re.fullmatch(r"\d{2,6}(?:\.\d{2})?", anchor_raw) else ""
     for _label, probes in _BY_PRODUCT_PROBES.items():
         path = None
         for probe in probes:
@@ -796,6 +893,7 @@ def _autodetect_product_profile(uploads, configs):
     upload_chapters = {c[:2] for c, _ in codes}
 
     best = None  # (score, value_frac, matched_value, config_path, cfg)
+    best_anchor = None  # (specificity, -chapters, matched_value, path, cfg)
     for path, cfg in configs:
         inc = cfg.get("include_codes")
         if not inc:
@@ -804,6 +902,13 @@ def _autodetect_product_profile(uploads, configs):
         tester.include_codes = list(inc)
         matched_value = sum(v for c, v in codes if tester._code_ok(c))
         frac = matched_value / total_value if total_value else 0.0
+        aspec = _anchor_specificity(inc, anchor)
+        if aspec:
+            # Judged before the value-coverage floor: a single-product config
+            # covers none of the neighbouring rows that floor is measured on.
+            cand = (aspec, -len(_chapters(inc)), matched_value, path, cfg)
+            if best_anchor is None or cand[:3] > best_anchor[:3]:
+                best_anchor = cand
         min_frac = float(cfg.get("detect_min_frac", 0.5))
         if frac < min_frac:
             continue
@@ -817,6 +922,8 @@ def _autodetect_product_profile(uploads, configs):
         if best is None or score > best[0] or (
                 score == best[0] and matched_value > best[2]):
             best = (score, frac, matched_value, path, cfg)
+    if best_anchor is not None:
+        return best_anchor[3], best_anchor[4]
     if best is None:
         return None
     return best[3], best[4]
@@ -1279,6 +1386,7 @@ def _job_worker(job_dir, job_fn):
         (job_dir / "manifest.json").write_text(
             json.dumps(manifest), encoding="utf-8")
         logs.append(f"Report ready: {manifest['report_name']}")
+        _bump_stats(reports=1)
         LOG.info("Background job %s finished -> %s",
                  job_dir.name, manifest["report_name"])
     except HTTPException as e:
