@@ -1078,7 +1078,9 @@
       }
       return '<tr>' + cells.join('') + '</tr>';
     }).join('');
-    previewTableWrap.innerHTML = '<table><thead><tr>' + head +
+    previewTableWrap.innerHTML =
+      (file.title ? '<div class="preview-title">' + esc(file.title) + '</div>' : '') +
+      '<table><thead><tr>' + head +
       '</tr></thead><tbody>' + body + '</tbody></table>';
   }
 

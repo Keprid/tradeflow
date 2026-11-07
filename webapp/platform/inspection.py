@@ -57,8 +57,18 @@ def _preview_file(path, max_rows):
                 rows.append(values)
             if len(rows) >= max_rows:
                 break
-        header = rows[0] if rows else []
-        body = rows[1:] if len(rows) > 1 else []
+        # Generated workbooks open with a title row ("FIGURE 1 | Kenya ..."),
+        # so the real header is the first row that carries year columns.
+        header_index = 0
+        for index, row in enumerate(rows[:8]):
+            if len(_year_columns(row)) >= 2:
+                header_index = index
+                break
+        title = " · ".join(
+            str(value) for row in rows[:header_index]
+            for value in row if value not in (None, ""))
+        header = rows[header_index] if rows else []
+        body = rows[header_index + 1:] if len(rows) > header_index + 1 else []
         year_cols = _year_columns(header)
         series = []
         if year_cols:
@@ -82,7 +92,8 @@ def _preview_file(path, max_rows):
             "name": path.name,
             "sheets": list(wb.sheetnames),
             "active": ws.title,
-            "columns": [str(c) for c in header],
+            "title": title,
+            "columns": ["" if c is None else str(c) for c in header],
             "rows": body,
             "row_count": len(body),
             "truncated": len(body) >= max_rows,

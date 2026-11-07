@@ -2,7 +2,8 @@
    Trade Flow Report Generator — "Harambee Ledger"
    A trade-intelligence workbench dressed like an official Kenyan brief:
    ink-green fields, warm paper surfaces, and the shield's beadwork
-   (crimson / emerald / ochre / black / white) as the accent language.
+   (black / crimson / emerald / white — the flag's own colours) as the
+   accent language.
    =========================================================================== */
 
 :root {
@@ -17,23 +18,20 @@
   --green-dark: #0b3a29;
   --green-light: #e2f2e6;
 
-  /* Full-chroma accents lifted from the beadwork ring. */
+  /* Full-chroma accents — the flag's crimson, plus the shield's white. */
   --red: #be2838;
   --red-bright: #ff7d8c;
   --red-dark: #8f1d29;
   --red-light: #fbe9eb;
-  --ochre: #c9862b;
-  --ochre-deep: #8a5a1d;
-  --ochre-light: #f7ecd9;
   --info: #1f6fb2;
   --info-light: #e8f1f9;
   --teal: #0f766e;
   --plum: #7c3aed;
 
-  /* Semantic tones. */
+  /* Semantic tones: emerald passes, flag black cautions, crimson fails. */
   --ok: #0f7a43;
-  --warn: #b77900;
-  --warn-light: #fdf3dd;
+  --warn: #051b13;
+  --warn-light: #e4e8de;
   --danger: #be2838;
 
   /* Warm + cool neutrals: background / surface / overlay / scrim. */
@@ -63,12 +61,11 @@
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, Menlo, monospace;
 
-  /* The shield's bead string, reused as a divider motif. */
+  /* The flag's bead string: black, white, crimson, white, emerald, white. */
   --beads: repeating-linear-gradient(90deg,
       var(--ink-950) 0 16px, var(--white) 16px 20px,
       var(--red) 20px 36px, var(--white) 36px 40px,
-      var(--green-bright) 40px 56px, var(--white) 56px 60px,
-      var(--ochre) 60px 68px, var(--white) 68px 72px);
+      var(--green-bright) 40px 56px, var(--white) 56px 60px);
 }
 
 * { box-sizing: border-box; }
@@ -103,7 +100,7 @@ body::after {
   background:
     radial-gradient(38% 30% at 18% 12%, rgba(0, 163, 75, 0.14), transparent 70%),
     radial-gradient(34% 28% at 86% 82%, rgba(190, 40, 56, 0.10), transparent 70%),
-    radial-gradient(26% 22% at 70% 18%, rgba(201, 134, 43, 0.10), transparent 70%);
+    radial-gradient(26% 22% at 70% 18%, rgba(17, 84, 60, 0.09), transparent 70%);
   animation: driftLight 26s ease-in-out infinite alternate;
 }
 
@@ -241,7 +238,7 @@ noscript .noscript-msg {
 .header-beads {
   height: 5px;
   background: var(--beads);
-  background-size: 72px 5px;
+  background-size: 60px 5px;
   box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.25) inset;
 }
 
@@ -254,7 +251,7 @@ noscript .noscript-msg {
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background:
-    radial-gradient(90% 140% at 100% 0%, rgba(201, 134, 43, 0.10), transparent 55%),
+    radial-gradient(90% 140% at 100% 0%, rgba(190, 40, 56, 0.07), transparent 55%),
     linear-gradient(160deg, var(--overlay) 0%, var(--surface) 100%);
   box-shadow: var(--shadow);
   position: relative;
@@ -271,7 +268,7 @@ noscript .noscript-msg {
   height: 190px;
   border-radius: 50%;
   border: 16px solid rgba(0, 132, 61, 0.08);
-  box-shadow: 0 0 0 10px rgba(190, 40, 56, 0.06), 0 0 0 26px rgba(201, 134, 43, 0.05);
+  box-shadow: 0 0 0 10px rgba(190, 40, 56, 0.06), 0 0 0 26px rgba(5, 27, 19, 0.05);
   pointer-events: none;
 }
 
@@ -281,7 +278,7 @@ noscript .noscript-msg {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ochre-deep);
+  color: var(--red-dark);
 }
 
 .hero h1 {
@@ -335,7 +332,7 @@ noscript .noscript-msg {
   background: var(--green);
 }
 
-.hero-step:nth-child(3) b { background: var(--ochre); }
+.hero-step:nth-child(3) b { background: var(--ink-950); }
 .hero-step:nth-child(5) b { background: var(--red); }
 
 .hero-arrow {
@@ -355,6 +352,7 @@ main {
 
 .card {
   position: relative;
+  scroll-margin-top: 110px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -386,12 +384,12 @@ main > .card:nth-of-type(7) { animation-delay: 0.35s; }
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--green) 0%, var(--green-bright) 60%, var(--ochre) 100%);
+  background: linear-gradient(90deg, var(--ink-950) 0%, var(--green) 55%, var(--green-bright) 100%);
 }
 
-#upload-card::before { background: linear-gradient(90deg, var(--ochre) 0%, var(--ochre-deep) 100%); }
+#upload-card::before { background: linear-gradient(90deg, var(--red) 0%, var(--red-dark) 100%); }
 #sources-card::before { background: linear-gradient(90deg, var(--info) 0%, var(--teal) 100%); }
-#options-card::before { background: linear-gradient(90deg, var(--red) 0%, var(--red-dark) 100%); }
+#options-card::before { background: linear-gradient(90deg, var(--ink-950) 0%, var(--ink-700) 100%); }
 #insight-card::before { background: linear-gradient(90deg, var(--teal) 0%, var(--green) 100%); }
 #jobs-card::before { background: linear-gradient(90deg, var(--text-muted) 0%, var(--ink-700) 100%); }
 
@@ -422,9 +420,9 @@ main > .card:nth-of-type(7) { animation-delay: 0.35s; }
   border-radius: var(--radius-sm);
 }
 
-#upload-card .card-title i { color: var(--ochre-deep); background: var(--ochre-light); border-color: rgba(201, 134, 43, 0.3); }
+#upload-card .card-title i { color: var(--red-dark); background: var(--red-light); border-color: rgba(190, 40, 56, 0.28); }
 #sources-card .card-title i { color: var(--info); background: var(--info-light); border-color: rgba(31, 111, 178, 0.25); }
-#options-card .card-title i { color: var(--red); background: var(--red-light); border-color: rgba(190, 40, 56, 0.22); }
+#options-card .card-title i { color: var(--ink-900); background: var(--green-light); border-color: rgba(5, 27, 19, 0.2); }
 #jobs-card .card-title i { color: var(--text-secondary); background: var(--bg-light); border-color: var(--border); }
 
 .card-step {
@@ -535,7 +533,7 @@ input[type=number] { font-family: var(--font-mono); font-variant-numeric: tabula
   height: 170px;
   border-radius: 50%;
   border: 13px solid rgba(190, 40, 56, 0.07);
-  box-shadow: 0 0 0 9px rgba(0, 132, 61, 0.06), 0 0 0 22px rgba(201, 134, 43, 0.06);
+  box-shadow: 0 0 0 9px rgba(0, 132, 61, 0.06), 0 0 0 22px rgba(5, 27, 19, 0.05);
   pointer-events: none;
 }
 
@@ -690,7 +688,7 @@ fieldset.group > legend {
 .sample-row .sample-label {
   font-size: 12.5px;
   font-weight: 700;
-  color: var(--ochre-deep);
+  color: var(--green-dark);
 }
 
 .sample-row .sample-label i { margin-right: 4px; }
@@ -812,7 +810,7 @@ fieldset.group > legend {
 .radio-option input[type="radio"]:checked + label .sub { color: #b9d3c2; }
 
 .radio-option input[type="radio"]:focus-visible + label {
-  outline: 2px solid var(--ochre);
+  outline: 2px solid var(--red);
   outline-offset: 2px;
 }
 
@@ -949,8 +947,8 @@ fieldset.group > legend {
 }
 
 .btn-secondary:hover { border-color: var(--green); color: var(--green-dark); background: var(--green-light); }
-.btn-secondary i { color: var(--ochre-deep); }
-.btn-secondary:hover i { color: var(--green); }
+.btn-secondary i { color: var(--red); }
+.btn-secondary:hover i { color: var(--red-dark); }
 
 .btn:disabled {
   opacity: 0.55;
@@ -961,7 +959,7 @@ fieldset.group > legend {
 
 .btn:disabled::before { display: none; }
 
-.btn:focus-visible { outline: 3px solid var(--ochre); outline-offset: 2px; }
+.btn:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
 
 .btn-compact {
   flex: 0 0 auto;
@@ -988,7 +986,7 @@ fieldset.group > legend {
   box-shadow: var(--shadow-lg);
 }
 
-.log-card::before { background: var(--beads); background-size: 72px 3px; height: 3px; }
+.log-card::before { background: var(--beads); background-size: 60px 3px; height: 3px; }
 
 .log-card .card-title {
   color: var(--white);
@@ -1015,7 +1013,7 @@ fieldset.group > legend {
   background: var(--red);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
 }
-.console-dots i:nth-child(2) { background: var(--ochre); }
+.console-dots i:nth-child(2) { background: var(--white); }
 .console-dots i:nth-child(3) { background: var(--green-bright); }
 
 #log {
@@ -1040,7 +1038,7 @@ fieldset.group > legend {
 
 #log .ok { color: #6fe3a1; }
 #log .err { color: var(--red-bright); }
-#log .warn { color: #f0c674; }
+#log .warn { color: #f2f7f2; font-weight: 700; }
 
 #log > div:not(.log-empty) { animation: lineIn 0.24s ease both; }
 
@@ -1112,6 +1110,12 @@ fieldset.group > legend {
   box-shadow: 0 8px 20px -12px rgba(0, 163, 75, 0.9);
 }
 
+.result a.btn-secondary-link {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+
 .result a:hover,
 .result button.btn-secondary-link:hover {
   transform: translateY(-2px);
@@ -1122,14 +1126,13 @@ fieldset.group > legend {
 
 .result a:hover { background: linear-gradient(135deg, var(--green-bright) 0%, var(--green) 100%); }
 
-.result a:focus-visible,
-.result button.btn-secondary-link:focus-visible { outline: 3px solid var(--ochre); outline-offset: 2px; }
-
-.result a.btn-secondary-link {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.22);
-  box-shadow: none;
+.result a.btn-secondary-link:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--green-bright);
 }
+
+.result a:focus-visible,
+.result button.btn-secondary-link:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
 
 /* ---------------------------------------------------------------------------
    Toasts
@@ -1240,7 +1243,7 @@ fieldset.group > legend {
   padding: 12px 15px;
   background: linear-gradient(140deg, var(--bg-light) 0%, var(--overlay) 100%);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--ochre);
+  border-left: 4px solid var(--green);
   border-radius: var(--radius-sm);
   font-size: 13px;
   line-height: 1.6;
@@ -1283,9 +1286,9 @@ fieldset.group > legend {
 .sample-summary {
   margin-top: 12px;
   padding: 12px 15px;
-  background: var(--ochre-light);
-  border: 1px solid rgba(201, 134, 43, 0.35);
-  border-left: 4px solid var(--ochre);
+  background: var(--green-light);
+  border: 1px solid rgba(0, 132, 61, 0.28);
+  border-left: 4px solid var(--green);
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   line-height: 1.6;
@@ -1375,7 +1378,7 @@ fieldset.group > legend {
 .progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--ink-700), var(--green-bright), var(--ochre));
+  background: linear-gradient(90deg, var(--ink-950), var(--green), var(--green-bright));
   box-shadow: 0 0 12px rgba(0, 163, 75, 0.55);
   animation: crawl 1.9s ease-in-out infinite alternate;
   transition: width 0.15s ease;
@@ -1384,7 +1387,7 @@ fieldset.group > legend {
 .progress-fill.uploading { width: 0; margin-left: 0; animation: none; transition: width 0.2s ease; }
 
 .progress-fill.building {
-  background: linear-gradient(90deg, var(--red-dark), var(--red), var(--ochre));
+  background: linear-gradient(90deg, var(--red-dark), var(--red), var(--red-bright));
   box-shadow: 0 0 12px rgba(190, 40, 56, 0.55);
 }
 
@@ -1418,7 +1421,7 @@ fieldset.group > legend {
   right: 0;
   height: 4px;
   background: var(--beads);
-  background-size: 72px 4px;
+  background-size: 60px 4px;
 }
 
 .site-footer p {
@@ -1549,6 +1552,7 @@ fieldset.group > legend {
 
 .insight-head h3, .comments-block h3 {
   margin: 0;
+  flex: 0 0 auto;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 600;
@@ -1558,6 +1562,8 @@ fieldset.group > legend {
 
 .insight-head select {
   width: auto;
+  min-width: 0;
+  flex: 0 1 auto;
   max-width: 100%;
   padding: 6px 30px 6px 10px;
   font-size: 11.5px;
@@ -1570,7 +1576,7 @@ fieldset.group > legend {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--ochre-deep);
+  color: var(--red-dark);
 }
 
 .badge {
@@ -1587,7 +1593,7 @@ fieldset.group > legend {
 }
 
 .badge.ok { background: var(--green-light); border-color: rgba(0, 132, 61, 0.4); color: var(--green-dark); }
-.badge.warn { background: var(--warn-light); border-color: rgba(183, 121, 0, 0.4); color: #7d5300; }
+.badge.warn { background: var(--warn-light); border-color: rgba(5, 27, 19, 0.4); color: var(--ink-950); }
 .badge.error { background: var(--red-light); border-color: rgba(190, 40, 56, 0.35); color: var(--red-dark); }
 
 /* Preview chart — six hues that stay separable by luminance and direct labels. */
@@ -1602,6 +1608,19 @@ fieldset.group > legend {
     var(--bg-light);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+
+.preview-chart:empty { display: none; }
+
+.preview-title {
+  padding: 9px 12px;
+  background: var(--red-light);
+  border-bottom: 1px solid rgba(190, 40, 56, 0.28);
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--red-dark);
 }
 
 .preview-series-label {
@@ -1636,7 +1655,7 @@ fieldset.group > legend {
 .preview-bar:hover .bar { filter: brightness(1.12) saturate(1.1); }
 
 .preview-bar:nth-child(6n+2) .bar { background: linear-gradient(180deg, #e0485c 0%, var(--red-dark) 100%); }
-.preview-bar:nth-child(6n+3) .bar { background: linear-gradient(180deg, #e8a63c 0%, var(--ochre-deep) 100%); }
+.preview-bar:nth-child(6n+3) .bar { background: linear-gradient(180deg, #465a4f 0%, var(--ink-950) 100%); }
 .preview-bar:nth-child(6n+4) .bar { background: linear-gradient(180deg, #3d92d8 0%, #14476f 100%); }
 .preview-bar:nth-child(6n+5) .bar { background: linear-gradient(180deg, #2bb3a3 0%, #0b4f49 100%); }
 .preview-bar:nth-child(6n+6) .bar { background: linear-gradient(180deg, #a678f5 0%, #4c1d95 100%); }
@@ -1700,7 +1719,7 @@ fieldset.group > legend {
 
 .quality-item i { margin-top: 2px; }
 .quality-item.ok i { color: var(--ok); }
-.quality-item.warn { background: var(--warn-light); border-left-color: var(--warn); border-color: rgba(183, 121, 0, 0.3); }
+.quality-item.warn { background: var(--warn-light); border-left-color: var(--warn); border-color: rgba(5, 27, 19, 0.28); }
 .quality-item.warn i { color: var(--warn); }
 .quality-item.error { background: var(--red-light); border-left-color: var(--danger); border-color: rgba(190, 40, 56, 0.3); }
 .quality-item.error i { color: var(--danger); }
@@ -1729,7 +1748,7 @@ fieldset.group > legend {
   padding: 10px 12px;
   background: var(--bg-light);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--ochre);
+  border-left: 3px solid var(--red);
   border-radius: var(--radius-xs);
   font-size: 12px;
   line-height: 1.55;
@@ -1849,7 +1868,7 @@ fieldset.group > legend {
   .header-text { order: 3; flex: 1 1 100%; }
   .header-tagline { font-size: 18px; }
   .header-tagline small { font-size: 11.5px; margin-top: 4px; }
-  .card { padding: 17px; border-radius: var(--radius-sm); }
+  .card { padding: 17px; border-radius: var(--radius-sm); scroll-margin-top: 160px; }
   .card-title { font-size: 15px; gap: 10px; flex-wrap: wrap; }
   .card-step { margin-left: auto; }
   .btn { width: 100%; }
