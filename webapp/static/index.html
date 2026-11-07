@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Generate Kenya trade flow reports (goods, services, export performance, product profiles, competitor analysis) from ITC Trade Map downloads in one click.">
 <title>Trade Flow Report Generator | KEPROBA</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23111111'/%3E%3Crect x='8' y='44' width='48' height='6' fill='%23be2838'/%3E%3Crect x='8' y='54' width='48' height='4' fill='%2300a34b'/%3E%3Ctext x='32' y='40' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='bold' fill='%23fff' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307271c'/%3E%3Crect x='8' y='44' width='48' height='6' fill='%23be2838'/%3E%3Crect x='8' y='54' width='48' height='4' fill='%2300a34b'/%3E%3Ctext x='32' y='40' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='bold' fill='%23fff' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       integrity="sha384-3B6NwesSXE7YJlcLI9RpRqGf2p/EgVH8BgoKTaUrmKNDkHPStTQ3EyoYjCGXaOTS"
       crossorigin="anonymous" referrerpolicy="no-referrer">
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
 
@@ -34,6 +34,7 @@
       <img src="/static/keproba_icon.png" alt="KEPROBA" height="32">
     </div>
   </div>
+  <div class="header-beads" aria-hidden="true"></div>
 </header>
 
 <main>
@@ -42,31 +43,44 @@
     <div><b>Shared read-only report.</b> You can download the report, inspect the preview and quality checks, and read comments. Starting new jobs and adding comments are disabled.</div>
   </div>
 
+  <section class="hero" aria-labelledby="hero-title">
+    <p class="hero-kicker">Kenya Export Promotion &amp; Branding Agency &middot; Research &amp; Innovation</p>
+    <h1 id="hero-title">Trade Flow Report Generator</h1>
+    <p class="hero-lead">Six ITC Trade Map downloads in, a formatted Word brief and its Excel tables out &mdash; goods, services, export performance, product profiles and competitor analysis, with every dollar figure cross-checked against the KNBS reference snapshot.</p>
+    <div class="hero-flow">
+      <span class="hero-step"><b>01</b> Choose &amp; upload</span>
+      <i class="fas fa-arrow-right hero-arrow" aria-hidden="true"></i>
+      <span class="hero-step"><b>02</b> Generate</span>
+      <i class="fas fa-arrow-right hero-arrow" aria-hidden="true"></i>
+      <span class="hero-step"><b>03</b> Download &amp; share</span>
+    </div>
+  </section>
+
   <div class="card" id="analysis-card">
-    <div class="card-title"><i class="fas fa-sliders-h" aria-label="Choose analysis type"></i> Step 1 &mdash; Choose the analysis</div>
+    <div class="card-title"><i class="fas fa-sliders-h" aria-hidden="true"></i> Choose the analysis <span class="card-step">Step 01</span></div>
 
     <fieldset class="group">
       <legend>Analysis type</legend>
       <div class="radio-group">
       <div class="radio-option">
         <input type="radio" name="report_type" value="quarterly" id="rt-quarterly">
-        <label for="rt-quarterly"><i class="fas fa-chart-line" aria-label="View report analytics"></i> Export Performance</label>
+        <label for="rt-quarterly"><i class="fas fa-chart-line" aria-hidden="true"></i> Export Performance<span class="sub">KRA periods vs the same months last year</span></label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="goods" checked id="rt-goods">
-        <label for="rt-goods"><i class="fas fa-box" aria-label="Product profile mode"></i> Trade Brief</label>
+        <label for="rt-goods"><i class="fas fa-box" aria-hidden="true"></i> Trade Brief<span class="sub">Goods flows, partner markets and re-exports</span></label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="competitor" id="rt-competitor">
-        <label for="rt-competitor"><i class="fas fa-chess" aria-label="Competitor analysis mode"></i> Competitor Analysis</label>
+        <label for="rt-competitor"><i class="fas fa-chess" aria-hidden="true"></i> Competitor Analysis<span class="sub">Rival suppliers in your export markets</span></label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="product" id="rt-product">
-        <label for="rt-product"><i class="fas fa-boxes" aria-label="Multiple products mode"></i> Product Profile</label>
+        <label for="rt-product"><i class="fas fa-boxes" aria-hidden="true"></i> Product Profile<span class="sub">One HS family, in depth</span></label>
       </div>
       <div class="radio-option">
         <input type="radio" name="report_type" value="services" id="rt-services">
-        <label for="rt-services"><i class="fas fa-concierge-bell" aria-label="Export support"></i> Services Brief</label>
+        <label for="rt-services"><i class="fas fa-concierge-bell" aria-hidden="true"></i> Services Brief<span class="sub">EBOPS categories and world peers</span></label>
       </div>
       </div>
     </fieldset>
@@ -129,7 +143,7 @@
   </div>
 
   <div class="card" id="upload-card">
-    <div class="card-title"><i class="fas fa-cloud-arrow-up"></i> Step 2 &mdash; Upload your files</div>
+    <div class="card-title"><i class="fas fa-cloud-arrow-up" aria-hidden="true"></i> Upload your files <span class="card-step">Step 02</span></div>
 
     <div class="hint" id="upload-hint" style="margin-top:0;">
       <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
@@ -138,8 +152,16 @@
     </div>
 
     <div class="dropzone" id="dropzone" style="margin-top:10px;">
-      <label for="files">Upload files</label>
-      <input type="file" id="files" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.csv,.zip">
+      <div class="dropzone-drop">
+        <label for="files" class="sr-only">Upload files</label>
+        <input type="file" id="files" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.csv,.zip">
+        <div class="dropzone-face" aria-hidden="true">
+          <span class="dz-icon"><i class="fas fa-cloud-arrow-up"></i></span>
+          <strong>Drop your ITC downloads here</strong>
+          <span>or click to browse &mdash; six workbooks, a .zip, or the ready-made Table 1&ndash;6 workbook</span>
+          <span class="dz-formats"><em>.xlsx</em><em>.xlsm</em><em>.xls</em><em>.xlsb</em><em>.csv</em><em>.zip</em></span>
+        </div>
+      </div>
       <div id="file-summary" class="file-summary"></div>
     </div>
 
@@ -163,7 +185,7 @@
   </div>
 
   <div class="card" id="sources-card">
-    <div class="card-title"><i class="fas fa-database" aria-label="Open data sources"></i> Or fetch open data</div>
+    <div class="card-title"><i class="fas fa-database" aria-hidden="true"></i> Or fetch open data <span class="card-step">Optional</span></div>
     <div class="hint" style="margin-top:0;">
       <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
       &nbsp;Fetch open data instead of uploading ITC files. UNCTADstat builds
@@ -191,7 +213,7 @@
   </div>
 
   <div class="card" id="options-card">
-    <div class="card-title"><i class="fas fa-gear"></i> Step 3 &mdash; Options and generate</div>
+    <div class="card-title"><i class="fas fa-gear" aria-hidden="true"></i> Options and generate <span class="card-step">Step 03</span></div>
 
     <div class="row">
       <div id="top-wrap">
@@ -213,8 +235,8 @@
   </div>
 
   <div class="card log-card">
-    <div class="card-title"><i class="fas fa-terminal" aria-label="Advanced settings"></i> Progress and results</div>
-    <div id="log" role="log" aria-live="polite" aria-busy="false"><div class="log-empty"><i class="fas fa-inbox" aria-label="File upload"></i>No run yet &mdash; upload your files in step 2, then choose Generate Report.</div></div>
+    <div class="card-title"><i class="fas fa-terminal" aria-hidden="true"></i> Progress and results <span class="console-dots" aria-hidden="true"><i></i><i></i><i></i></span> <span class="card-step">Live</span></div>
+    <div id="log" role="log" aria-live="polite" aria-busy="false"><div class="log-empty"><i class="fas fa-inbox" aria-hidden="true"></i>No run yet &mdash; load your files in Step 02, then choose Generate Report.</div></div>
     <div id="progress-wrap" class="progress-wrap">
       <div class="progress-label">
         <span class="stage"><i class="fas fa-spinner fa-spin" aria-label="Processing progress"></i><span id="progress-stage-text">Uploading files&hellip;</span></span>
@@ -239,7 +261,7 @@
   </div>
 
   <div class="card" id="insight-card" style="display:none;">
-    <div class="card-title"><i class="fas fa-chart-column" aria-label="Preview and quality"></i> Preview and quality</div>
+    <div class="card-title"><i class="fas fa-chart-column" aria-hidden="true"></i> Preview and quality <span class="card-step">Review</span></div>
     <div class="insight-grid">
       <section class="insight-panel">
         <div class="insight-head">
@@ -302,6 +324,6 @@
 
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-<script src="/static/app.js?v=4" defer></script>
+<script src="/static/app.js?v=5" defer></script>
 </body>
 </html>
