@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       integrity="sha384-3B6NwesSXE7YJlcLI9RpRqGf2p/EgVH8BgoKTaUrmKNDkHPStTQ3EyoYjCGXaOTS"
       crossorigin="anonymous" referrerpolicy="no-referrer">
-<link rel="stylesheet" href="/static/style.css?v=2">
+<link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
 
@@ -37,7 +37,12 @@
 </header>
 
 <main>
-  <div class="card">
+  <div id="share-banner" class="share-banner" style="display:none;">
+    <i class="fas fa-link" aria-hidden="true"></i>
+    <div><b>Shared read-only report.</b> You can download the report, inspect the preview and quality checks, and read comments. Starting new jobs and adding comments are disabled.</div>
+  </div>
+
+  <div class="card" id="analysis-card">
     <div class="card-title"><i class="fas fa-sliders-h" aria-label="Choose analysis type"></i> Step 1 &mdash; Choose the analysis</div>
 
     <fieldset class="group">
@@ -123,7 +128,7 @@
 
   </div>
 
-  <div class="card">
+  <div class="card" id="upload-card">
     <div class="card-title"><i class="fas fa-cloud-arrow-up"></i> Step 2 &mdash; Upload your files</div>
 
     <div class="hint" id="upload-hint" style="margin-top:0;">
@@ -144,17 +149,48 @@
         <option value="">Select a sample dataset&hellip;</option>
       </select>
       <button id="load-sample" class="btn btn-secondary btn-compact" type="button">
-        <i class="fas fa-download" aria-label="Download report"></i> Load sample
+        <i class="fas fa-play" aria-label="Load sample"></i> Load sample
+      </button>
+      <button id="download-sample" class="btn btn-secondary btn-compact" type="button">
+        <i class="fas fa-file-zipper" aria-label="Download sample files"></i> Download files
       </button>
     </div>
     <div class="hint" style="margin-top:10px;">
       <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
-      &nbsp;Bundled demo datasets &mdash; loading one picks its analysis type.
+      &nbsp;Bundled demo datasets &mdash; loading one picks its analysis type; download one to inspect the required files.
     </div>
     <div id="sample-summary" class="file-summary sample-summary"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sources-card">
+    <div class="card-title"><i class="fas fa-database" aria-label="Open data sources"></i> Or fetch open data</div>
+    <div class="hint" style="margin-top:0;">
+      <i class="fas fa-circle-info" aria-label="Information tooltip" style="color:var(--red);"></i>
+      &nbsp;Fetch open data instead of uploading ITC files. UNCTADstat builds
+      the six Services Brief workbooks; KNBS rebuilds the reference snapshot
+      every report cross-checks its dollar figures against. Only the sources
+      this report can use are listed.
+    </div>
+    <div class="source-grid">
+      <div>
+        <label for="source-select">Data source</label>
+        <select id="source-select"><option value="">Loading sources&hellip;</option></select>
+      </div>
+      <button id="source-fetch" class="btn btn-secondary btn-compact" type="button">
+        <i class="fas fa-cloud-arrow-down" aria-hidden="true"></i> Fetch data
+      </button>
+    </div>
+    <div id="source-description" class="hint"></div>
+    <div id="source-params" class="source-params"></div>
+    <div id="source-status" class="source-status" role="status"></div>
+    <div id="source-result" class="source-result" style="display:none;">
+      <div id="source-notes"></div>
+      <div id="source-files" class="source-files"></div>
+      <div id="source-actions" class="source-actions"></div>
+    </div>
+  </div>
+
+  <div class="card" id="options-card">
     <div class="card-title"><i class="fas fa-gear"></i> Step 3 &mdash; Options and generate</div>
 
     <div class="row">
@@ -195,8 +231,67 @@
         <a id="dl-report" href="#"><i class="fas fa-file-word" aria-label="Word document output"></i> Download Word Report (.docx)</a>
         <a id="dl-tables" href="#" class="btn-secondary-link"><i class="fas fa-file-archive" aria-label="Excel tables output"></i> Download Tables (.zip)</a>
         <a id="dl-xlsx" href="#" class="btn-secondary-link" style="display:none;"><i class="fas fa-file-excel" aria-label="Excel output"></i> Download Table (.xlsx)</a>
+        <button id="share-btn" type="button" class="btn-secondary-link" style="display:none;">
+          <i class="fas fa-link" aria-label="Create share link"></i> Share
+        </button>
       </div>
     </div>
+  </div>
+
+  <div class="card" id="insight-card" style="display:none;">
+    <div class="card-title"><i class="fas fa-chart-column" aria-label="Preview and quality"></i> Preview and quality</div>
+    <div class="insight-grid">
+      <section class="insight-panel">
+        <div class="insight-head">
+          <h3>Data preview</h3>
+          <select id="preview-file" aria-label="Preview workbook"></select>
+        </div>
+        <div id="preview-chart" class="preview-chart"></div>
+        <div id="preview-table-wrap" class="table-wrap"></div>
+      </section>
+      <section class="insight-panel">
+        <div class="insight-head">
+          <h3>Quality checks</h3>
+          <span id="quality-summary" class="badge"></span>
+        </div>
+        <div id="quality-list" class="quality-list"></div>
+        <h4 class="insight-subtitle">Inputs and fingerprints</h4>
+        <div id="quality-files" class="quality-files"></div>
+      </section>
+    </div>
+    <div class="share-row">
+      <label for="share-link">Share link</label>
+      <input id="share-link" type="text" readonly placeholder="Create a read-only link for this report">
+      <button id="share-create" type="button" class="btn btn-secondary btn-compact">
+        <i class="fas fa-link" aria-hidden="true"></i> Create link
+      </button>
+      <button id="share-copy" type="button" class="btn btn-quiet btn-compact">
+        <i class="fas fa-copy" aria-hidden="true"></i> Copy
+      </button>
+    </div>
+    <div class="comments-block">
+      <div class="insight-head"><h3>Comments</h3><span id="comments-count" class="badge"></span></div>
+      <div id="comments-list" class="comments-list"></div>
+      <div id="comment-compose" class="comment-compose">
+        <label for="comment-author" class="sr-only">Your name</label>
+        <input id="comment-author" type="text" maxlength="80" placeholder="Your name (optional)">
+        <label for="comment-body" class="sr-only">Comment</label>
+        <textarea id="comment-body" maxlength="4000" rows="2" placeholder="Add a note about this report&hellip;"></textarea>
+        <button id="comment-add" type="button" class="btn btn-secondary btn-compact">
+          <i class="fas fa-comment-dots" aria-hidden="true"></i> Add comment
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="jobs-card">
+    <div class="card-title">
+      <i class="fas fa-clock-rotate-left" aria-label="Recent jobs"></i> Recent jobs
+      <button id="jobs-refresh" type="button" class="btn btn-quiet btn-compact" style="margin-left:auto;">
+        <i class="fas fa-rotate" aria-hidden="true"></i> Refresh
+      </button>
+    </div>
+    <div id="jobs-list" class="jobs-list"><div class="jobs-empty">No jobs in this browser yet.</div></div>
   </div>
 </main>
 
@@ -207,6 +302,6 @@
 
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-<script src="/static/app.js?v=2" defer></script>
+<script src="/static/app.js?v=4" defer></script>
 </body>
 </html>

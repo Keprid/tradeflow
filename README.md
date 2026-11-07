@@ -34,7 +34,7 @@ addition to the seven individual files, `make_tables.py` writes a combined
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - `python-docx`, `openpyxl`, `matplotlib` (install with `pip install -r requirements.txt`)
 - Chart font is auto-detected: **Times New Roman on Windows**, Liberation Serif
   (metrically identical) on Linux. No font configuration needed.
@@ -272,6 +272,20 @@ progress by polling, so even multi-minute quarterly builds (large KRA
 extracts) or slow hosts no longer kill the request mid-way. If the server
 does restart during a job, the page says so instead of hanging.
 
+**Preview, quality, sharing and comments.** A completed job shows workbook
+previews, a data-quality report, and an optional comment thread. The
+**Recent jobs** panel lists jobs created by the current browser; each job's
+owner token is kept in `localStorage` under `tf_job_store_v1`. A share link
+opens a read-only view of the job, expires after seven days by default, and is
+signed with the server secret.
+
+New jobs are owner-token protected by default: API, status, download, preview
+and quality requests need either `X-Job-Token: <token>` or
+`?token=<token>`, while shared links use `?share=<signed-token>`. Legacy job
+folders with no registered owner remain readable. Set
+`TRADEFLOW_ENFORCE_JOB_OWNERSHIP=0` only on a trusted single-user deployment
+that needs bare bookmarkable job URLs.
+
 **Auto-detecting the country:** the dropdown's first option is *Auto-detect
 country from data*. The server reads the country name and report years
 straight from Table 1 of the uploaded set: if a matching `config/<country>.json`
@@ -287,6 +301,95 @@ python3 make_config.py output/tables_uae                # config/united_arab_emi
 python3 make_config.py sourcefiles                       # raw ITC downloads work too
 python3 make_config.py sourcefiles --output config/mine.json
 ```
+
+### Open-data sources
+
+The **Or fetch open data** card appears on the Trade Brief, Product Profile and
+Services Brief tabs, and lists only the sources that tab can use. Fetched files
+are kept for six hours (configurable) and can be downloaded individually or as
+a ZIP. A report-producing fetch feeds a new job directly; a reference fetch is
+installed instead.
+
+| Source | Produces | Credentials | Notes |
+|---|---|---|---|
+| **UNCTADstat** | Services Brief source workbooks | `UNCTAD_CLIENT_ID`, `UNCTAD_API_KEY` | UNCTAD-WTO trade in services by EBOPS category. Builds the six Trade Map-style services workbooks. Services tab only. |
+| **KNBS reference series** | `knbs_reference.json` + `knbs_observations.csv` | none | Rebuilds the Economic Survey snapshot every report cross-checks against, from the portal's Hub-and-Node API (about 12 s for 14 datasets). The card lists the reports and tables that read it before you fetch. **Install snapshot** replaces `data/knbs_reference.json` and drops the in-process cache, so the next build reads the new vintage. Not a report input. |
+
+No goods source is offered. The UN Comtrade preview and World Bank WITS cannot
+return the partner-market HS4 tables the Trade Brief needs, so their files were
+unusable as report inputs and those connectors are not registered;
+`webapp/connectors/__init__.py` lists what the app exposes. ITC Trade Map has no
+public API either, so goods, product and quarterly data must still be
+downloaded manually from trademap.org and uploaded. `GET /api/sources` reports
+the catalog's parameters, credential readiness and, for a reference source, the
+`used_by` list of reports and tables that read it; the browser disables sources
+whose server credentials are missing.
+
+### Platform endpoints and operations
+
+Health and operations:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /healthz` | Liveness, version, queue depth and job counts. |
+| `GET /metrics` | Prometheus text metrics for HTTP, jobs and queue depth. |
+| `GET /api/jobs?limit=25` | Recent jobs visible to the caller. |
+
+Job inspection and collaboration:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/preview/{job_id}` | Table/chart preview data for a completed job. |
+| `GET /api/quality/{job_id}` | Input/output validation report for a completed job. |
+| `POST /api/share/{job_id}` | Create a signed read-only share URL (owner only). |
+| `GET /api/jobs/{job_id}/comments` | List comments. |
+| `POST /api/jobs/{job_id}/comments` | Add a comment (`{"body": "...", "author": "..."}`; owner only). |
+
+Open-data fetch flow:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/sources` | Connector catalogue, parameters, credential readiness and `used_by`. |
+| `POST /api/sources/{source_id}/fetch` | Fetch data; body is the connector's parameter object. |
+| `GET /api/fetches/{fetch_id}/files/{name}` | Download one fetched file. |
+| `GET /api/fetches/{fetch_id}/download` | Download all fetched files as a ZIP. |
+| `POST /api/fetches/{fetch_id}/run` | Start a report from a report-producing fetch (`{"report_type": "goods", ...}`). A reference-only source is refused whatever type is asked for. |
+| `POST /api/fetches/{fetch_id}/install` | Replace `data/knbs_reference.json` with a fetched KNBS snapshot. Refuses a snapshot with no observations, leaving the installed series untouched. |
+
+If `TRADEFLOW_API_KEY` is set, clients must also send `X-API-Key` (or
+`?api_key=`) on job-list and fetch/run endpoints. Owner/share tokens continue
+to control access to individual jobs.
+
+### Environment configuration
+
+All settings are optional; the defaults preserve local behaviour. Set them as
+normal environment variables or in your hosting provider's dashboard.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TRADEFLOW_DATA_DIR` | `webapp/` | Root for the registry, fetches, cache and generated secret. |
+| `TRADEFLOW_DB` | `<data>/platform.db` | SQLite registry path. |
+| `TRADEFLOW_JOBS_DIR` | `webapp/jobs/` | Per-job uploads, reports and tables. |
+| `TRADEFLOW_FETCH_DIR` | `<data>/fetches/` | Staged source downloads. |
+| `TRADEFLOW_CACHE_DIR` | `<data>/cache/` | Connector/reference-data cache. |
+| `TRADEFLOW_REPORT_VERSION` | `2026.1` | Version stamp written into job provenance. |
+| `TRADEFLOW_JOB_TTL` | `86400` | Job retention in seconds (24 hours). |
+| `TRADEFLOW_FETCH_TTL` | `21600` | Fetch retention in seconds (6 hours). |
+| `TRADEFLOW_WORKERS` | `1` | Background queue worker count. |
+| `TRADEFLOW_JOB_ATTEMPTS` | `2` | Attempts before a job is marked failed. |
+| `TRADEFLOW_SHARE_TTL` | `604800` | Share-link lifetime in seconds (7 days). |
+| `TRADEFLOW_API_KEY` | unset | Optional API gate for job-list and fetch/run endpoints. |
+| `TRADEFLOW_ENFORCE_JOB_OWNERSHIP` | `1` | Require owner tokens for registered jobs. |
+| `TRADEFLOW_WEBHOOK_URL` | unset | Optional completion webhook (POST JSON). |
+| `TRADEFLOW_WEBHOOK_TIMEOUT` | `5` | Webhook timeout in seconds. |
+| `TRADEFLOW_SECRET` | generated | HMAC secret for share tokens. Set it in hosting to keep links valid across restarts. |
+| `UNCTAD_CLIENT_ID` / `UNCTAD_API_KEY` | unset | UNCTADstat credentials. |
+| `COMTRADE_API_KEY` | unset | UN Comtrade subscription key. |
+
+The generated secret is stored at `<data>/.platform_secret`. If the data
+directory is read-only, an ephemeral secret is used and existing share links
+stop working after a restart. Job ownership is enforced only for jobs created
+by this version; old job folders without an owner hash remain readable.
 
 ### Windows
 Install Python (tick "Add Python to PATH") — no pip step is needed, the
@@ -325,6 +428,56 @@ default `output/.tmp`).
 
 `make_tables.py` options: `--excel-dir` (default `sourcefiles`), `--out-dir`
 (default `output/tables`), `--top` (rows kept per table, default 20).
+
+## KNBS reference series (cross-checks, regions, one year ahead)
+
+Kenya National Bureau of Statistics publishes the machine-readable equivalent
+of Economic Survey chapter 6 (external sector) through the Hub-and-Node API
+behind [opendata.knbs.or.ke](https://opendata.knbs.or.ke/beta/databrowser/).
+The values are in Kenyan shillings, so they are an independent check on the US
+dollar figures ITC and UNCTAD give us, and they arrive about a year earlier
+than the international databases.
+
+| Module | Does |
+|---|---|
+| `knbs_reference.py` | Portal client, the unit-scale registry and the annual average KSh/USD table. `python knbs_reference.py refresh` rewrites the vendored snapshot in `data/knbs_reference.json`; the web app's KNBS connector does the same and installs it on request. |
+| `knbs_check.py` | Cross-checks. Each returns one shape (`label`, `rows` of `{year, ours, knbs, diff_pct, provisional}`, `status`, `source`) that any report can render. |
+| `knbs_regions.py` | KNBS's own region tree (continents, sub-regions, the EU and EAC as "of which" blocs) and one year of a cube turned into report rows. |
+| `knbs_sector.py` | The industry behind a product: area, output, yield and the farm-gate price, from the Economic Survey's sector chapters, as rows a profile can print. |
+
+What a reader sees:
+
+- **Trade Brief** — `Table 4a` sets Figure 1's bilateral exports and imports
+  beside KNBS's customs line for the same partner, and section 3.6 adds
+  `Table 7a`, Kenya's exports by region, which the country list cannot show.
+- **Services Brief** — Figure 12 continues into KNBS's provisional Balance of
+  Payments year (2025) that UNCTAD's EBOPS series lacks, and `Table 13a` at the
+  end of section 5 prints the gap between the two sources. Category detail in
+  Tables 3 and 4 stays on UNCTAD's EBOPS series, which ends a year earlier.
+- **Product Profile** — a profile scoped to one 4-digit heading that KNBS
+  publishes separately (cut flowers 0603, coffee 0901, tea 0902, essential
+  oils 3301) gets `Table 12a`. KNBS counts *domestic* exports, so a shortfall
+  that repeats every year is re-exported volume rather than an error. When the
+  portfolio also holds the "List of products exported by Kenya" workbook, the
+  same table carries a second row for Kenya's total merchandise exports. A
+  profile of a whole family (several headings) prints no check, because KNBS
+  has no single line that means the same thing.
+- **Product Profile, sectoral context** — `Table 12b` (or `12a` when there is
+  no customs check) sets the exports beside KNBS's account of the industry
+  itself: hectares under the crop, tonnes picked, yield and the farm-gate price
+  for coffee and tea; volumes and earnings for horticulture; output and prices
+  for minerals; live weights and prices for meat.  It covers the five years the
+  Survey publishes cleanly, 2021-2025, and only for the headings KNBS keeps such
+  a series for; a dairy or crafts profile prints nothing.  Coffee rows are crop
+  years, so the 2025 column is the 2024/25 season, and a cell KNBS itself
+  publishes inconsistently prints `n/a` with a note rather than a wrong number.
+
+House rules the layer keeps to: a report prints nothing rather than a zero, a
+year KNBS marks provisional carries a `*`, gaps above `REVIEW_THRESHOLD_PCT`
+(2%) are bold red with a note asking for a review, and a missing or stale
+snapshot leaves every report exactly as it was before the layer existed.
+Partner names are matched to KNBS's own labels, so a market KNBS lumps into
+"Other Countries in Africa" (Nigeria, for instance) produces no check at all.
 
 ## Competitor analysis (per product or per Kenya export market)
 
@@ -372,12 +525,19 @@ wakes on the first request, so the first load can take ~1 minute).
 Notes:
 
 - No files are stored permanently: uploads and generated reports live in
-  `webapp/jobs/` and are cleaned after 24 h, so nothing sensitive lingers.
+  `webapp/jobs/`, fetched source files under `webapp/fetches/`, and both are
+  cleaned after their TTLs. The SQLite registry and generated secret also sit
+  on Render's ephemeral filesystem, so job history is lost on redeploy.
+- Set `TRADEFLOW_SECRET` in Render to keep signed share links valid across
+  restarts and redeploys; otherwise the generated secret is recreated.
 - The whole app -- including the original single-country report generator -- is
   served from one process via `uvicorn webapp.main:app`
   (see `render.yaml`); the launch code works whether the app is imported as a
   script, a module, or by gunicorn/uvicorn `webapp.main:app`.
-- There is no login on the app, so only share the URL with people you trust.
+- The app has no user accounts. Each browser receives an owner token for the
+  jobs it creates, and share links are signed, read-only and expiring. Set
+  `TRADEFLOW_API_KEY` for a private deployment, or
+  `TRADEFLOW_ENFORCE_JOB_OWNERSHIP=0` only when bare job URLs are acceptable.
 - Charts use Liberation Serif (installed during the build) so figures match
   your local output. If that install is skipped, matplotlib falls back to a
   built-in font and only the chart font changes.
@@ -453,4 +613,3 @@ so you can re-download at 4-digit level. The bundled sample tables are already H
   names the UAE, inconsistent with its own Table-3 list.
 - In Microsoft Word, the Table of Contents must be refreshed once
   (Right-click > Update Field) after opening the generated document.
-# tradeflow

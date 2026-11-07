@@ -16,6 +16,7 @@ from pathlib import Path
 
 import openpyxl
 import pytest
+from docx import Document
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLES = ROOT / "Samplefiles"
@@ -139,6 +140,12 @@ def test_golden_services_report(tmp_path):
              "--config", ROOT / "config" / "services_world.json",
              "--output", docx, "--tmp", tmp_path / "tmp"])
     assert_docx(docx)
+    # The KNBS cross-check is only findable if its caption is numbered: the
+    # List of Tables is generated from the Caption Table style alone.
+    caption = [p for p in Document(str(docx)).paragraphs
+               if p.text.startswith("Table 13a")]
+    assert caption, "the KNBS services cross-check has no numbered caption"
+    assert caption[0].style.name == "Caption Table"
 
 
 # --------------------------------------------------------------------------

@@ -31,7 +31,7 @@ step 2. For full details on building the tables, see `MAKE_TABLES.md`.
 
 ## 1. What you need
 
-- Python 3.9 or newer. Get it at https://www.python.org/downloads/
+- Python 3.10 or newer. Get it at https://www.python.org/downloads/
   - On **Windows**, during installation tick **"Add Python to PATH"**.
   - Check it works by opening Command Prompt (or Terminal) and typing:
     ```
@@ -80,9 +80,18 @@ browser:
 
 The upload can be the six raw ITC downloads, the seven ready-made tables, or
 a zip of either set. When raw files are uploaded the app builds the tables for
-you automatically. When it finishes you can download the `.docx` report and a
-zip of the generated tables. Generated jobs are stored under `webapp/jobs/`
-and cleaned up after 24 hours.
+you automatically. When it finishes you can preview the workbooks, run a
+data-quality check, download the `.docx` report and a zip of the generated
+tables, or create a read-only share link. Recent jobs, sharing and comments are
+covered in `README.md`; the browser keeps each job's owner token locally so
+only this browser can revisit it without a share link. Generated jobs are
+stored under `webapp/jobs/` and cleaned up after 24 hours.
+
+The **Or fetch open data** card appears only on the Services Brief tab and
+pulls services trade from UNCTADstat, which needs server credentials. It is the
+only open-data source offered: the other endpoints could not produce workbooks
+the pipelines can read. Goods, product and quarterly reports still need manual
+ITC Trade Map downloads.
 
 Press `Ctrl+C` in the terminal to stop the web app.
 

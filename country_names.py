@@ -507,7 +507,8 @@ def title_case(text):
             return w.lower()
         return w[:1].upper() + w[1:]
 
-    m = re.match(r"^((?:Table|Figure)\s+\d+[a-z]?\s*[:\-–]\s*)(.*)$", text, re.IGNORECASE)
+    m = re.match(r"^((?:Table|Figure)\s+\d+[a-z]?\s*(?:\([^)]*\))?\s*[:\-–]\s*)"
+                 r"(.*)$", text, re.IGNORECASE)
     prefix, rest = m.groups() if m else ("", text)
     words = re.split(r"(\s+)", rest)
     out = []

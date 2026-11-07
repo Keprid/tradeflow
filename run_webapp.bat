@@ -1,3 +1,8 @@
+@set UNCTAD_CLIENT_ID=0d24f378-7e2d-4b34-a962-e54c3f336c1c
+@set UNCTAD_API_KEY=7zun3HsqSwt238GR9/niHZ7D6N8lnwEuzrAb8Xg3h6U=
+
+
+
 @echo off
 rem ============================================================
 rem  Trade Flow Report Generator - Web App launcher (Windows)

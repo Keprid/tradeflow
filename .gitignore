@@ -15,6 +15,11 @@ webapp/jobs/
 webapp/uploads/
 webapp/stats.json
 webapp/stats.json.tmp
+webapp/platform.db
+webapp/platform.db-*
+webapp/.platform_secret
+webapp/cache/
+webapp/fetches/
 
 output/
 output_*/

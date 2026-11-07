@@ -63,6 +63,9 @@ from docx.shared import Cm, Inches, Pt, RGBColor
 from generate_report import (ReportBuilder, num, pct, clean_label, short_label,
                              to_float, SRC)
 from country_names import display_name, fix_label, is_africa
+import knbs_check
+import knbs_sector
+from knbs_reference import KnbsError
 import charts
 from excel_deliverable import THEME
 import xlsx_compat
@@ -3773,6 +3776,78 @@ def _mirror_global(b, cfg, data, source, tmp_dir):
             b._missing_required_table(_n, _t, source)
 
 
+def add_knbs_product_check(b, cfg, data):
+    """Reconcile the dollar figures a profile prints with KNBS's customs data.
+
+    KNBS publishes only selected commodities, and counts domestic exports
+    while ITC counts every shipment leaving Kenya, so this checks the profile
+    against a second source without pretending the two measure one thing.
+    """
+    codes = [str(c).strip() for c in (cfg.get("include_codes") or [])]
+    if len(codes) != 1 or not codes[0].isdigit() or len(codes[0]) != 4:
+        return False          # a family of headings has no single KNBS line
+    if 12 not in b.done_tables:
+        return False          # the table this one is lettered against is absent
+    series = data.market_share_series()
+    if not series:
+        return False
+    ours = {y: display(k) for y, k, _world, _share in series}
+    try:
+        checks = [knbs_check.check_product(ours, hs_code=codes[0],
+                                           commodity=cfg.get("knbs_commodity"))]
+        if data.kenya_total_exports:
+            checks.append(knbs_check.check_goods_exports(
+                {int(y): display(v)
+                 for y, v in data.kenya_total_exports.items() if v}))
+    except KnbsError:
+        return False
+    checks = [c for c in checks if c["rows"]]
+    if not checks:
+        return False
+    b.add_para(
+        "The rows below compare figures this profile prints with KNBS's own "
+        "customs series for the same flow, converted at the Economic Survey's "
+        "annual average shilling rate. KNBS counts domestic exports where ITC "
+        "counts every shipment leaving Kenya, so a shortfall that repeats "
+        "every year is re-exported volume rather than an error.",
+        italic=True, size=10)
+    b.add_knbs_check_table(
+        checks,
+        caption="Table 12a (KNBS): Kenya's %s Export Cross-Check Against "
+                "KNBS Customs Data" % (cfg.get("family_title") or "product"))
+    return True
+
+
+def add_knbs_sector_context(b, cfg, letter="a"):
+    """KNBS's own account of the industry the profile sells into.
+
+    Exports say nothing about the hectares, the tonnes an estate picked, or the
+    price a farmer was paid, and all three are in the Economic Survey.  Only
+    products KNBS publishes such a series for are covered; a profile of dairy
+    or crafts prints nothing.
+    """
+    if 12 not in b.done_tables:
+        return False      # the table these blocks are lettered against is absent
+    try:
+        ctx = knbs_sector.context(cfg.get("include_codes"))
+    except KnbsError:
+        return False
+    if not ctx:
+        return False
+    b.add_para(
+        "The rows below come from KNBS's own account of Kenya's %s industry. "
+        "They measure what the sector produced and what it earned at source, "
+        "so they explain the export figures above rather than repeat them."
+        % ctx["title"],
+        italic=True, size=10)
+    b.add_knbs_sector_table(
+        ctx,
+        caption="Table 12%s (KNBS): Kenya's %s Sectoral Context From Economic "
+                "Survey 2026" % (letter,
+                                 cfg.get("family_title") or ctx["title"].title()))
+    return True
+
+
 def section_mirror_kenya(b, cfg, data, source):
     """3.0 KENYA'S EXPORTS AND IMPORTS MARKET TRENDS: tables 11-17 plus the
     sub-family table 13."""
@@ -3821,6 +3896,11 @@ def section_mirror_kenya(b, cfg, data, source):
         trend_bullets(b, members, years, family, "exports",
                       scope="Kenya's", residual="All other products",
                       denom="Kenya's total")
+
+    # The two KNBS blocks are lettered against Table 12, in the order they
+    # print: the customs cross-check first, the industry figures second.
+    letter = "b" if add_knbs_product_check(b, cfg, data) else "a"
+    add_knbs_sector_context(b, cfg, letter)
 
     # Table 13 - Kenya's exports of the sub-family (e.g. processed meat)
     for i, sf in enumerate(cfg.get("sub_families") or []):

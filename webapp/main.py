@@ -27,15 +27,22 @@ import sys
 import threading
 import time
 import traceback
+import urllib.request
 import uuid
 import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import openpyxl
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import (Body, FastAPI, File, Form, HTTPException, Request,
+                     UploadFile)
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+from webapp.connectors import connector_catalog, get_connector
+from webapp.connectors.base import ConnectorError, zip_files
+from webapp.platform import auth, metrics, provenance, queue, registry, settings
+from webapp.platform.inspection import preview_workbooks, quality_report
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 LOG = logging.getLogger("tradeflow.webapp")
@@ -55,6 +62,7 @@ import period_data                           # noqa: E402
 import generate_product_profile as gpp   # noqa: E402
 import generate_crafts_report as gcr     # noqa: E402
 import generate_competitor_analysis as gca  # noqa: E402
+import knbs_reference                       # noqa: E402
 from pipeline_errors import PipelineError   # noqa: E402
 from xlsx_compat import (                   # noqa: E402
     _write_csv_as_xlsx, _write_xls_as_xlsx, _write_xlsb_as_xlsx,
@@ -216,10 +224,20 @@ def _family_overlap(fam_tokens, name):
     inter = len(fam_tokens & nt)
     return inter / min(len(fam_tokens), len(nt))
 
+_QUEUE = None
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    registry.init_db()
     _cleanup_old_jobs()
-    yield
+    _cleanup_expired_fetches()
+    _ensure_queue().start()
+    try:
+        yield
+    finally:
+        if _QUEUE is not None:
+            _QUEUE.stop()
 
 app = FastAPI(title="Trade Flow Report Generator", lifespan=_lifespan)
 
@@ -231,6 +249,24 @@ async def _revalidate_static(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.middleware("http")
+async def _observe_requests(request: Request, call_next):
+    started = time.time()
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    try:
+        response = await call_next(request)
+    except Exception:
+        metrics.inc("tradeflow_http_errors_total")
+        raise
+    metrics.inc("tradeflow_http_requests_total")
+    if response.status_code >= 500:
+        metrics.inc("tradeflow_http_5xx_total")
+    metrics.set_gauge("tradeflow_last_request_seconds",
+                      time.time() - started)
+    response.headers["X-Request-ID"] = request_id
     return response
 
 
@@ -287,6 +323,19 @@ def _cleanup_old_jobs():
                     shutil.rmtree(d, ignore_errors=True)
             except OSError:
                 pass
+    try:
+        registry.delete_jobs_before(now - JOB_TTL_SECONDS)
+    except Exception:  # noqa: BLE001 - cleanup must never block startup
+        LOG.warning("Could not prune the job registry", exc_info=True)
+
+
+def _cleanup_expired_fetches():
+    try:
+        for item in registry.expired_fetches():
+            shutil.rmtree(item.get("dir") or "", ignore_errors=True)
+            registry.delete_fetch(item["id"])
+    except Exception:  # noqa: BLE001
+        LOG.warning("Could not prune expired fetches", exc_info=True)
 
 
 def _read_stats():
@@ -435,6 +484,17 @@ def _convert_to_xlsx(src):
 # ---------------------------------------------------------------------------
 @app.get("/", include_in_schema=False)
 def index():
+    return FileResponse(STATIC_DIR / "index.html",
+                        headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/share/{job_id}", include_in_schema=False)
+def share_page(job_id: str, request: Request):
+    """Human-readable landing page for a read-only share link."""
+    token = auth.share_from_request(request)
+    if not auth.verify_share_token(job_id, token):
+        raise HTTPException(404, "Share link not found or expired.")
+    _job_dir(job_id)
     return FileResponse(STATIC_DIR / "index.html",
                         headers={"Cache-Control": "no-cache"})
 
@@ -644,10 +704,41 @@ def api_sample_file(group_id: str, filename: str):
     return FileResponse(str(p), filename=os.path.basename(p))
 
 
+@app.get("/api/sample-download/{group_id}")
+def api_sample_download(group_id: str):
+    """Zip up a bundled sample dataset so users can inspect its files."""
+    group = next((g for g in _scan_sample_groups() if g["id"] == group_id),
+                 None)
+    if group is None:
+        raise HTTPException(404, f"Sample dataset '{group_id}' not found")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filename in group["files"]:
+            p = (SAMPLE_DIR / group["dir"] / filename).resolve()
+            if p.is_file() and SAMPLE_DIR.resolve() in p.parents:
+                zf.write(str(p), arcname=filename)
+    buf.seek(0)
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", group["label"]).strip("_")
+    stem = stem or group["id"]
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{stem}-sample-files.zip"'},
+    )
+
+
 def _detect_mode(uploads_dir, report_type="goods"):
     names = [f.lower() for f in os.listdir(uploads_dir) if f.lower().endswith(ALLOWED_EXT)]
     if not names:
         return None, "No Excel files were uploaded."
+    if any("wits" in n or "tradestats" in n for n in names):
+        return None, (
+            "The uploaded files are World Bank WITS reference data, not report "
+            "inputs. WITS provides broad product sectors and Kenya's own trade "
+            "totals, not the partner-market HS4 tables required by a Trade "
+            "Brief. Use manually downloaded ITC Trade Map files for a full "
+            "report; keep the WITS files for reference.")
     if report_type == "quarterly":
         stems = {os.path.splitext(n)[0] for n in names}
         if {"exports", "imports"} <= stems:
@@ -1390,7 +1481,7 @@ def _write_job_error(job_dir, message, traceback_text=None):
     (job_dir / "error_public.txt").write_text(message, encoding="utf-8")
 
 
-def _job_worker(job_dir, job_fn):
+def _job_worker(job_dir, job_fn, job_id=None, provenance_data=None):
     logs = _JobLog(job_dir)
     try:
         # Log before taking the lock: if another job is still running the
@@ -1400,36 +1491,181 @@ def _job_worker(job_dir, job_fn):
         with _PIPELINE_LOCK:
             logs.append("Renderer acquired; build starting.")
             report_path, manifest = job_fn(logs)
+        manifest = dict(manifest or {})
+        manifest.setdefault("report_type", "goods")
+        manifest.setdefault("mode", "")
+        manifest.setdefault("report_version", settings.REPORT_VERSION)
+        manifest["finished_at"] = time.time()
+        if provenance_data:
+            manifest["provenance"] = provenance_data
         (job_dir / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8")
-        logs.append(f"Report ready: {manifest['report_name']}")
+            json.dumps(manifest, indent=2), encoding="utf-8")
+        logs.append(f"Report ready: {manifest.get('report_name')}")
         _bump_stats(reports=1)
+        metrics.inc("tradeflow_jobs_completed_total")
         LOG.info("Background job %s finished -> %s",
-                 job_dir.name, manifest["report_name"])
+                 job_dir.name, manifest.get("report_name"))
+        if job_id:
+            registry.set_status(
+                job_id, "done", manifest=manifest, error=None,
+                report_version=manifest.get("report_version"),
+                provenance=provenance_data or {})
+        _notify_webhook(job_id or job_dir.name, "done", manifest=manifest)
     except HTTPException as e:
-        LOG.error("Background job %s failed: %s", job_dir.name, e.detail)
-        _write_job_error(job_dir, str(e.detail))
+        detail = str(e.detail)
+        LOG.error("Background job %s failed: %s", job_dir.name, detail)
+        _write_job_error(job_dir, detail)
+        metrics.inc("tradeflow_jobs_failed_total")
+        if job_id:
+            registry.set_status(job_id, "error", error=detail)
+        _notify_webhook(job_id or job_dir.name, "error", error=detail)
     except PipelineError as e:
         LOG.error("Background job %s failed: %s", job_dir.name, e)
         _write_job_error(job_dir, str(e))
+        metrics.inc("tradeflow_jobs_failed_total")
+        if job_id:
+            registry.set_status(job_id, "error", error=str(e))
+        _notify_webhook(job_id or job_dir.name, "error", error=str(e))
     except SystemExit as e:
         LOG.error("Background job %s aborted: %s", job_dir.name, e)
-        _write_job_error(job_dir, f"Pipeline aborted: {e}")
+        message = f"Pipeline aborted: {e}"
+        _write_job_error(job_dir, message)
+        metrics.inc("tradeflow_jobs_failed_total")
+        if job_id:
+            registry.set_status(job_id, "error", error=message)
+        _notify_webhook(job_id or job_dir.name, "error", error=message)
     except Exception as e:
         tb = traceback.format_exc()
         LOG.error("Background job %s failed:", job_dir.name)
         LOG.error("%s", tb)
-        _write_job_error(job_dir, f"Pipeline failed: {e}", tb)
+        message = f"Pipeline failed: {e}"
+        _write_job_error(job_dir, message, tb)
+        metrics.inc("tradeflow_jobs_failed_total")
+        if job_id:
+            registry.set_status(job_id, "error", error=message)
+        _notify_webhook(job_id or job_dir.name, "error", error=message)
+
+
+def _notify_webhook(job_id, status, manifest=None, error=""):
+    if not settings.WEBHOOK_URL:
+        return
+    payload = {
+        "job_id": job_id,
+        "status": status,
+        "error": error or "",
+        "report_name": (manifest or {}).get("report_name"),
+        "report_type": (manifest or {}).get("report_type"),
+        "report_version": (manifest or {}).get("report_version"),
+        "finished_at": (manifest or {}).get("finished_at") or time.time(),
+    }
+    try:
+        request = urllib.request.Request(
+            settings.WEBHOOK_URL, method="POST",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "User-Agent": "tradeflow-webhook/1.0"})
+        with urllib.request.urlopen(
+                request, timeout=settings.WEBHOOK_TIMEOUT) as response:
+            response.read(200)
+    except Exception:  # noqa: BLE001 - a webhook must never break a job
+        LOG.warning("Completion webhook failed for job %s", job_id)
+
+
+def _job_fn_for(report_type, job_dir, config, top, mode, period):
+    if report_type == "quarterly":
+        return lambda logs: _run_export_pipeline(
+            job_dir, top, mode, period, logs)
+    if report_type == "services":
+        return lambda logs: _run_services_pipeline(
+            job_dir, config, top, logs)
+    if report_type == "product":
+        return lambda logs: _run_product_pipeline(
+            job_dir, config, top, logs)
+    if report_type == "crafts":
+        return lambda logs: _run_crafts_pipeline(
+            job_dir, config, top, logs)
+    if report_type == "competitor":
+        return lambda logs: _run_competitor_pipeline(job_dir, logs)
+    return lambda logs: _run_pipeline(job_dir, config, top, mode, logs)
+
+
+def _run_queued_job(job):
+    spec = job.get("spec") or {}
+    job_dir = JOBS_DIR / job["id"]
+    report_type = spec.get("report_type") or job.get("report_type") or "goods"
+    job_fn = _job_fn_for(
+        report_type, job_dir, spec.get("config", "__auto__"),
+        int(spec.get("top") or 20), spec.get("mode", ""),
+        spec.get("period", ""))
+    _job_worker(job_dir, job_fn, job_id=job["id"],
+                provenance_data=job.get("provenance"))
+
+
+def _ensure_queue():
+    global _QUEUE
+    if _QUEUE is None:
+        _QUEUE = queue.JobQueue(_run_queued_job)
+    return _QUEUE
+
+
+def _enqueue_job(job_dir, report_type, config, top, mode, period,
+                 provenance_data):
+    owner_token = auth.new_owner_token()
+    (job_dir / "meta.json").write_text(json.dumps({
+        "started": time.time(),
+        "report_type": report_type,
+        "mode": mode,
+        "owner_hash": auth.token_hash(owner_token),
+    }), encoding="utf-8")
+    registry.create_job(
+        job_dir.name, report_type, mode=mode, config=config, period=period,
+        spec={"report_type": report_type, "config": config, "top": top,
+              "mode": mode, "period": period},
+        owner_hash=auth.token_hash(owner_token),
+        provenance=provenance_data,
+        report_version=settings.REPORT_VERSION)
+    _ensure_queue().start()
+    _ensure_queue().notify()
+    metrics.inc("tradeflow_jobs_queued_total")
+    return owner_token
+
+
+def _job_record(job_id):
+    try:
+        return registry.get_job(job_id)
+    except Exception:  # noqa: BLE001 - legacy jobs must still work
+        return None
+
+
+def _authorize_job(request, job):
+    if job is not None and not auth.is_authorized(request, job):
+        raise HTTPException(
+            403, "This job belongs to another browser session. Open its "
+                 "share link, or start a new job.")
+
+
+def _access_suffix(request):
+    share = auth.share_from_request(request)
+    if share:
+        return "?share=" + share
+    token = auth.token_from_request(request)
+    if token:
+        return "?token=" + token
+    return ""
 
 
 @app.get("/api/status/{job_id}")
-def api_status(job_id: str):
+def api_status(job_id: str, request: Request):
     """Poll a background job started by POST /api/run.
 
-    States: running | done | error. A job whose meta.json predates this
-    server process must have been interrupted by a restart -> error.
+    States: running | done | error. Registered jobs also report their queue
+    position and provenance; legacy folders keep the original file-based
+    behaviour.
     """
     job_dir = _job_dir(job_id)
+    job = _job_record(job_id)
+    _authorize_job(request, job)
+    suffix = _access_suffix(request)
 
     log_lines = _read_job_log(job_dir)
     err_path = job_dir / "error_public.txt"
@@ -1437,23 +1673,39 @@ def api_status(job_id: str):
         err_path = job_dir / "error.txt"
     man_path = job_dir / "manifest.json"
     if err_path.exists():
-        return {"state": "error", "detail": err_path.read_text(encoding="utf-8"),
-                "log": log_lines}
+        detail = err_path.read_text(encoding="utf-8")
+        if job:
+            registry.set_status(job_id, "error", error=detail)
+        return {"state": "error", "detail": detail, "log": log_lines}
     if man_path.exists():
         m = json.loads(man_path.read_text(encoding="utf-8"))
         resp = {"state": "done", "job_id": job_id,
                 "report_name": m.get("report_name"),
-                "report_url": f"/api/download/{job_id}",
-                "tables_url": f"/api/tables/{job_id}",
-                "mode": m.get("mode"), "log": log_lines}
+                "report_url": f"/api/download/{job_id}{suffix}",
+                "tables_url": f"/api/tables/{job_id}{suffix}",
+                "preview_url": f"/api/preview/{job_id}{suffix}",
+                "quality_url": f"/api/quality/{job_id}{suffix}",
+                "mode": m.get("mode"),
+                "report_type": m.get("report_type"),
+                "report_version": m.get("report_version"),
+                "log": log_lines}
         if m.get("report_type") in ("product", "crafts"):
-            resp["product_tables_url"] = f"/api/product-tables/{job_id}"
+            resp["product_tables_url"] = f"/api/product-tables/{job_id}{suffix}"
             resp.pop("tables_url", None)
         if m.get("report_type") == "competitor":
-            resp["png_url"] = f"/api/competitor-file/{job_id}/png"
-            resp["xlsx_url"] = f"/api/competitor-file/{job_id}/xlsx"
+            resp["png_url"] = f"/api/competitor-file/{job_id}/png{suffix}"
+            resp["xlsx_url"] = f"/api/competitor-file/{job_id}/xlsx{suffix}"
             resp.pop("tables_url", None)
         return resp
+    if job and job.get("status") in ("queued", "running"):
+        resp = {"state": "running", "job_id": job_id, "log": log_lines,
+                "queue_position": registry.queue_depth()
+                if job.get("status") == "queued" else 0}
+        if job.get("status") == "queued":
+            resp["detail"] = "Queued; waiting for the renderer."
+        return resp
+    if job and job.get("status") == "error" and job.get("error"):
+        return {"state": "error", "detail": job["error"], "log": log_lines}
     try:
         started = json.loads((job_dir / "meta.json").read_text())["started"]
     except Exception:
@@ -1571,39 +1823,41 @@ def api_run(config: str = Form("__auto__"), top: int = Form(20),
         elif mode in ("raw", "ready"):
             report_type = "goods"
 
+        # Check that uploaded files are large enough for a report.
+        # Very small uploads are usually reference data (e.g. WITS) and cannot
+        # build a full Trade Brief; raise a clear error instead of failing
+        # deep inside the pipeline.
+        upload_dir = job_dir / "uploads"
+        if upload_dir.is_dir():
+            total_bytes = sum(f.stat().st_size for f in upload_dir.iterdir() if f.is_file())
+            if total_bytes < 100_000:  # 100 KB minimum for a report
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    400,
+                    "Uploaded files are too small to build a report.  "
+                    "Reference datasets are inspection‑only; "
+                    "use manually downloaded ITC Trade Map files "
+                    "for a full Trade Brief."
+                )
+
         LOG.info("POST /api/run config=%s top=%s mode=%s report_type=%s "
                  "period=%s job=%s",
                  config, top, mode, report_type, period, job_dir.name)
 
-        if report_type == "quarterly":
-            job_fn = lambda logs: _run_export_pipeline(       # noqa: E731
-                job_dir, top, mode, period, logs)
-        elif report_type == "services":
-            job_fn = lambda logs: _run_services_pipeline(    # noqa: E731
-                job_dir, config, top, logs)
-        elif report_type == "product":
-            job_fn = lambda logs: _run_product_pipeline(     # noqa: E731
-                job_dir, config, top, logs)
-        elif report_type == "crafts":
-            job_fn = lambda logs: _run_crafts_pipeline(      # noqa: E731
-                job_dir, config, top, logs)
-        elif report_type == "competitor":
-            job_fn = lambda logs: _run_competitor_pipeline(   # noqa: E731
-                job_dir, logs)
-        else:
-            job_fn = lambda logs: _run_pipeline(             # noqa: E731
-                job_dir, config, top, mode, logs)
-
-        # The heavy build runs in a background thread; the request answers
+        source = "upload"
+        if zip_upload is not None:
+            source = "upload+zip"
+        provenance_data = provenance.files_provenance(
+            job_dir / "uploads", source)
+        # The heavy build runs in the durable queue; the request answers
         # immediately and the page polls /api/status/<job>. Long synchronous
         # responses are what got killed by proxies / restarts before.
-        (job_dir / "meta.json").write_text(
-            json.dumps({"started": time.time()}), encoding="utf-8")
-        threading.Thread(target=_job_worker, args=(job_dir, job_fn),
-                         daemon=True).start()
+        owner_token = _enqueue_job(
+            job_dir, report_type, config, top, mode, period, provenance_data)
         return {
             "job_id": job_dir.name,
             "status_url": f"/api/status/{job_dir.name}",
+            "job_token": owner_token,
             "mode": mode,
         }
     except HTTPException:
@@ -1618,8 +1872,9 @@ def api_run(config: str = Form("__auto__"), top: int = Form(20),
 
 
 @app.get("/api/download/{job_id}")
-def api_download(job_id: str):
+def api_download(job_id: str, request: Request):
     job_dir = _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
     manifest = _read_manifest(job_dir)
     report = job_dir / manifest["report_name"]
     if not report.exists():
@@ -1629,8 +1884,9 @@ def api_download(job_id: str):
 
 
 @app.get("/api/tables/{job_id}")
-def api_tables(job_id: str):
+def api_tables(job_id: str, request: Request):
     job_dir = _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
     manifest = _read_manifest(job_dir)
     src = job_dir / manifest["excel_dir"]
     if not src.is_dir():
@@ -1646,9 +1902,10 @@ def api_tables(job_id: str):
 
 
 @app.get("/api/product-tables/{job_id}")
-def api_product_tables(job_id: str):
+def api_product_tables(job_id: str, request: Request):
     """Download the Excel deliverable of a product-profile job."""
     job_dir = _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
     manifest = _read_manifest(job_dir)
     tables = job_dir / manifest.get("tables_name", "")
     if not tables.exists():
@@ -1659,9 +1916,10 @@ def api_product_tables(job_id: str):
 
 
 @app.get("/api/competitor-file/{job_id}/{kind}")
-def api_competitor_file(job_id: str, kind: str):
+def api_competitor_file(job_id: str, kind: str, request: Request):
     """Download a competitor-analysis deliverable (png / xlsx / docx)."""
     job_dir = _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
     manifest = _read_manifest(job_dir)
     if manifest.get("report_type") != "competitor":
         raise HTTPException(404, "Not a competitor-analysis job.")
@@ -1677,6 +1935,355 @@ def api_competitor_file(job_id: str, kind: str):
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }[kind]
     return FileResponse(str(path), filename=path.name, media_type=media)
+
+
+# ---------------------------------------------------------------------------
+# Platform endpoints: health, metrics, recent jobs, previews, sharing,
+# source connectors and staged fetch downloads.
+# ---------------------------------------------------------------------------
+@app.get("/healthz")
+def healthz():
+    try:
+        counts = registry.status_counts()
+        depth = registry.queue_depth()
+    except Exception:  # noqa: BLE001
+        counts, depth = {}, 0
+    return {
+        "status": "ok",
+        "version": settings.REPORT_VERSION,
+        "time": time.time(),
+        "uptime_seconds": round(time.time() - _SERVER_START, 1),
+        "queue_depth": depth,
+        "jobs": counts,
+    }
+
+
+@app.get("/metrics")
+def metrics_endpoint():
+    extra = {"tradeflow_queue_depth": registry.queue_depth()}
+    for status, count in registry.status_counts().items():
+        extra[f"tradeflow_jobs_status_{status}"] = count
+    return Response(metrics.render(extra),
+                    media_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+def _job_summary(job, suffix=""):
+    return {
+        "job_id": job["id"],
+        "created": job.get("created"),
+        "updated": job.get("updated"),
+        "status": job.get("status"),
+        "report_type": job.get("report_type"),
+        "mode": job.get("mode"),
+        "period": job.get("period"),
+        "report_version": job.get("report_version"),
+        "attempts": job.get("attempts"),
+        "error": job.get("error"),
+        "status_url": f"/api/status/{job['id']}{suffix}",
+        "preview_url": f"/api/preview/{job['id']}{suffix}",
+        "quality_url": f"/api/quality/{job['id']}{suffix}",
+    }
+
+
+@app.get("/api/jobs")
+def api_jobs(request: Request, limit: int = 25):
+    if not auth.api_key_ok(request):
+        raise HTTPException(401, "Invalid or missing API key.")
+    limit = max(1, min(int(limit or 25), 100))
+    token = auth.token_from_request(request)
+    suffix = _access_suffix(request)
+    if token:
+        jobs = registry.list_jobs(auth.token_hash(token), limit)
+    elif settings.ENFORCE_JOB_OWNERSHIP:
+        jobs = [job for job in registry.list_jobs(None, limit * 4)
+                if not job.get("owner_hash")][:limit]
+    else:
+        jobs = registry.list_jobs(None, limit)
+    return {"jobs": [_job_summary(job, suffix) for job in jobs],
+            "queue_depth": registry.queue_depth(),
+            "counts": registry.status_counts()}
+
+
+@app.get("/api/preview/{job_id}")
+def api_preview(job_id: str, request: Request):
+    job_dir = _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
+    manifest = _read_manifest(job_dir)
+    directory = job_dir / manifest.get("excel_dir", "") if \
+        manifest.get("excel_dir") else job_dir
+    if not directory.is_dir():
+        directory = job_dir
+    return JSONResponse(preview_workbooks(directory))
+
+
+@app.get("/api/quality/{job_id}")
+def api_quality(job_id: str, request: Request):
+    job_dir = _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
+    manifest = _read_manifest(job_dir)
+    return JSONResponse(quality_report(job_dir, manifest))
+
+
+@app.post("/api/share/{job_id}")
+def api_share(job_id: str, request: Request):
+    job = _job_record(job_id)
+    if job and not auth.is_authorized(request, job, allow_share=False):
+        raise HTTPException(403, "Only the job owner can create a share link.")
+    _job_dir(job_id)
+    token, expires = auth.make_share_token(job_id)
+    base = str(request.base_url).rstrip("/")
+    return {
+        "share_token": token,
+        "expires_at": expires,
+        "share_url": f"{base}/share/{job_id}?share={token}",
+        "status_url": f"{base}/api/status/{job_id}?share={token}",
+        "report_url": f"{base}/api/download/{job_id}?share={token}",
+        "tables_url": f"{base}/api/tables/{job_id}?share={token}",
+        "preview_url": f"{base}/api/preview/{job_id}?share={token}",
+        "quality_url": f"{base}/api/quality/{job_id}?share={token}",
+    }
+
+
+@app.get("/api/jobs/{job_id}/comments")
+def api_comments(job_id: str, request: Request):
+    _job_dir(job_id)
+    _authorize_job(request, _job_record(job_id))
+    return {"comments": registry.list_comments(job_id)}
+
+
+@app.post("/api/jobs/{job_id}/comments")
+def api_add_comment(job_id: str, request: Request,
+                    payload: dict | None = Body(default=None)):
+    _job_dir(job_id)
+    job = _job_record(job_id)
+    if job and not auth.is_authorized(request, job, allow_share=False):
+        raise HTTPException(403, "Only the job owner can comment.")
+    body = str((payload or {}).get("body") or "").strip()
+    if not body:
+        raise HTTPException(400, "Comment text is required.")
+    if len(body) > 4000:
+        raise HTTPException(400, "Comment is too long (max 4000 characters).")
+    author = str((payload or {}).get("author") or "")[:80]
+    return registry.add_comment(job_id, body, author)
+
+
+def _source_catalog():
+    catalog = connector_catalog()
+    for item in catalog:
+        if item["id"] == "unctad":
+            item["credentials_ready"] = bool(
+                settings.UNCTAD_CLIENT_ID and settings.UNCTAD_API_KEY)
+        else:
+            item["credentials_ready"] = True
+    return catalog
+
+
+@app.get("/api/sources")
+def api_sources():
+    return {"sources": _source_catalog(),
+            "fetch_ttl_seconds": settings.FETCH_RETENTION_SECONDS}
+
+
+@app.post("/api/sources/{source_id}/fetch")
+def api_source_fetch(source_id: str, request: Request,
+                     payload: dict | None = Body(default=None)):
+    if not auth.api_key_ok(request):
+        raise HTTPException(401, "Invalid or missing API key.")
+    connector = get_connector(source_id)
+    if connector is None:
+        raise HTTPException(404, f"Unknown data source: {source_id}")
+    values = payload or {}
+    try:
+        result = connector.fetch(values)
+    except ConnectorError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    _cleanup_expired_fetches()
+    fetch_id = uuid.uuid4().hex
+    directory = settings.FETCH_DIR / fetch_id
+    directory.mkdir(parents=True, exist_ok=True)
+    files = []
+    for name, data in sorted(result.files.items()):
+        safe = _clip_name(Path(str(name)).name) or "download.bin"
+        target = directory / safe
+        target.write_bytes(data)
+        files.append({"name": safe, "bytes": len(data),
+                      "url": f"/api/fetches/{fetch_id}/files/{safe}"})
+    provenance_data = provenance.files_provenance(
+        directory, f"connector:{source_id}")
+    provenance_data.update(result.provenance or {})
+    record = registry.create_fetch(
+        fetch_id, source_id, values, provenance_data, files, directory,
+        settings.FETCH_RETENTION_SECONDS)
+    return {
+        "fetch_id": fetch_id,
+        "source": source_id,
+        "files": files,
+        "notes": result.notes,
+        "provenance": provenance_data,
+        "expires_at": record.get("expires_at"),
+        "zip_url": f"/api/fetches/{fetch_id}/download",
+        "run_url": f"/api/fetches/{fetch_id}/run",
+        # The KNBS snapshot is the one fetch that can be installed: it replaces
+        # the vendored reference series the report pipelines read.
+        "install_url": (f"/api/fetches/{fetch_id}/install"
+                        if source_id == "knbs" else None),
+    }
+
+
+def _fetch_record(fetch_id):
+    if not _JOB_ID_RE.fullmatch(fetch_id or ""):
+        raise HTTPException(404, "Fetch not found (or expired).")
+    record = registry.get_fetch(fetch_id)
+    if record is None:
+        raise HTTPException(404, "Fetch not found (or expired).")
+    if record.get("expires_at") and record["expires_at"] < time.time():
+        registry.delete_fetch(fetch_id)
+        raise HTTPException(404, "Fetch expired. Please fetch again.")
+    return record
+
+
+@app.get("/api/fetches/{fetch_id}/files/{filename:path}")
+def api_fetch_file(fetch_id: str, filename: str):
+    record = _fetch_record(fetch_id)
+    directory = Path(record["dir"]).resolve()
+    target = (directory / Path(filename).name).resolve()
+    if directory not in target.parents or not target.is_file():
+        raise HTTPException(404, "File not found in this fetch.")
+    return FileResponse(str(target), filename=target.name)
+
+
+@app.get("/api/fetches/{fetch_id}/download")
+def api_fetch_download(fetch_id: str):
+    record = _fetch_record(fetch_id)
+    directory = Path(record["dir"])
+    data = {}
+    for item in record.get("files") or []:
+        path = directory / Path(item.get("name", "")).name
+        if path.is_file():
+            data[path.name] = path.read_bytes()
+    return Response(
+        content=zip_files(data), media_type="application/zip",
+        headers={"Content-Disposition":
+                 f'attachment; filename="fetched-{fetch_id}.zip"'})
+
+
+@app.post("/api/fetches/{fetch_id}/install")
+def api_fetch_install(fetch_id: str, request: Request):
+    """Replace the vendored KNBS snapshot with the one just fetched."""
+    if not auth.api_key_ok(request):
+        raise HTTPException(401, "Invalid or missing API key.")
+    record = _fetch_record(fetch_id)
+    if record["source"] != "knbs":
+        raise HTTPException(
+            400, "Only the KNBS reference snapshot can be installed. This "
+                 "source produces report inputs or inspection files.")
+    path = Path(record["dir"]) / "knbs_reference.json"
+    if not path.is_file():
+        raise HTTPException(404, "This fetch holds no KNBS snapshot.")
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(400, "The fetched snapshot is not readable JSON.") \
+            from exc
+    datasets = (snapshot or {}).get("datasets") or {}
+    if not datasets or not all(
+            isinstance(d, dict) and d.get("rows") for d in datasets.values()):
+        raise HTTPException(
+            400, "The fetched snapshot holds no observations; the installed "
+                 "series were left as they were.")
+
+    destination = Path(knbs_reference.SNAPSHOT_PATH)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = destination.with_name(destination.name + ".installing")
+    staging.write_text(json.dumps(snapshot, separators=(",", ":")),
+                       encoding="utf-8")
+    os.replace(staging, destination)
+    knbs_reference.clear_cache()
+    observations = sum(len(d["rows"]) for d in datasets.values())
+    LOG.info("Installed KNBS snapshot: %d datasets, %d observations (%s)",
+             len(datasets), observations, snapshot.get("generated_at"))
+    return {"installed": str(destination),
+            "datasets": len(datasets),
+            "observations": observations,
+            "generated_at": snapshot.get("generated_at")}
+
+
+@app.post("/api/fetches/{fetch_id}/run")
+def api_fetch_run(fetch_id: str, request: Request,
+                  payload: dict | None = Body(default=None)):
+    if not auth.api_key_ok(request):
+        raise HTTPException(401, "Invalid or missing API key.")
+    record = _fetch_record(fetch_id)
+    connector = get_connector(record["source"])
+    if connector is None:
+        raise HTTPException(400, "This fetch has no runnable pipeline.")
+    payload = payload or {}
+    runnable = [t for t in connector.report_types if t != "reference"]
+    report_type = payload.get("report_type") or (runnable[0] if runnable else "")
+    # A reference-only source cannot build a report whatever type is asked
+    # for, so the guard is on the connector, not on the requested type.
+    if not runnable or report_type == "reference":
+        detail = ("This source produces a reference dataset, not a report. "
+                  "Its files cannot be uploaded as report inputs.")
+        if record["source"] == "knbs":
+            detail += (" Install the snapshot to refresh the KNBS series the "
+                       "reports cross-check against.")
+        else:
+            detail += " Download files from ITC Trade Map instead."
+        raise HTTPException(400, detail)
+    if report_type not in ("goods", "services", "quarterly", "product",
+                           "competitor"):
+        raise HTTPException(400, "Unsupported report_type.")
+    config = str(payload.get("config") or "__auto__")
+    if config and config != "__auto__" and not _CFG_ID_RE.fullmatch(config):
+        raise HTTPException(400, f"Invalid config id: {config!r}")
+    try:
+        top = int(payload.get("top") or 20)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "top must be a number.")
+    if top < 1 or top > 100:
+        raise HTTPException(400, "top must be between 1 and 100")
+    period = str(payload.get("period") or "")
+    if report_type == "quarterly" and period not in _EXPORT_PERIODS:
+        raise HTTPException(400, "Please choose a review period.")
+
+    job_dir = _new_job_dir()
+    source_dir = Path(record["dir"])
+    for item in record.get("files") or []:
+        src = source_dir / Path(item.get("name", "")).name
+        if not src.is_file():
+            continue
+        dst = job_dir / "uploads" / _clip_name(src.name)
+        shutil.copy2(src, dst)
+        if dst.suffix.lower() in (".xls", ".xlsb", ".csv"):
+            try:
+                _convert_to_xlsx(dst)
+            except HTTPException as exc:
+                LOG.warning("Could not convert fetched file %s: %s",
+                            dst.name, exc.detail)
+    mode, err = _detect_mode(job_dir / "uploads", report_type)
+    if mode is None:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(400, err)
+    if mode.startswith("services"):
+        report_type = "services"
+    elif mode.startswith("quarterly"):
+        report_type = "quarterly"
+    elif mode in ("product", "crafts", "competitor"):
+        report_type = mode
+    elif mode in ("raw", "ready"):
+        report_type = "goods"
+    provenance_data = provenance.files_provenance(
+        job_dir / "uploads", f"fetch:{fetch_id}")
+    owner_token = _enqueue_job(
+        job_dir, report_type, config, top, mode, period, provenance_data)
+    return {
+        "job_id": job_dir.name,
+        "job_token": owner_token,
+        "status_url": f"/api/status/{job_dir.name}",
+        "mode": mode,
+        "report_type": report_type,
+    }
 
 
 # ---------------------------------------------------------------------------

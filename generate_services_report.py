@@ -58,6 +58,8 @@ from generate_report import (
     to_float, num, pct, clean_label, short_label, lighten,
     chart_font, THEME_ACCENTS, SRC, FONT_PREFERENCE,
 )
+import knbs_check
+from knbs_reference import KnbsError
 
 # Module-level cfg_path (used by ReportBuilder.resolve_path for images)
 cfg_path = ""
@@ -234,7 +236,12 @@ def parse_rank_table(path):
 
 
 def parse_balance(path):
-    """Parse Figure 1 Services Balance workbook."""
+    """Parse Figure 1 Services Balance workbook.
+
+    ``make_services_tables.py`` writes this sheet in USD billions while every
+    consumer -- the Figure 12 chart, its narrative and the Excel deliverable
+    -- labels the series USD million, so the values are rescaled here.
+    """
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.worksheets[0]
     grid = _cell_grid(ws)
@@ -251,9 +258,12 @@ def parse_balance(path):
                          if isinstance(v, (int, float)) and int(v) >= 2000]
                 if not years:
                     continue
-                exports = [to_float(row[1 + i]) for i in range(len(years))]
-                imports = [to_float(grid[ri + 1][1 + i]) for i in range(len(years))]
-                balance = [to_float(grid[ri + 2][1 + i]) for i in range(len(years))]
+                def usd_millions(v):
+                    x = to_float(v)
+                    return x * 1e3 if x is not None else None
+                exports = [usd_millions(row[1 + i]) for i in range(len(years))]
+                imports = [usd_millions(grid[ri + 1][1 + i]) for i in range(len(years))]
+                balance = [usd_millions(grid[ri + 2][1 + i]) for i in range(len(years))]
                 return {"years": years, "exports": exports,
                         "imports": imports, "balance": balance}
     raise ValueError(f"Could not parse balance series from {path}")
@@ -426,6 +436,8 @@ class ServicesAnalysis:
         self.year = int(cfg["report"].get("year", 0))  # Will be overridden by data
         self.years = []
         self.iy = 0
+        self.knbs_services = None
+        self.knbs_checks = []
 
     def load(self, excel_dir):
         files = find_service_excel_files(excel_dir)
@@ -445,7 +457,52 @@ class ServicesAnalysis:
         # Always use the latest year from the data, regardless of config
         self.year = self.years[-1] if self.years else 2024
         self.iy = self.years.index(self.year) if self.year in self.years else len(self.years) - 1
+        self.knbs_services = self._load_knbs_services()
+        self.knbs_checks = self._load_knbs_checks()
         return self
+
+    def _load_knbs_services(self):
+        """KNBS Balance of Payments years past the end of the UNCTAD series.
+
+        None when the vendored snapshot is absent, which leaves the report
+        exactly as it was before the reference layer existed.
+        """
+        try:
+            return knbs_check.services_extension(self.balance["years"][-1])
+        except KnbsError:
+            return None
+
+    def _load_knbs_checks(self):
+        """UNCTAD series against the KNBS Balance of Payments, year by year."""
+        paired = {y: v for y, v in zip(self.balance["years"],
+                                       self.balance["exports"]) if v}
+        paired_imp = {y: v for y, v in zip(self.balance["years"],
+                                           self.balance["imports"]) if v}
+        try:
+            return [knbs_check.check_services_exports(paired),
+                    knbs_check.check_services_imports(paired_imp)]
+        except KnbsError:
+            return []
+
+    def balance_chart(self):
+        """Figure 12 as (years, exports, imports, balance, knbs_from).
+
+        ``knbs_from`` is the index the KNBS-sourced tail starts at, or None
+        when the chart is entirely UNCTAD.
+        """
+        years = list(self.balance["years"])
+        exports = list(self.balance["exports"])
+        imports = list(self.balance["imports"])
+        balance = list(self.balance["balance"])
+        ext = self.knbs_services
+        if not ext:
+            return years, exports, imports, balance, None
+        start = len(years)
+        years += ext["years"]
+        exports += ext["exports"]
+        imports += ext["imports"]
+        balance += ext["balance"]
+        return years, exports, imports, balance, start
 
     def top(self, table, n):
         return table["items"][:n]
@@ -557,6 +614,20 @@ def build_narratives(a: ServicesAnalysis, cfg):
     else:
         t["s5"] = []
 
+    ext = a.knbs_services
+    if ext and bal["exports"] and bal["imports"]:
+        sentences = []
+        for i, yr in enumerate(ext["years"]):
+            word = "provisional Balance of Payments" if ext["provisional"][i] \
+                else "Balance of Payments"
+            tag = " (provisional)" if ext["provisional"][i] else ""
+            surplus = ext["balance"][i]
+            sentences.append(
+                f"KNBS's {word} extends the series: in {yr}{tag} Kenya's "
+                f"services exports reached USD {ext['exports'][i]:,.1f} million "
+                f"and imports USD {ext['imports'][i]:,.1f} million, a surplus "
+                f"of USD {surplus:,.1f} million.")
+        t["s5"] = t["s5"] + sentences
     # Kenya imports by category
     ki_items = a.top(a.table4, 5)
     t["s4_imports"] = [
@@ -1300,22 +1371,42 @@ def build_services_report(cfg, excel_dir, out_path, tmp_dir):
     # Figure 12: Balance chart (editable bar)
     b.add_table_caption(f"Figure 12: Kenya's Services Balance of Trade")
     if a.balance and a.balance.get("years"):
+        chart_years, chart_exports, chart_imports, chart_balance, _knbs = \
+            a.balance_chart()
         b.add_word_chart(
             "bar", "Kenya Services Balance of Trade (USD Million)",
-            a.balance["years"],
-            [("Exports", a.balance["exports"]),
-             ("Imports", a.balance["imports"]),
-             ("Balance of Trade", a.balance["balance"])],
+            chart_years,
+            [("Exports", chart_exports),
+             ("Imports", chart_imports),
+             ("Balance of Trade", chart_balance)],
             width_in=6.3, height_in=3.6,
             name="Figure 12 - Services Balance of Trade",
             colors=["#156082", "#E97132", "#196B24"])
     else:
         b.add_para("[Balance chart data not available]", italic=True,
                    color=RGBColor(0x9A, 0x1F, 0x1F))
-    b.add_source()
+    ext = a.knbs_services
+    if ext:
+        tail = ", ".join(str(y) for y in ext["years"])
+        b.add_source(SRC.rstrip(".") + f"; {tail} from {ext['source']}"
+                     f"; KSh to USD at {ext['rate_source']}")
+        if any(ext["provisional"]):
+            prov = ", ".join(str(y) for y, p in zip(ext["years"], ext["provisional"]) if p)
+            b.add_note(f"{prov} is KNBS's provisional Balance of Payments; "
+                       f"the KNBS 2026 Survey of International Trade in "
+                       f"Services will rebase these totals.")
+        b.add_note(f"Service-category detail in Tables 3 and 4 stays on "
+                   f"UNCTAD's EBOPS series, which ends in "
+                   f"{a.balance['years'][-1]}.")
+    else:
+        b.add_source()
     for line in narr.get("s5", []):
         if line:
             b.add_bullet(line)
+    b.add_knbs_check_table(
+        a.knbs_checks,
+        caption="Table 13a (KNBS): Kenya's Services Balance Cross-Check "
+                "Against KNBS Balance of Payments")
     b.page_break()
 
     # ============================== ANNEX ===================================

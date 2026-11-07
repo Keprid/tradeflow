@@ -102,3 +102,52 @@ def test_run_rejects_unsupported_extension():
     r = c.post("/api/run", data={"top": "20"}, files=files)
     assert r.status_code == 400
     assert "Unsupported file type" in r.json()["detail"]
+
+
+def test_platform_health_and_metrics():
+    health = c.get("/healthz")
+    assert health.status_code == 200
+    body = health.json()
+    assert body["status"] == "ok"
+    assert "queue_depth" in body
+    metrics = c.get("/metrics")
+    assert metrics.status_code == 200
+    assert "tradeflow_http_requests_total" in metrics.text
+    assert "tradeflow_queue_depth" in metrics.text
+
+
+def test_sources_catalog_is_available():
+    r = c.get("/api/sources")
+    assert r.status_code == 200
+    body = r.json()
+    ids = {source["id"] for source in body["sources"]}
+    # UNCTADstat builds the Services Brief workbooks; KNBS rebuilds the
+    # reference snapshot the reports cross-check against. The other open-data
+    # sources were dropped as unusable.
+    assert ids == {"unctad", "knbs"}
+    for source in body["sources"]:
+        assert isinstance(source["credentials_ready"], bool)
+        assert isinstance(source["params"], list)
+        assert isinstance(source["used_by"], list)
+    unctad = next(s for s in body["sources"] if s["id"] == "unctad")
+    assert unctad["used_by"] == []      # a report input, not a cross-check
+
+
+def test_new_platform_panels_are_in_index():
+    html = c.get("/").text
+    assert 'id="sources-card"' in html
+    assert 'id="insight-card"' in html
+    assert 'id="jobs-card"' in html
+    assert 'id="share-banner"' in html
+
+
+def test_unknown_job_platform_endpoints_404():
+    assert c.get(f"/api/preview/{JOB0}").status_code == 404
+    assert c.get(f"/api/quality/{JOB0}").status_code == 404
+    assert c.get(f"/api/jobs/{JOB0}/comments").status_code == 404
+    assert c.post(f"/api/share/{JOB0}").status_code == 404
+
+
+def test_share_page_rejects_missing_or_invalid_token():
+    assert c.get(f"/share/{JOB0}").status_code == 404
+    assert c.get(f"/share/{JOB0}", params={"share": "bad"}).status_code == 404

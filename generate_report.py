@@ -66,6 +66,9 @@ from docx.shared import Emu, Inches, Pt, RGBColor
 from charts import draw_share_pie, series_shares, slice_callouts, new_fig, finish
 from country_names import (display_name, is_africa, narrative_ref,
                            short_product_name, title_partner, title_case)
+import knbs_check
+import knbs_regions
+from knbs_reference import KnbsError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -562,6 +565,7 @@ class Analysis:
         self.years = YEAR_HEADER
         self.iy = 0                       # set in load(), once the data is read
         self.i5 = 0
+        self.knbs_checks = []
 
     def load(self, excel_dir):
         files = find_excel_files(excel_dir)
@@ -602,7 +606,25 @@ class Analysis:
         self.iy = self.years.index(self.year)
         self.i5 = len(self.years) - 1
         self._warn_hs_level()
+        self.knbs_checks = self._load_knbs_checks()
         return self
+
+    def _load_knbs_checks(self):
+        """Bilateral figures KNBS publishes for the same flow as Figure 1.
+
+        Empty when the snapshot is absent or KNBS groups this partner into a
+        continent line instead of naming it; the report then prints no
+        cross-check rather than an empty one.
+        """
+        def by_year(values):
+            return {y: v for y, v in zip(self.balance["years"], values) if v}
+        try:
+            return knbs_check.partner_checks(
+                self.country,
+                exports_by_year=by_year(self.balance["exports"]),
+                imports_by_year=by_year(self.balance["imports"]))
+        except KnbsError:
+            return []
 
     def _warn_hs_level(self):
         """Heads-up when a product table appears to be at HS2 rather than the
@@ -1792,11 +1814,15 @@ class ReportBuilder:
         p = self.doc.add_paragraph()
         r = p.add_run(_title_case(text))
         self._style_run(r, italic=True, bold=True)
-        m = re.match(r"^(Table|Figure)\s+\d+\s*[:\-–]", str(text), re.IGNORECASE)
+        m = re.match(r"^(Table|Figure)\s+\d+[a-z]?\s*(?:\([^)]*\))?\s*[:\-–]",
+                     str(text), re.IGNORECASE)
         if m:
-            # style drives the automated List of Tables / List of Figures
-            p.style = self.doc.styles[
-                "Caption Table" if m.group(1).lower() == "table" else "Caption Figure"]
+            # the style drives the automated List of Tables / List of Figures,
+            # and only exists in the KEPROBA template
+            name = ("Caption Table" if m.group(1).lower() == "table"
+                    else "Caption Figure")
+            if name in self.doc.styles:
+                p.style = self.doc.styles[name]
         else:
             p.paragraph_format.space_before = Pt(10)
         return p
@@ -2340,6 +2366,151 @@ class ReportBuilder:
         self._fit_table_on_page(table)
         return table
 
+    def add_knbs_check_table(self, checks, caption="KNBS Cross-Check"):
+        """Reconcile the USD figures a report prints against KNBS's KSh series.
+
+        ``checks`` is a list of the dictionaries ``knbs_check`` returns.  Each
+        divides a published Kenyan-shilling series by the Economic Survey's
+        annual average exchange rate, so agreement with KNBS is an independent
+        confirmation of a number rather than a restatement of the same source.
+        Series with no KNBS counterpart are named in a note instead of being
+        printed as zeros.
+        """
+        checks = [c for c in (checks or []) if c]
+        live = [c for c in checks if c.get("rows")]
+        missing = [c for c in checks if not c.get("rows")]
+        if not live:
+            if missing:
+                self.add_note("KNBS cross-check not available for: "
+                              + "; ".join(c["label"] for c in missing) + ".")
+            return None
+        rows = [(c["label"], r) for c in live for r in c["rows"]]
+        self.add_table_caption(caption)
+        table = self.doc.add_table(rows=1 + len(rows), cols=5)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._set_table_widths(table, [2600, 700, 1500, 1500, 1200])
+        head = ["Series", "Year", "This report (USD m)", "KNBS (USD m)",
+                "Difference"]
+        for ci, h in enumerate(head):
+            self._cell_text(table.cell(0, ci), h, bold=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        threshold = live[0].get("review_threshold_pct") or 2.0
+        for ri, (label, r) in enumerate(rows, 1):
+            diverged = abs(r["diff_pct"]) > threshold
+            self._cell_text(table.cell(ri, 0), label, wrap=True)
+            self._cell_text(table.cell(ri, 1), str(r["year"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 2), num(r["ours"]),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 3),
+                            num(r["knbs"]) + ("*" if r.get("provisional") else ""),
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 4), f"{r['diff_pct']:+.2f}%",
+                            bold=diverged, color=RED if diverged else None,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
+        worst = max(c["max_abs_diff_pct"] for c in live)
+        self.add_note(f"{worst:.2f}% is the largest gap between the two sources"
+                      + (", within the tolerance expected of customs valuation "
+                         "and rounding." if worst <= threshold else
+                         ", above the review tolerance -- check the figures "
+                         "before publication."))
+        if any(r.get("provisional") for _, r in rows):
+            self.add_note("* KNBS publishes this year as provisional.")
+        sources = [c["source"] for c in live if c.get("source")]
+        rates = [c["rate_source"] for c in live if c.get("rate_source")]
+        self.add_source("Source: " + "; ".join(dict.fromkeys(sources))
+                        + "; KSh to USD at " + "; ".join(dict.fromkeys(rates)))
+        if missing:
+            self.add_note("No KNBS counterpart available for: "
+                          + "; ".join(c["label"] for c in missing) + ".")
+        return table
+
+    def add_knbs_sector_table(self, ctx, caption="KNBS Sectoral Context"):
+        """What KNBS says about the industry behind a product.
+
+        ``ctx`` is a ``knbs_sector.context`` result.  Each row carries its own
+        unit because the Survey itself prints hectares beside tonnes beside
+        KSh per 100 Kg, and a year KNBS holds provisionally is marked with an
+        asterisk in its column header.  Years no row can fill are dropped.
+        """
+        rows, years = ctx.get("rows") or [], ctx.get("years") or []
+        if len(rows) < 2 or not years:
+            return None
+        self.add_table_caption(caption)
+        table = self.doc.add_table(rows=1 + len(rows), cols=2 + len(years))
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._set_table_widths(table, [2600, 1400] + [850] * len(years))
+        provisional = set(ctx.get("provisional") or [])
+        head = ["Indicator", "Unit"] + [
+            f"{y}*" if y in provisional else str(y) for y in years]
+        for ci, h in enumerate(head):
+            self._cell_text(table.cell(0, ci), h, bold=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        for ri, r in enumerate(rows, 1):
+            self._cell_text(table.cell(ri, 0), r["label"], wrap=True)
+            self._cell_text(table.cell(ri, 1), r["unit"])
+            digits = 1 if r.get("digits") is None else r["digits"]
+            for ci, y in enumerate(years, 2):
+                v = r["values"].get(y)
+                self._cell_text(
+                    table.cell(ri, ci),
+                    "n/a" if v is None else num(v, digits),
+                    align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
+        self.add_source("Source: Kenya National Bureau of Statistics, "
+                        + "; ".join(ctx["sources"])
+                        + " (KNBS Open Data Portal)")
+        for note in ctx.get("notes") or []:
+            self.add_note(note)
+        if provisional:
+            self.add_note("* KNBS publishes this year as provisional.")
+        return table
+
+    def add_knbs_region_table(self, d, caption=None):
+        """KNBS's own regional split of one year of Kenya's trade in goods.
+
+        ``d`` is a ``knbs_regions.decomposition`` result.  Sub-regions are
+        indented under their continent and the blocs (European Union, East
+        African Community) are marked "of which", because they cut across the
+        regions instead of adding up to them.
+        """
+        rows = [r for r in d["rows"] if r["value"] is not None]
+        if len(rows) < 2:
+            return None
+        self.add_table_caption(
+            caption or f"Kenya's {d['flow'].lower()} by region, {d['year']}")
+        table = self.doc.add_table(rows=1 + len(rows), cols=3)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._set_table_widths(table, [4200, 2600, 2600])
+        head = ["Region", "Value (USD million)", "Share of total"]
+        for ci, h in enumerate(head):
+            self._cell_text(table.cell(0, ci), h, bold=True,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        nbsp = "\u00a0\u00a0\u00a0\u00a0"
+        for ri, r in enumerate(rows, 1):
+            label = ("of which: " if r.get("bloc") else "") + r["name"]
+            top = r["level"] == 0
+            self._cell_text(table.cell(ri, 0), nbsp * r["level"] + label,
+                            bold=top, wrap=True)
+            self._cell_text(table.cell(ri, 1), num(r["value"]), bold=top,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+            self._cell_text(table.cell(ri, 2), pct(r["share"]), bold=top,
+                            align=WD_ALIGN_PARAGRAPH.CENTER)
+        self._fit_table_on_page(table)
+        self.add_source(f"{d['source']}; KSh to USD at {d['rate_source']}")
+        if d["provisional"]:
+            self.add_note(f"{d['year']} is KNBS's provisional trade figure.")
+        if not d["reconciles"]:
+            self.add_note(f"Regions do not add up to the total: the largest "
+                          f"gap is {d['max_residual_pct']}% of it. KNBS may "
+                          f"have regrouped its partner codes -- check before "
+                          f"publishing any share.")
+        return table
+
     def add_africa_focus_table(self, a: Analysis, table=None):
         """Compact Table showing the partner's exports destined to Africa,
         with the Kenya row highlighted.  Backs the 'Africa / Kenya' insight."""
@@ -2601,6 +2772,99 @@ def bilateral_bullets(a):
 
 
 # ---------------------------------------------------------------------------
+# KNBS regional decomposition (optional block)
+# ---------------------------------------------------------------------------
+def knbs_region_bullets(d, previous):
+    """Two or three lines reading the regional split the way KNBS prints it."""
+    rows = [r for r in d["rows"] if r["value"] is not None and not r.get("bloc")]
+    total = next((r for r in rows if r["code"] == "_T"), None)
+    regions = [r for r in rows if r["level"] == 1 and r["code"] != "_TOTHER"]
+    if not regions:
+        return []
+    bullets = []
+    lead = max(regions, key=lambda r: r["value"])
+    bullets.append(
+        f"KNBS's own regional split puts {lead['name']} first: USD "
+        f"{lead['value']:,.1f} million in {d['year']}, {pct(lead['share'])} of "
+        f"Kenya's total merchandise exports.")
+    if len(regions) >= 2:
+        second = sorted(regions, key=lambda r: -r["value"])[1]
+        bullets.append(
+            f"{second['name']} follows at USD {second['value']:,.1f} million "
+            f"({pct(second['share'])}), with the remaining regions together "
+            f"accounting for {pct(total['share'] - lead['share'] - second['share'])}.")
+    subs = [r for r in rows if r["level"] == 2]
+    if subs:
+        top_sub = max(subs, key=lambda r: r["value"])
+        bullets.append(
+            f"By sub-region {top_sub['name']} is the largest single grouping: "
+            f"USD {top_sub['value']:,.1f} million, {pct(top_sub['share'])} of "
+            f"Kenya's total export earnings.")
+    if previous:
+        by_code = {r["code"]: r for r in previous["rows"] if r["value"]}
+        movers = [(r, r["value"] / by_code[r["code"]]["value"] - 1)
+                  for r in regions if r["code"] in by_code
+                  and by_code[r["code"]]["value"]]
+        if movers:
+            up = max(movers, key=lambda m: m[1])
+            down = min(movers, key=lambda m: m[1])
+            bullets.append(
+                f"Against {previous['year']}, {up[0]['name']} gained "
+                f"{pct(up[1])} while {down[0]['name']} lost "
+                f"{pct(abs(down[1]))}.")
+    return bullets
+
+
+def add_knbs_export_regions(b):
+    """Section 3.6: Kenya's merchandise exports by KNBS region.
+
+    Returns the decomposition, or None when the reference snapshot is absent
+    -- the brief is then exactly what it was before this block existed.
+    """
+    try:
+        d = knbs_regions.decomposition("exports_by_destination")
+        available = knbs_regions.years("exports_by_destination")
+        previous = (knbs_regions.decomposition("exports_by_destination",
+                                               d["year"] - 1)
+                    if d["year"] - 1 in available else None)
+    except KnbsError:
+        return None
+    b.add_heading(f"3.6 Kenya's Export Destinations by Region", level=2)
+    b.add_para(
+        "KNBS groups Kenya's customs destinations into regions, and publishes "
+        "one year ahead of the international databases, so the split below "
+        "complements the country list in Table 3.", italic=True, size=10)
+    b.add_knbs_region_table(
+        d,
+        caption=f"Table 7a (KNBS): Kenya's Exports by Region in {d['year']}")
+    for line in knbs_region_bullets(d, previous):
+        b.add_bullet(line)
+    return d
+
+
+def add_knbs_bilateral_check(b, a):
+    """Hold Figure 1 against KNBS's own customs figures for the same partner.
+
+    Nothing is printed when KNBS does not name the partner separately, which
+    is the case for most of its smaller destinations.
+    """
+    checks = a.knbs_checks
+    if not checks:
+        return False
+    b.add_para(
+        f"KNBS reports Kenya's customs flow with {a.country} in Kenyan "
+        f"shillings. Table 4a converts the same two lines at the Economic "
+        f"Survey's annual average exchange rate, so Figure 1 is checked "
+        f"against a source independent of ITC.",
+        italic=True, size=10)
+    b.add_knbs_check_table(
+        checks,
+        caption="Table 4a (KNBS): Bilateral Trade Cross-Check Against "
+                "KNBS Customs Data")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Main report assembly
 # ---------------------------------------------------------------------------
 def build_report(cfg, excel_dir, out_path, tmp_dir):
@@ -2742,6 +3006,7 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
     b.add_source()
     for line in narr["s31"]:
         b.add_bullet(line)
+    add_knbs_bilateral_check(b, a)
 
     # Export share figure (placed after Table 5, mirroring Table 6 -> Figure 3)
     # 3.2 Export products
@@ -2805,6 +3070,10 @@ def build_report(cfg, excel_dir, out_path, tmp_dir):
         "the strongest market alignment opportunities.",
         italic=True)
     b.page_break()
+
+    # ============ 3.6 KENYA'S EXPORT DESTINATIONS BY REGION (KNBS) ==========
+    if add_knbs_export_regions(b):
+        b.page_break()
 
     # ============== SECTION 4 (optional): TRADE AGREEMENTS ==================
     if has_ta:

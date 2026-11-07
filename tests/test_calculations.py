@@ -453,3 +453,87 @@ def test_load_monthly_cache_restores_flow_warnings(tmp_path):
     df2 = load_monthly(str(tmp_path))
     assert len(df2) == 1
     assert any("dropped 1 row(s)" in w for w in period_data.WARNINGS)
+
+
+# ---------------------------------------------------------------------------
+# Services balance: figure-1 units and the KNBS extension
+# ---------------------------------------------------------------------------
+def _write_balance(tmp_path):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Figure 1"
+    for row in ([None],
+                 [None, 2023, 2024],
+                 ["Exports", 5405.3, 5531.1],
+                 ["Imports", 4803.4, 4922.9],
+                 ["Balance of Trade", 601.9, 608.2]):
+        ws.append(row)
+    path = tmp_path / "Figure 1 Services Balance.xlsx"
+    wb.save(str(path))
+    return str(path)
+
+
+def test_parse_balance_returns_usd_millions(tmp_path):
+    """Figure 1 is written in USD billions but labelled USD millions."""
+    import generate_services_report as gsr
+    bal = gsr.parse_balance(_write_balance(tmp_path))
+    assert bal["years"] == [2023, 2024]
+    assert bal["exports"] == [pytest.approx(5_405_300.0),
+                              pytest.approx(5_531_100.0)]
+    assert bal["balance"] == [pytest.approx(e - i) for e, i in
+                              zip(bal["exports"], bal["imports"])]
+
+
+def _analysis(bal):
+    import generate_services_report as gsr
+    cfg = {"country": {"name": "Kenya", "short": "KE", "possessive": "Kenya's"},
+           "report": {"year": 2024}}
+    a = gsr.ServicesAnalysis(cfg)
+    a.balance = bal
+    a.knbs_services = a._load_knbs_services()
+    return a
+
+
+def test_knbs_extension_absent_when_snapshot_missing(monkeypatch):
+    import knbs_check
+    from knbs_reference import KnbsError
+
+    def no_snapshot(upto_year):
+        raise KnbsError("refresh the snapshot")
+    monkeypatch.setattr(knbs_check, "services_extension", no_snapshot)
+    a = _analysis({"years": [2023, 2024], "exports": [1.0, 2.0],
+                   "imports": [1.0, 1.0], "balance": [0.0, 1.0]})
+    assert a.knbs_services is None
+    # the chart is unchanged: same years, same series, no KNBS start index
+    assert a.balance_chart() == ([2023, 2024], [1.0, 2.0], [1.0, 1.0],
+                                 [0.0, 1.0], None)
+
+
+def test_knbs_extension_appends_years_unctad_lacks(monkeypatch):
+    import knbs_check
+    exports = {2024: 9000.0, 2025: 9500.0}
+    imports = {2024: 6000.0, 2025: 6200.0}
+    monkeypatch.setattr(knbs_check, "services_2025", lambda: {
+        "exports": exports, "imports": imports,
+        "balance": {y: exports[y] - imports[y] for y in exports}})
+    a = _analysis({"years": [2023, 2024], "exports": [5100.0, 5531.1],
+                   "imports": [4600.0, 4922.9], "balance": [500.0, 608.2]})
+    assert a.knbs_services["years"] == [2025]
+    assert a.knbs_services["balance"] == [pytest.approx(3300.0)]
+    years, chart_exports, chart_imports, balance, knbs_from = a.balance_chart()
+    assert years == [2023, 2024, 2025]
+    assert knbs_from == 2                      # only the appended tail is KNBS
+    assert chart_exports[-1] == pytest.approx(9500.0)
+    assert balance[-1] == pytest.approx(3300.0)
+    assert chart_exports[:2] == [5100.0, 5531.1]   # UNCTAD years untouched
+
+
+def test_knbs_extension_is_empty_when_unctad_already_reaches_the_end(monkeypatch):
+    import knbs_check
+    exports = {2024: 9000.0}
+    monkeypatch.setattr(knbs_check, "services_2025", lambda: {
+        "exports": exports, "imports": exports,
+        "balance": {y: 0.0 for y in exports}})
+    a = _analysis({"years": [2023, 2024], "exports": [5100.0, 5531.1],
+                   "imports": [4600.0, 4922.9], "balance": [500.0, 608.2]})
+    assert a.knbs_services is None
