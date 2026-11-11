@@ -199,7 +199,7 @@ def _read_xlsx(path, sheet):
                      "net value", "flow", "hs_c", "hs code",
                      "commodity code", "destination name", "destination",
                      "destin", "origin name", "origin", "partner",
-                     "partner.1", "partner name")]
+                     "partner.1", "partner name", "insurance", "freight")]
     if not need or "year" not in lower or "month" not in lower:
         # without Year/Month nothing can be attributed to a period; bail out
         # instead of raising (the caller would fall back to the slow parser).
@@ -299,7 +299,19 @@ def _read_one(path, sheet):
     out["Group"] = [g[0] for g in groups]
     out["GroupLabel"] = [g[1] for g in groups]
 
-    out["Value"] = pd.to_numeric(df[col_val], errors="coerce").fillna(0.0) / 1e9
+    out["Value"] = pd.to_numeric(df[col_val], errors="coerce").fillna(0.0)
+    # KNBS imports carry FOB-like Value plus separate Insurance / Freight
+    # columns; KRA's "CIF Value" already includes them.  Add the two so both
+    # sources are compared on the same CIF basis.
+    col_ins = _pick(cols, "Insurance")
+    col_frt = _pick(cols, "Freight")
+    if col_ins is not None or col_frt is not None:
+        extra = pd.Series(0.0, index=df.index)
+        for c in (col_ins, col_frt):
+            if c is not None:
+                extra = extra + pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        out["Value"] = out["Value"] + extra.where(out["Side"] == "Imports", 0.0)
+    out["Value"] = out["Value"] / 1e9
     out = out.dropna(subset=["Year", "Month"])
     out["Year"] = out["Year"].astype(int)
     out["Month"] = out["Month"].astype(int)

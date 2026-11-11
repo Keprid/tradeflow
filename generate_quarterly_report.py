@@ -398,6 +398,7 @@ class QuarterAnalysis:
         self.t2 = None   # top export products
         self.a1 = None   # imports by supplying countries
         self.a2 = None   # imports by products
+        self.cross = {"exports": {}, "imports": {}}   # (partner, product) -> [prev, cur]
 
     # -- loading ------------------------------------------------------------
     def load(self, excel_dir):
@@ -438,6 +439,83 @@ class QuarterAnalysis:
         self.month_names = self.t1["months"]
         self.quarter = quarter_label(self.month_names)
         return self
+
+    def load_crosstabs(self, excel_dir):
+        """Aggregate the Data sheets into (partner, product) totals.
+
+        Gives the narrative the partner-product cross view (which product
+        drove a market's rise/fall) that the rank tables cannot provide.
+        Missing Data sheets degrade silently to empty cross-tabs.
+        """
+        files = find_workbooks(excel_dir)
+        for side in ("exports", "imports"):
+            agg = {}
+            wb = openpyxl.load_workbook(files[side], data_only=True,
+                                        read_only=True)
+            try:
+                if "Data" not in wb.sheetnames:
+                    self.cross[side] = agg
+                    continue
+                ws = wb["Data"]
+                rows = ws.iter_rows(values_only=True)
+                next(rows, None)          # header row
+                for row in rows:
+                    if row is None or len(row) < 5:
+                        continue
+                    yr, _mo, partner, product, value = row[:5]
+                    if yr is None or partner is None or product is None:
+                        continue
+                    try:
+                        yr = int(yr)
+                    except (TypeError, ValueError):
+                        continue
+                    idx = 1 if yr == self.year else 0
+                    key = (str(partner).strip().upper(),
+                           str(product).strip())
+                    cell = agg.setdefault(key, [0.0, 0.0])
+                    try:
+                        cell[idx] += float(value or 0.0)
+                    except (TypeError, ValueError):
+                        pass
+            finally:
+                wb.close()
+            self.cross[side] = agg
+        return self
+
+    # -- partner x product driver analysis -----------------------------------
+    def partner_drivers(self, side, partner, topn=3, min_abs=0.05):
+        """Products behind a partner's change: [(product, prev, cur, chg)]."""
+        out = []
+        for (p, prod), (prev, cur) in self.cross[side].items():
+            if p != str(partner).strip().upper():
+                continue
+            chg = cur - prev
+            if abs(chg) < min_abs:
+                continue
+            out.append((prod, prev, cur, chg))
+        out.sort(key=lambda t: abs(t[3]), reverse=True)
+        return out[:topn]
+
+    def product_drivers(self, side, product, topn=3, min_abs=0.05):
+        """Partners behind a product's change: [(partner, prev, cur, chg)]."""
+        key = str(product).strip().upper()
+        out = []
+        for (p, prod), (prev, cur) in self.cross[side].items():
+            if prod.strip().upper() != key:
+                continue
+            chg = cur - prev
+            if abs(chg) < min_abs:
+                continue
+            out.append((p, prev, cur, chg))
+        out.sort(key=lambda t: abs(t[3]), reverse=True)
+        return out[:topn]
+
+    def top_movers(self, table, topn=3, min_abs=1.0):
+        """Items with the largest absolute YoY change in ``table``."""
+        rows = [d for d in table["items"]
+                if d["change"] is not None and abs(d["change"]) >= min_abs]
+        rows.sort(key=lambda d: abs(d["change"]), reverse=True)
+        return rows[:topn]
 
     # -- basic aggregates ---------------------------------------------------
     @property
@@ -601,6 +679,272 @@ def _share_doughnut_data(a, table, other_label, year="cur"):
 
 
 # ---------------------------------------------------------------------------
+# Table-as-image renderer (reference-report style)
+# ---------------------------------------------------------------------------
+# The reference report embeds the big rank tables as full-page images
+# (pasted from Excel) instead of Word tables, so each table always fits a
+# single page and keeps the Century Gothic 12 workbook formatting. The
+# renderer below reproduces that: the table is drawn at its natural size
+# (Century Gothic 12 everywhere) and inserted into Word scaled to the
+# text width, exactly like the pasted EMF tables in the reference.
+import textwrap
+
+TBL_FONT = "Century Gothic"
+TBL_FONT_SIZE = 12                      # pt, as in the workbook tables
+TBL_HDR_FILL = "#FFFFFF"
+TBL_HDR_TEXT = "#000000"
+TBL_TOTAL_FILL = "#FFFFFF"
+TBL_ROW_EVEN = "#FFFFFF"
+TBL_ROW_ODD = "#FFFFFF"
+TBL_GRID = "#B0B0B0"
+TBL_GREEN = "#00B050"
+TBL_RED = "#FF0000"
+TBL_UNIT_NOTE = "(Value in Ksh. Billion)"
+
+_CHAR_W = 0.088          # approx inches per character, Century Gothic 12
+_ROW_H = 0.28            # inches per text line
+_ROW_PAD = 0.10
+
+
+def _wrap_label(text, width_chars):
+    lines = []
+    for chunk in str(text).split("\n"):
+        lines.extend(textwrap.wrap(chunk, width_chars) or [""])
+    return lines
+
+
+def _col_w(headers, values, min_w=0.55, pad=0.28):
+    """Width for a numeric column: widest of header / formatted values."""
+    longest = max([len(str(h)) for h in headers] +
+                  [len(str(v)) for v in values] + [4])
+    return max(min_w, longest * _CHAR_W + pad)
+
+
+def _draw_cell(ax, x, y_top, w, h, text, align="center", bold=False,
+               color="#000000", fontsize=TBL_FONT_SIZE):
+    if text is None or str(text) == "":
+        return
+    tx = x + w / 2 if align == "center" else x + 0.06
+    ha = "center" if align == "center" else "left"
+    ax.text(tx, y_top - h / 2, str(text), ha=ha, va="center",
+            fontsize=fontsize, color=color, family=TBL_FONT,
+            fontweight="bold" if bold else "normal")
+
+
+def render_table_image(parsed, out_path, item_header="ITEM", year=None):
+    """Render one rank table (comparison or single-year) to a PNG.
+
+    Layout mirrors the workbook sheets: dark-blue header block, alternating
+    row fills, light-blue All-other / Grand-total rows and green-up /
+    red-down arrows in the change columns. Returns the PNG path.
+    """
+    comp = bool(parsed.get("comparison"))
+    months = [m[:3] for m in parsed["months"]]
+    n = len(months)
+    years = parsed.get("years") or [None, None]
+    Yc = years[1] or year or ""
+    Yp = years[0] if comp else None
+
+    def fmt(v):
+        return num(v) if v is not None else ""
+
+    def pct_fmt(v):
+        return ("%.1f%%" % (v * 100)) if v is not None else ""
+
+    data_rows = list(parsed["items"])
+    if parsed.get("all_other"):
+        data_rows.append(parsed["all_other"])
+    grand = parsed["grand"]
+
+    # ---- column widths -----------------------------------------------------
+    if comp:
+        chg_vals = [d["change"] for d in data_rows] + [grand["change"]]
+        pct_vals = [d["pct"] for d in data_rows] + [grand["pct"]]
+        w_rank = 0.45
+        w_item = 3.0
+        w_month = _col_w(months, [fmt(v) for d in data_rows
+                                  for v in list(d["months"][0]) +
+                                  list(d["months"][1])])
+        w_total = _col_w(["Total"], [fmt(d["totals"][0])
+                                     for d in data_rows] +
+                         [fmt(grand["totals"][0])], min_w=0.75)
+        w_chg = _col_w(["Total change"], [fmt(v) for v in chg_vals],
+                       min_w=0.95) + 0.15        # room for the arrow
+        w_pct = _col_w(["%", "% change"], [pct_fmt(v) for v in pct_vals],
+                       min_w=0.7)
+        widths = ([w_rank, w_item] + [w_month] * n + [w_total] +
+                  [w_month] * n + [w_total, w_chg, w_pct])
+        ncols = len(widths)
+        c_chg, c_pct = ncols - 2, ncols - 1
+        p_first, p_total = 2, 2 + n
+        c_first, c_total = p_total + 1, p_total + 1 + n
+    else:
+        w_rank = 0.45
+        w_item = 3.4
+        w_month = _col_w(months, [fmt(v) for d in data_rows
+                                  for v in d["months"][1]])
+        w_total = _col_w(["Total"], [fmt(d["totals"][1])
+                                     for d in data_rows] +
+                         [fmt(grand["totals"][1])], min_w=0.8)
+        w_share = 0.75
+        widths = [w_rank, w_item] + [w_month] * n + [w_total, w_share]
+        ncols = len(widths)
+        c_share = ncols - 1
+        c_total = 2 + n
+
+    total_w = sum(widths)
+
+    # ---- row heights (wrapped item labels) ---------------------------------
+    item_chars = max(12, int(w_item / _CHAR_W))
+    row_lines = []
+    for d in data_rows:
+        row_lines.append(max(1, len(_wrap_label(d["name"], item_chars))))
+    grand_lines = max(1, len(_wrap_label(grand["name"], item_chars)))
+
+    hdr_h0, hdr_h1 = 0.30, 0.30
+    note_h = 0.22
+    row_hs = [ln * _ROW_H + _ROW_PAD for ln in row_lines]
+    grand_h = grand_lines * _ROW_H + _ROW_PAD
+    fig_h = note_h + hdr_h0 + hdr_h1 + sum(row_hs) + grand_h + 0.1
+
+    fig = plt.figure(figsize=(total_w, fig_h), dpi=200)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, total_w)
+    ax.set_ylim(0, fig_h)
+    ax.axis("off")
+    ax.set_facecolor("white")
+
+    def rect(x, y, w, h, fill):
+        from matplotlib.patches import Rectangle
+        ax.add_patch(Rectangle((x, y), w, h, facecolor=fill,
+                               edgecolor="none", zorder=0))
+
+    # ---- column x positions -------------------------------------------------
+    xs = [0.0]
+    for w in widths:
+        xs.append(xs[-1] + w)
+
+    # unit note
+    ax.text(0, fig_h - note_h / 2, TBL_UNIT_NOTE, ha="left", va="center",
+            fontsize=9, style="italic", color="#555555", family=TBL_FONT)
+
+    y = fig_h - note_h
+    y_hdr0_bot = y - hdr_h0
+    y_hdr1_bot = y_hdr0_bot - hdr_h1
+
+    # header band fills
+    rect(0, y_hdr1_bot, total_w, y - y_hdr1_bot, TBL_HDR_FILL)
+
+    def hcenter(c0, c1, text, row_top, row_h, fontsize=TBL_FONT_SIZE):
+        x0, x1 = xs[c0], xs[c1]
+        _draw_cell(ax, x0, row_top, x1 - x0, row_h, text,
+                   bold=True, color=TBL_HDR_TEXT, fontsize=fontsize)
+
+    # row 0 (group headers) - merged cells drawn as one label per span
+    # rank + item span both header rows
+    _draw_cell(ax, xs[0], y, widths[0], hdr_h0 + hdr_h1, "Rank",
+               bold=True, color=TBL_HDR_TEXT)
+    _draw_cell(ax, xs[1], y, widths[1], hdr_h0 + hdr_h1, item_header,
+               bold=True, color=TBL_HDR_TEXT)
+    if comp:
+        hcenter(p_first, p_total + 1, str(Yp), y, hdr_h0)
+        hcenter(c_first, c_total + 1, str(Yc), y, hdr_h0)
+        hcenter(c_chg, c_pct + 1, "Change in\n%d-%d" % (Yp, Yc),
+                y, hdr_h0, fontsize=TBL_FONT_SIZE - 1)
+        for base, tcol in ((p_first, p_total), (c_first, c_total)):
+            for k, m in enumerate(months):
+                hcenter(base + k, base + k + 1, m, y_hdr0_bot, hdr_h1)
+            hcenter(tcol, tcol + 1, "Total", y_hdr0_bot, hdr_h1)
+        hcenter(c_chg, c_chg + 1, "Total change", y_hdr0_bot, hdr_h1,
+                fontsize=TBL_FONT_SIZE - 1)
+        hcenter(c_pct, c_pct + 1, "%", y_hdr0_bot, hdr_h1)
+    else:
+        for k, m in enumerate(months):
+            hcenter(2 + k, 3 + k, m, y, hdr_h0)
+        hcenter(c_total, c_total + 1, "Total", y, hdr_h0)
+        # share header spans both header rows (year needs the space)
+        _draw_cell(ax, xs[c_share], y, widths[c_share],
+                   hdr_h0 + hdr_h1, "Share\nin %s" % Yc,
+                   bold=True, color=TBL_HDR_TEXT,
+                   fontsize=TBL_FONT_SIZE - 1)
+        # unit label spanning the month+total columns
+        hcenter(2, c_total + 1, TBL_UNIT_NOTE, y_hdr0_bot, hdr_h1,
+                fontsize=10)
+
+    y = y_hdr1_bot
+    # ---- data rows -----------------------------------------------------------
+    def arrow_cell(ri, c, value, kind, h):
+        if value is None:
+            txt = "\u2013"
+            color = "#808080"
+        else:
+            up = value >= 0
+            txt = ("\u25b2 " if up else "\u25bc ") + \
+                (("%.1f%%" % (value * 100)) if kind == "pct" else fmt(value))
+            color = TBL_GREEN if up else TBL_RED
+        _draw_cell(ax, xs[c], y, widths[c], h, txt,
+                   bold=True, color=color, fontsize=TBL_FONT_SIZE - 1)
+
+    def emit(d, ri, is_total=False, is_grand=False):
+        nonlocal y
+        h = grand_h if is_grand else row_hs[ri]
+        fill = TBL_TOTAL_FILL if (is_total or is_grand) else \
+            (TBL_ROW_EVEN if ri % 2 == 0 else TBL_ROW_ODD)
+        rect(0, y - h, total_w, h, fill)
+        bold = is_total or is_grand
+        name_lines = _wrap_label(d["name"], item_chars)
+        _draw_cell(ax, xs[0], y, widths[0], h,
+                   str(d["rank"]) if d.get("rank") is not None else "",
+                   bold=bold)
+        _draw_cell(ax, xs[1], y, widths[1], h,
+                   "\n".join(name_lines), align="left", bold=bold)
+        if comp:
+            for base, tcol, mvals, tot in (
+                    (p_first, p_total, d["months"][0], d["totals"][0]),
+                    (c_first, c_total, d["months"][1], d["totals"][1])):
+                for k, v in enumerate(mvals):
+                    _draw_cell(ax, xs[base + k], y, widths[base + k], h,
+                               fmt(v), bold=bold)
+                _draw_cell(ax, xs[tcol], y, widths[tcol], h, fmt(tot),
+                           bold=bold)
+            arrow_cell(ri, c_chg, d.get("change"), "chg", h)
+            arrow_cell(ri, c_pct, d.get("pct"), "pct", h)
+        else:
+            for k, v in enumerate(d["months"][1]):
+                _draw_cell(ax, xs[2 + k], y, widths[2 + k], h, fmt(v),
+                           bold=bold)
+            _draw_cell(ax, xs[c_total], y, widths[c_total], h,
+                       fmt(d["totals"][1]), bold=bold)
+            sh = d.get("share")
+            _draw_cell(ax, xs[c_share], y, widths[c_share], h,
+                       ("%.1f%%" % (sh * 100)) if sh is not None else "",
+                       bold=bold)
+        y -= h
+
+    ri = 0
+    for d in data_rows:
+        is_total = parsed.get("all_other") is not None and d is data_rows[-1] \
+            and d.get("rank") is None
+        emit(d, ri, is_total=is_total)
+        ri += 1
+    emit(grand, ri, is_grand=True)
+
+    # grid lines
+    for yb in [fig_h - note_h, y_hdr1_bot] + \
+            [y_hdr1_bot - sum(row_hs[:i + 1]) for i in range(len(row_hs))] + \
+            [0.05]:
+        ax.plot([0, total_w], [yb, yb], color=TBL_GRID, linewidth=0.6,
+                zorder=1)
+    for xv in xs:
+        ax.plot([xv, xv], [0.05, fig_h - note_h], color=TBL_GRID,
+                linewidth=0.6, zorder=1)
+
+    fig.savefig(out_path, facecolor="white")
+    plt.close(fig)
+    return out_path
+
+
+# ---------------------------------------------------------------------------
 # Narrative generation (every figure derived from the analysed data)
 # ---------------------------------------------------------------------------
 _KEEP_CAPS = {"USA", "UAE", "UK", "US", "EU", "DRC", "USSR", "GCC"}
@@ -617,337 +961,600 @@ def _mkt(name):
     return disp
 
 
+def _chg_phrase(prev, cur, y_prev, Y):
+    """'an increase of Ksh 2.2 billion (5.0%), from Ksh 44.0 billion in
+    2025 to Ksh 46.3 billion in 2026' -- reference-report wording."""
+    chg = cur - prev
+    word = "an increase" if chg >= 0 else "a decline"
+    pct = (" (%+.1f%%)" % (abs(chg) / prev * 100)) if prev else ""
+    return ("%s of %s%s, from %s in %d to %s in %d"
+            % (word, fmt_b(abs(chg)), pct, fmt_b(prev), y_prev,
+               fmt_b(cur), Y))
+
+
+def _driver_clause(drivers, y_prev, Y, maxn=2):
+    """', from Ksh A in <yp> to Ksh B in <Y>' clauses for the top drivers."""
+    parts = []
+    for prod, prev, cur, chg in drivers[:maxn]:
+        parts.append("%s by %s, from %s in %d to %s in %d"
+                     % (short_prod(prod, 46).lower(), fmt_b(abs(chg)),
+                        fmt_b(prev), y_prev, fmt_b(cur), Y))
+    return ", and ".join(parts)
+
+
+def _up_list(items):
+    """'Name (up 54.7%, from Ksh A to Ksh B)' list for the overview."""
+    return ", ".join(
+        "%s (up %.1f%%, from %s to %s)"
+        % (short_prod(d["name"], 34), d["pct"] * 100,
+           fmt_b(d["totals"][0]), fmt_b(d["totals"][1]))
+        for d in items)
+
+
+def _interventions():
+    """The standing raft of proposed interventions (reference report)."""
+    return [
+        "**Market Intelligence** \u2013 Set up a trade intelligence unit "
+        "and real-time dashboard; commission diagnostic studies on the "
+        "declines in strategic markets; strengthen embassy trade "
+        "attach\u00e9s.",
+        "**Diplomatic Engagement** \u2013 Reactivate trade dialogues with "
+        "markets registering declines; align with the EU on compliance "
+        "requirements; use AfCFTA and trade missions to reinforce ties "
+        "with underperforming markets.",
+        "**Diversification** \u2013 Expand into new markets, building on "
+        "the gains recorded by the fastest-growing destinations, and "
+        "promote higher-value product lines in traditional sectors.",
+        "**Trade Facilitation** \u2013 Streamline customs and logistics; "
+        "expand export credit/insurance and trade finance to manage "
+        "currency risk.",
+    ]
+
+
 def build_narratives(a: QuarterAnalysis):
     """Build every narrative block from the analysed quarter.
 
-    All figures are derived from the parsed tables; nothing is hard-coded
-    except the phrasing patterns of the reference report.
+    All figures are derived from the parsed tables and the partner-product
+    cross-tabs; the phrasing follows the reference (Q2) export performance
+    report. Single-year extracts (no prior-year quarter in the data) fall
+    back to share-based narratives.
     """
     Y = a.year
     q = a.quarter
     m_first, m_last = a.month_names[0], a.month_names[-1]
     period = "%s %d" % (q, Y)
+    comp = a.has_comparison
+    Yp = a.year_prev
     t1, t2 = a.t1, a.t2
     a1, a2 = a.a1, a.a2
 
-    exp_t, imp_t, def_t = a.exp_total, a.imp_total, a.deficit
-    growth = a.exp_growth_through_quarter()
-    multiple = a.import_multiple()
+    exp_t, imp_t = a.exp_total, a.imp_total
+    def_t = a.deficit
+    yoy_e = a.yoy_growth() if comp else None
+    yoy_i = a.yoy_import_growth() if comp else None
 
     mkts = a.shares(t1)
-    top10_m = a.cum_share(t1, 10)
-    eac_s = a.group_share(t1, EAC)
-
-    tea = a.find_item(t2, r"^tea[\s,]")
-    coffee = a.find_item(t2, r"^coffee")
-    roses = a.find_item(t2, r"\broses?\b")
-    other_flowers = None
-    for name, v, s in a.shares(t2):
-        low = name.lower()
-        if "cut flower" in low and not (roses and name == roses[0]) \
-                and "rose" not in low:
-            other_flowers = (name, v, s)
-            break
-    avo = a.find_item(t2, r"avocado")
-    petro_exp = a.find_item(t2, r"petroleum oils")
-    agri_s = a.keyword_share(
-        t2, ("tea", "coffee", "cut flower", "rose", "avocado", "vegetable",
-             "fruit", "macadamia", "nuts", "beans,", "peas,"))
-
+    prods = [x for x in a.shares(t2)
+             if not str(x[0]).lower().startswith("all others")]
     imp_mkts = a.shares(a1)
-    asia_s = a.group_share(a1, ASIA)
-    gulf_s = a.group_share(a1, GULF)
-    west_items = [(n_, v_, s_) for n_, v_, s_ in imp_mkts
-                  if n_.strip().lower() in WEST]
-    west_s = sum(s_ for _, _, s_ in west_items)
-    africa_items = [(n_, v_, s_) for n_, v_, s_ in imp_mkts
-                    if n_.strip().lower() in AFRICA]
-    africa_s = sum(s_ for _, _, s_ in africa_items)
-
-    petro_imp = a.find_item(a2, r"petroleum oils")
-    gasol = a.find_item(a2, r"motor spirit|gasoline")
-    butane = a.find_item(a2, r"butane")
-    fuel_s = a.keyword_share(a2, PETROLEUM_KW)
-    wheat = a.find_item(a2, r"wheat|meslin")
-    palm = a.find_item(a2, r"palm oil")
-    rice = a.find_item(a2, r"\brice\b")
-    maize = a.find_item(a2, r"maize|\bcorn\b")
+    imp_prods = [x for x in a.shares(a2)
+                 if not str(x[0]).lower().startswith("all others")]
 
     n = {}
 
-    # ---- Section 1: Overview --------------------------------------------
-    p1 = ("The total value of Kenya's merchandise exports in the second "
-          "quarter of %d (between %s and %s) was %s. "
-          % (Y, m_first, m_last, fmt_b(exp_t)))
-    if growth is not None:
-        p1 += ("Exports grew steadily through the quarter (%+.1f%%, %s to "
-               "%s). " % (growth * 100, m_first, m_last))
-    p1 += ("Trade remains regionally concentrated and agriculture-led. "
-           "The top 10 markets took %s of exports. The leading buyers were "
-           "%s (%s), %s (%s) and %s (%s). "
-           "EAC partners absorbed %s of the total. "
-           % (pct_s(top10_m),
-              _mkt(mkts[0][0]), pct_s(mkts[0][2]),
+    # ---- Section 1: overview ---------------------------------------------
+    p1 = ("Kenya's trade sector recorded total merchandise exports of %s "
+          "in %s (between %s and %s), according to data released by the "
+          "Kenya Revenue Authority (KRA). "
+          % (fmt_b(exp_t), period, m_first, m_last))
+    if comp and yoy_e is not None:
+        p1 += ("This was %s of %s (%+.1f%%) over the same period in %d. "
+               % ("an increase" if yoy_e >= 0 else "a decline",
+                  fmt_b(abs(exp_t - (a.exp_total_prev or 0))),
+                  yoy_e * 100, Yp))
+    top_m = [x for x in mkts[:3]]
+    if top_m:
+        p1 += ("Export growth during this period was driven by stronger "
+               "demand from destination countries including %s. "
+               % ", ".join(_mkt(x[0]) for x in top_m))
+    if comp:
+        growers_p = sorted(
+            [d for d in t2["items"]
+             if d["change"] is not None and d["change"] > 0.3
+             and d["pct"] is not None],
+            key=lambda d: d["change"], reverse=True)[:5]
+        if growers_p:
+            p1 += ("Significant contributions also came from key sectors "
+                   "such as %s, all of which recorded export growth in "
+                   "%s compared to %s. "
+                   % (_up_list(growers_p), Y, Yp))
+        if yoy_i is not None and yoy_e is not None and yoy_i >= yoy_e:
+            p1 += ("However, the pace of import growth outpaced that of "
+                   "exports, resulting in a widening trade deficit \u2013 a "
+                   "key indicator of the country's persistent reliance on "
+                   "foreign goods. ")
+    p1 += ("The leading buyers of Kenyan goods were %s (%s), %s (%s) and "
+           "%s (%s). "
+           % (_mkt(mkts[0][0]), pct_s(mkts[0][2]),
               _mkt(mkts[1][0]), pct_s(mkts[1][2]),
-              _mkt(mkts[2][0]), pct_s(mkts[2][2]),
-              pct_s(eac_s)))
-    if tea:
-        p1 += ("%s is the top export at %s (%s)"
-               % (short_prod(tea[0], 20), fmt_b(tea[1]), pct_s(tea[2])))
-        extras = [x for x in (coffee, roses) if x]
-        if len(extras) >= 2:
-            p1 += (", followed by %s (%s), %s (%s) and other cut flowers. "
-                   % (short_prod(extras[0][0], 16), pct_s(extras[0][2]),
-                      short_prod(extras[1][0], 16), pct_s(extras[1][2])))
-        elif extras:
-            p1 += (", followed by %s (%s). "
-                   % (short_prod(extras[0][0], 24), pct_s(extras[0][2])))
-        else:
-            p1 += ". "
-    if agri_s:
-        p1 += ("Together, horticulture and agriculture accounted for %s "
-               "of total exports." % pct_s(agri_s, 0))
-    n["overview_p1"] = p1
+              _mkt(mkts[2][0]), pct_s(mkts[2][2])))
+    if prods:
+        p1 += "%s was the top export at %s (%s of total exports). " \
+              % (short_prod(prods[0][0], 30), fmt_b(prods[0][1]),
+                 pct_s(prods[0][2]))
+    n["overview"] = [p1]
 
-    p2 = ("Export gains in the quarter were, however, offset by %s in "
-          "imports. " % fmt_b(imp_t))
-    if petro_imp:
-        p2 += ("Imports are fuel-dominated. Petroleum oils alone are %s of "
-               "imports" % pct_s(petro_imp[2]))
-        parts = []
-        if gasol:
-            parts.append("gasoline %s" % pct_s(gasol[2]))
-        if butane:
-            parts.append("butanes %s" % pct_s(butane[2]))
-        if fuel_s and parts:
-            p2 += (", and fuel-related goods (incl. %s) reached %s"
-                   % (", ".join(parts), pct_s(fuel_s)))
-        p2 += ". "
+    p2 = ("Total imports were valued at %s in the period %s to %s %d. "
+          % (fmt_b(imp_t), m_first, m_last, Y))
+    if comp and yoy_i is not None:
+        p2 += ("This was %s of %s (%+.1f%%) over the same quarter of %d. "
+               % ("an increase" if yoy_i >= 0 else "a decline",
+                  fmt_b(abs(imp_t - (a.imp_total_prev or 0))),
+                  yoy_i * 100, Yp))
+    if imp_mkts:
+        p2 += ("The leading sources of imports were %s (%s), %s (%s) and "
+               "%s (%s). "
+               % (_mkt(imp_mkts[0][0]), pct_s(imp_mkts[0][2]),
+                  _mkt(imp_mkts[1][0]), pct_s(imp_mkts[1][2]),
+                  _mkt(imp_mkts[2][0]), pct_s(imp_mkts[2][2])))
+    if imp_prods:
+        p2 += "%s remained the largest import at %s (%s of the bill). " \
+              % (short_prod(imp_prods[0][0], 30), fmt_b(imp_prods[0][1]),
+                 pct_s(imp_prods[0][2]))
+    n["overview"].append(p2)
+
+    if comp:
+        p3 = ("This report provides a comprehensive comparative analysis "
+              "of Kenya's trade performance between the %s quarters of %d "
+              "and %d. It examines critical trends in export destinations, "
+              "and the performance of major export commodities."
+              % (q, Yp, Y))
     else:
-        p2 += " "
-    food_bits = [x for x in (wheat, palm, rice) if x]
-    if food_bits:
-        p2 += ("Large food imports (%s) and capital and consumer goods "
-               "sustain a structurally large import bill."
-               % ", ".join(short_product_name(x[0], maxlen=18).lower()
-                           for x in food_bits))
-    else:
-        p2 += "Capital and consumer goods sustain a structurally large import bill."
-    n["overview_p2"] = p2
+        p3 = ("This report provides a comprehensive analysis of Kenya's "
+              "trade performance for %s. It examines critical trends in "
+              "export destinations, and the performance of major export "
+              "commodities." % period)
+    n["overview"].append(p3)
 
-    n["overview_p3"] = (
-        "The large trade deficit of %s creates a net foreign-currency "
-        "outflow keeping persistent pressure on the shilling and raising the "
-        "cost of the goods Kenya imports most (fuel and food)."
-        % fmt_b(abs(def_t)))
-
-    # ---- Section 2 bullets -------------------------------------------------
-    yoy_e = a.yoy_growth()
-    yoy_i = a.yoy_import_growth()
-    b1 = ("During the review period (%s), total exports were valued at %s."
-          % (period, fmt_b(exp_t)))
-    if yoy_e is not None:
-        b1 += " This was %s (%+.1f%%) over the %s quarter of %d." \
-            % ("an increase" if yoy_e >= 0 else "a decline",
-               yoy_e * 100, q, Y - 1)
-    b2 = ("On the other hand, total imports were worth %s in the period %s "
-          "to %s %d," % (fmt_b(imp_t), m_first, m_last, Y))
-    if yoy_i is not None:
-        b2 += " %s by %+.1f%% over the same quarter of %d," \
-            % ("up" if yoy_i >= 0 else "down", yoy_i * 100, Y - 1)
-    n["s2"] = [
-        b1,
-        b2,
-        "The balance of trade for merchandized trade for the period %s to "
-        "%s %d was %s." % (m_first, m_last, Y, fmt_b(def_t)),
-    ]
-
-    # ---- Section 5: Deduction ----------------------------------------------
-    d1 = ("Imports outpaced exports by a wide margin in the %s quarter. "
-          "Merchandise exports earned %s against an import bill of %s, "
-          "yielding a trade deficit of %s"
-          % (period, fmt_b(exp_t), fmt_b(imp_t), fmt_b(abs(def_t))))
-    if multiple:
-        d1 += ", so imports exceeded exports %.1f times. " \
-              % multiple
-    d1 += ("The composition of the import bill confirms Kenya's continued "
-           "reliance on foreign goods. ")
-    if fuel_s:
-        d1 += ("Fuel-related products accounted for %s of imports. "
-               % pct_s(fuel_s, 0))
-    staple = [x for x in (wheat, palm, rice, maize) if x]
-    if staple:
-        d1 += ("Essential food items (%s) are structural imports. "
-               % ", ".join(_staple_name(x[0]) for x in staple[:3]))
-    d1 += ("Machinery and capital goods reflect a need for imported equipment "
-           "for investment and production. This reliance on imported energy, "
-           "food and capital goods weighs on the shilling and on foreign "
-           "exchange reserves. It keeps the import bill large even as "
-           "exports grow.")
-    n["deduction"] = [d1]
-
-    lead = ["%s was the single largest market with %s (%s)"
-            % (_mkt(mkts[0][0]), fmt_b(mkts[0][1]), pct_s(mkts[0][2]))]
-    follow = ["%s (%s; %s)" % (_mkt(nm), fmt_b(vv), pct_s(ss))
-              for nm, vv, ss in mkts[1:6]]
-    d2 = ("Kenya's export performance remains anchored on a few "
-          "well-established destinations. %s, followed by %s, with EAC "
-          "partners together absorbing %s of total exports. "
-          % (lead[0], ", ".join(follow), pct_s(eac_s, 0)))
-    african = [(nm, vv, ss) for nm, vv, ss in mkts
-               if nm.strip().lower() in AFRICA
-               and nm.strip().lower() not in EAC]
-    if african:
-        d2 += ("Beyond these, several African destinations hold significant "
-               "potential. %s already feature among Kenya's top buyers under "
-               "the African Continental Free Trade Area (AfCFTA), which "
-               "presents a strategic opportunity to deepen and diversify "
-               "these gains."
-               % ", ".join(_mkt(nm) for nm, _, _ in african[:6]))
-    n["deduction"].append(d2)
-
-    d3 = ""
-    bits = []
-    if roses:
-        bits.append("roses (%s; %s)" % (fmt_b(roses[1]), pct_s(roses[2])))
-    if other_flowers:
-        bits.append("other cut flowers (%s; %s)"
-                    % (fmt_b(other_flowers[1]), pct_s(other_flowers[2])))
-    if bits or avo:
-        d3 = ("Horticulture remains the standout driver of Kenya's export "
-              "performance. Cut flowers alone - %s" % ", ".join(bits))
-        if avo:
-            d3 += (" – together with fresh avocados (%s; %s)"
-                   % (fmt_b(avo[1]), pct_s(avo[2])))
-        comp = [x for x in (tea, coffee) if x]
-        if comp:
-            d3 += (" – reaffirm the sector's role as a leading "
-                   "foreign-exchange earner, complementing %s to make "
-                   "agricultural and horticultural exports %s of the "
-                   "total in the period under review. "
-                   % (" and ".join("%s (%s)" % (short_prod(x[0], 12),
-                                                fmt_b(x[1])) for x in comp),
-                      pct_s(agri_s, 0)))
+    # ---- Section 2: comparative perspectives (plain paragraphs) -----------
+    if comp:
+        s2 = []
+        chg_e = exp_t - (a.exp_total_prev or 0)
+        s2.append("In %s %d, total exports were valued at %s compared to "
+                  "%s in the same period in %d; and therefore, total "
+                  "exports %s by %s (%+.1f%%)."
+                  % (q, Y, fmt_b(exp_t), fmt_b(a.exp_total_prev), Yp,
+                     "increased" if chg_e >= 0 else "decreased",
+                     fmt_b(abs(chg_e)), yoy_e * 100))
+        chg_i = imp_t - (a.imp_total_prev or 0)
+        s2.append("On the other hand, total imports were valued at %s in "
+                  "the period %s %d, which %s by %s (a %s of %+.1f%%) from "
+                  "%s in the same period in %d."
+                  % (fmt_b(imp_t), q, Y,
+                     "increased" if chg_i >= 0 else "decreased",
+                     fmt_b(abs(chg_i)),
+                     "increase" if chg_i >= 0 else "decline",
+                     yoy_i, fmt_b(a.imp_total_prev), Yp))
+        if def_t < 0:
+            s2.append("The balance of trade deficit for merchandised trade "
+                      "for the period %s %d %s by %s (%+.1f%%) to record "
+                      "%s in %d from %s in %d."
+                      % (q, Y,
+                         "widened" if abs(def_t) > abs(a.exp_total_prev -
+                                                       a.imp_total_prev or 0)
+                         else "narrowed",
+                         fmt_b(abs(def_t) -
+                               abs((a.exp_total_prev or 0) -
+                                   (a.imp_total_prev or 0))),
+                         (abs(def_t) / abs((a.exp_total_prev or 0) -
+                                           (a.imp_total_prev or 0)) - 1)
+                         * 100 if a.exp_total_prev and a.imp_total_prev
+                         else 0.0,
+                         fmt_b(abs(def_t)), Y,
+                         fmt_b(abs((a.exp_total_prev or 0) -
+                                   (a.imp_total_prev or 0))), Yp))
         else:
-            d3 += " – reaffirm horticulture as a leading earner. "
-        d3 += ("The sector's growth is buttressed by several bilateral "
-               "market-access arrangements, including the Kenya-EU Economic "
-               "Partnership Agreement; the UK-Kenya EPA; and market-access "
-               "protocols with China (fresh avocados since 2022), which are "
-               "opening new, high-value Asian markets. ")
-    if petro_exp:
-        d3 += ("Other notable gainers in the quarter included petroleum "
-               "products (%s; %s), which recorded significant growth over "
-               "the second quarter." % (fmt_b(petro_exp[1]),
-                                        pct_s(petro_exp[2])))
-    if d3:
-        n["deduction"].append(d3)
+            s2.append("The balance of trade for merchandised trade for the "
+                      "period %s %d recorded a surplus of %s."
+                      % (q, Y, fmt_b(def_t)))
+        n["s2"] = s2
+    else:
+        n["s2"] = [
+            "In the period %s %d (between %s and %s %d), total exports "
+            "were valued at %s."
+            % (q, Y, m_first, m_last, Y, fmt_b(exp_t)),
+            "On the other hand, total imports were valued at %s in the "
+            "same period." % fmt_b(imp_t),
+            "The balance of trade for merchandised trade for the period "
+            "%s %d was %s."
+            % (q, Y,
+               ("a deficit of %s" % fmt_b(abs(def_t))) if def_t < 0
+               else ("a surplus of %s" % fmt_b(def_t))),
+        ]
 
-    n["deduction"].append(
-        "Several other issues merit attention. First, concentration in both "
-        "products (tea, coffee and horticulture) and markets exposes "
-        "earnings to commodity price volatility and weather shocks. Kenya "
-        "should therefore speed up product and market diversification. "
-        "Second, the prominence of fuel in both the export and import "
-        "baskets ties trade performance to global oil prices. Rising prices "
-        "widen the deficit even as re-exports of refined petroleum support "
-        "export values. Together these issues point to the need to broaden "
-        "exports and to address competitiveness and supply-side constraints "
-        "in key sectors.")
+    # ---- Section 3: markets narrative + driver bullets ---------------------
+    if comp:
+        n["markets_note"] = (
+            "The two last columns in the above table represent change in "
+            "value and % respectively between the two years. In %d "
+            "compared to the same period %s %d, Kenyan export destination "
+            "markets that showed significant change were as follows."
+            % (Y, q, Yp))
+        bullets = []
+        decliners = [d for d in a.top_movers(t1, topn=4, min_abs=1.0)
+                     if d["change"] < 0]
+        growers = [d for d in a.top_movers(t1, topn=4, min_abs=1.0)
+                   if d["change"] > 0]
+        for d in decliners[:3]:
+            drv = a.partner_drivers("exports", d["name"], topn=2)
+            if drv:
+                bullets.append(
+                    "Decline in exports to %s for the reviewed period was "
+                    "as a result of decline in export of %s."
+                    % (_mkt(d["name"]),
+                       _driver_clause(drv, Yp, Y)))
+            else:
+                bullets.append(
+                    "Exports to %s declined by %s (%+.1f%%), from %s in "
+                    "%d to %s in %d."
+                    % (_mkt(d["name"]), fmt_b(abs(d["change"])),
+                       (d["pct"] or 0) * 100, fmt_b(d["totals"][0]), Yp,
+                       fmt_b(d["totals"][1]), Y))
+        for d in growers[:2]:
+            drv = a.partner_drivers("exports", d["name"], topn=2)
+            if drv:
+                bullets.append(
+                    "Export growth to %s was driven by increase in export "
+                    "of %s."
+                    % (_mkt(d["name"]), _driver_clause(drv, Yp, Y)))
+        n["market_bullets"] = bullets
+    else:
+        n["markets_note"] = None
+        n["market_bullets"] = [
+            "%s was the leading destination market, absorbing %s of "
+            "exports (%s of the total)."
+            % (_mkt(mkts[0][0]), fmt_b(mkts[0][1]), pct_s(mkts[0][2])),
+            "The top ten destination markets accounted for %s of total "
+            "exports, led by %s."
+            % (pct_s(a.cum_share(t1, 10)),
+               ", ".join(_mkt(x[0]) for x in mkts[1:6])),
+        ]
+
+    # ---- Section 4: products narrative --------------------------------------
+    if comp:
+        n["products_note"] = (
+            "Compared to the period %s %d and %d, below is a table with "
+            "top export products whose exports experienced significant "
+            "change." % (q, Yp, Y))
+        paras = []
+        decliners_p = [d for d in a.top_movers(t2, topn=3, min_abs=0.5)
+                       if d["change"] < 0]
+        for d in decliners_p[:2]:
+            drv = a.product_drivers("exports", d["name"], topn=3)
+            if drv:
+                paras.append(
+                    "The decline in %s by %s was mainly driven by reduced "
+                    "exports to %s."
+                    % (short_prod(d["name"], 46), fmt_b(abs(d["change"])),
+                       ", ".join(
+                           "%s (down %s, from %s to %s)"
+                           % (_mkt(x[0]), fmt_b(abs(x[3])), fmt_b(x[1]),
+                              fmt_b(x[2]))
+                           for x in drv[:3])))
+        growers_p = sorted(
+            [d for d in t2["items"]
+             if d["change"] is not None and d["change"] > 0.5
+             and d["pct"] is not None],
+            key=lambda d: d["change"], reverse=True)[:4]
+        if growers_p:
+            paras.append("On the growth side, %s registered the largest "
+                         "gains in the review period."
+                         % _up_list(growers_p))
+        n["product_paras"] = paras
+    else:
+        n["products_note"] = None
+        n["product_paras"] = [
+            "%s, %s and %s were the leading export products, together "
+            "accounting for %s of total exports."
+            % (short_prod(prods[0][0], 30), short_prod(prods[1][0], 30),
+               short_prod(prods[2][0], 30),
+               pct_s(sum(x[2] for x in prods[:3]), 0))
+            if len(prods) >= 3 else
+            "The leading export products accounted for the bulk of "
+            "earnings in the review period.",
+            "The top ten export products accounted for %s of total "
+            "exports." % pct_s(a.cum_share(t2, 10)),
+        ]
+
+    # ---- Section 5: deduction ----------------------------------------------
+    if comp:
+        g_mkt, d_mkt = a.growth_decline(t1, threshold=1.0)
+        g_prd, d_prd = a.growth_decline(t2, threshold=1.0)
+        d1 = ("The %s quarter of %d marked %s for Kenya's merchandise "
+              "trade. Total exports %s by %s (%+.1f%%), from %s in %d to "
+              "%s in %d, signalling %s demand for Kenyan products in key "
+              "international markets."
+              % (q, Y,
+                 "a period of robust expansion" if yoy_e and yoy_e > 0
+                 else "a challenging period",
+                 "rose" if yoy_e >= 0 else "fell",
+                 fmt_b(abs(exp_t - (a.exp_total_prev or 0))),
+                 yoy_e * 100, fmt_b(a.exp_total_prev), Yp, fmt_b(exp_t), Y,
+                 "improved" if yoy_e >= 0 else "weakened"))
+        n["deduction"] = [d1]
+
+        d2 = ("This growth was broad, with %d export destination(s) "
+              "registering increases exceeding Kshs 1 billion in the top "
+              "25 category, led by %s (%s)"
+              % (len(g_mkt),
+                 _mkt(g_mkt[0]["name"]) if g_mkt else mkts[0][0],
+                 fmt_b(g_mkt[0]["change"]) if g_mkt else fmt_b(0)))
+        if len(g_mkt) > 1:
+            d2 += (" and regional neighbours %s"
+                   % ", ".join("%s (%s)" % (_mkt(x["name"]), fmt_b(x["change"]))
+                               for x in g_mkt[1:4]))
+        d2 += "."
+        if d_mkt:
+            d2 += (" However, this positive export performance was "
+                   "partially offset by declines in shipments to %s, "
+                   "reflecting shifting global demand patterns and "
+                   "competitive pressures in traditional markets."
+                   % ", ".join("%s (%s)" % (_mkt(x["name"]),
+                                           fmt_b(x["change"]))
+                               for x in d_mkt[:3]))
+        n["deduction"].append(d2)
+
+        d3 = ""
+        if g_prd:
+            lead = g_prd[0]
+            d3 = ("On the product performance front, Kenya's export basket "
+                  "demonstrated significant dynamism. The standout "
+                  "performer was %s, which recorded an increase of %s "
+                  "(%+.1f%%), from %s in %d to %s in %d. "
+                  % (short_prod(lead["name"], 40), fmt_b(lead["change"]),
+                     (lead["pct"] or 0) * 100, fmt_b(lead["totals"][0]),
+                     Yp, fmt_b(lead["totals"][1]), Y))
+            others = [x for x in g_prd[1:5]]
+            if others:
+                d3 += ("Traditional mainstays such as %s continued to "
+                       "register steady growth. "
+                       % ", ".join("%s (%s)" % (short_prod(x["name"], 26),
+                                                fmt_b(x["change"]))
+                                   for x in others))
+        if d_prd:
+            d3 += ("The decline in %s was the notable contraction, "
+                   "suggesting that Kenya's export growth was largely "
+                   "resilient in the review period."
+                   % ", ".join("%s (%s)" % (short_prod(x["name"], 30),
+                                            fmt_b(x["change"]))
+                               for x in d_prd[:2]))
+        if d3:
+            n["deduction"].append(d3)
+
+        chg_i = imp_t - (a.imp_total_prev or 0)
+        d4 = ("The combined effect of strong import growth outpacing "
+              "export expansion resulted in a significantly widened trade "
+              "deficit. The merchandise trade deficit %s by %s (%+.1f%%), "
+              "from %s in %d to %s in %d. This widening imbalance "
+              "underscores Kenya's continued reliance on imported capital "
+              "goods, machinery, vehicles and energy products to support "
+              "its economic activities, even as its export sector shows "
+              "encouraging growth and diversification."
+              % ("ballooned" if chg_i > 0 else "narrowed",
+                 fmt_b(abs(abs(def_t) -
+                           abs((a.exp_total_prev or 0) -
+                               (a.imp_total_prev or 0)))),
+                 (abs(def_t) / abs((a.exp_total_prev or 0) -
+                                   (a.imp_total_prev or 0)) - 1) * 100
+                 if a.exp_total_prev and a.imp_total_prev else 0.0,
+                 fmt_b(abs((a.exp_total_prev or 0) -
+                           (a.imp_total_prev or 0))), Yp,
+                 fmt_b(abs(def_t)), Y))
+        n["deduction"].append(d4)
+    else:
+        n["deduction"] = [
+            "Kenya's merchandise trade in the %s quarter of %d recorded "
+            "total exports of %s against an import bill of %s, yielding a "
+            "%s of %s. Trade remains concentrated in a narrow set of "
+            "markets and products: the top ten destinations absorbed %s "
+            "of exports and the top ten products earned %s of the total."
+            % (q, Y, fmt_b(exp_t), fmt_b(imp_t),
+               "deficit" if def_t < 0 else "surplus",
+               fmt_b(abs(def_t)), pct_s(a.cum_share(t1, 10), 0),
+               pct_s(a.cum_share(t2, 10), 0)),
+            "The leading destination markets were %s, with %s alone "
+            "taking %s of total exports. On the product front, %s led "
+            "export earnings at %s (%s), followed by %s. This "
+            "concentration in both products and markets exposes earnings "
+            "to commodity price volatility, weather shocks and external "
+            "demand fluctuations."
+            % (", ".join(_mkt(x[0]) for x in mkts[:5]), _mkt(mkts[0][0]),
+               pct_s(mkts[0][2]),
+               short_prod(prods[0][0], 30) if prods else "-",
+               fmt_b(prods[0][1]) if prods else "",
+               pct_s(prods[0][2]) if prods else "",
+               ", ".join(short_prod(x[0], 24) for x in prods[1:4])),
+            "Imports were valued at %s, with the leading sources being %s. "
+            "%s was the largest import item at %s (%s of the bill). The "
+            "import bill of %s against exports of %s %s the need to "
+            "broaden exports and address competitiveness and supply-side "
+            "constraints in key sectors."
+            % (fmt_b(imp_t),
+               ", ".join(_mkt(x[0]) for x in imp_mkts[:5]),
+               short_prod(imp_prods[0][0], 30) if imp_prods else "-",
+               fmt_b(imp_prods[0][1]) if imp_prods else "",
+               pct_s(imp_prods[0][2]) if imp_prods else "",
+               fmt_b(imp_t), fmt_b(exp_t),
+               "underscores" if def_t < 0 else "despite the surplus, "
+               "highlights"),
+        ]
+
+    # ---- Implication for the country ---------------------------------------
+    if comp:
+        imp_p1 = ("The %s quarter of %d demonstrated that Kenya's export "
+                  "sector remains resilient. Growth in exports to %s "
+                  "suggests that there exist diverse opportunities in "
+                  "these markets that require targeted market-development "
+                  "interventions. %s remain among Kenya's strongest export "
+                  "performers, confirming the need for ongoing "
+                  "productivity improvements, compliance with "
+                  "international standards, climate-resilience "
+                  "interventions and support for value addition."
+                  % (q, Y,
+                     ", ".join(_mkt(x["name"]) for x in g_mkt[:5])
+                     if comp and g_mkt else
+                     ", ".join(_mkt(x[0]) for x in mkts[:5]),
+                     ", ".join(short_prod(x["name"], 22)
+                               for x in g_prd[:4])
+                     if comp and g_prd else
+                     ", ".join(short_prod(x[0], 22) for x in prods[:4])))
+        imp_p2 = ("The trade balance moved from %s in %d to %s in %d, "
+                  "with total imports %s by %+.1f%%. This raises concerns "
+                  "on long-term trade balance sustainability and "
+                  "reinforces the need for policies that promote domestic "
+                  "production, export competitiveness and value addition. "
+                  "The country should prioritise support for emerging "
+                  "export sectors while sustaining competitiveness in "
+                  "traditional sectors such as tea, coffee and "
+                  "horticulture."
+                  % (fmt_b(abs((a.exp_total_prev or 0) -
+                               (a.imp_total_prev or 0))), Yp,
+                     fmt_b(abs(def_t)), Y,
+                     "growing" if yoy_i >= 0 else "declining",
+                     yoy_i * 100))
+        imp_p3 = ("The concentration of export growth in a limited number "
+                  "of markets highlights the need for continued efforts "
+                  "to diversify Kenya's export destinations and products. "
+                  "Overreliance on a few destination markets exposes "
+                  "exporters to external shocks, policy changes and "
+                  "market disruptions. The reported declines in exports "
+                  "to strategic markets suggest that greater diplomatic "
+                  "and trade engagement may be required to address "
+                  "market-specific challenges affecting Kenyan exports.")
+        n["implication"] = [imp_p1, imp_p2, imp_p3]
+    else:
+        n["implication"] = [
+            "The %s quarter of %d demonstrated that Kenya's export sector "
+            "remains anchored on traditional products and markets. %s and "
+            "the wider East African region remain among Kenya's strongest "
+            "export performers, confirming the need for ongoing "
+            "productivity improvements, compliance with international "
+            "standards, climate-resilience interventions and support for "
+            "value addition."
+            % (q, Y, _mkt(mkts[0][0]) if mkts else "Kenya's traditional "
+               "markets"),
+            "The trade balance recorded a %s of %s in the review period, "
+            "with total imports of %s against exports of %s. This "
+            "reinforces the need for policies that promote domestic "
+            "production, export competitiveness and value addition. The "
+            "country should prioritise support for emerging export "
+            "sectors while sustaining competitiveness in traditional "
+            "sectors such as tea, coffee and horticulture."
+            % ("deficit" if def_t < 0 else "surplus", fmt_b(abs(def_t)),
+               fmt_b(imp_t), fmt_b(exp_t)),
+            "The concentration of export growth in a limited number of "
+            "markets highlights the need for continued efforts to "
+            "diversify Kenya's export destinations and products. "
+            "Overreliance on a few destination markets exposes exporters "
+            "to external shocks, policy changes and market disruptions.",
+        ]
+    n["interventions"] = _interventions()
 
     # ---- Annex 1: imports by supplying countries ---------------------------
-    im3 = imp_mkts[:3]
-    monthly_txt = ", ".join("%s %s" % (mn, fmt_b(v))
-                            for mn, v in zip(a.month_names, a.imp_months()))
-    annex1 = [
-        "Kenya imported goods worth %s in the %s quarter (%s). Import "
-        "sourcing is heavily concentrated in a small group of partner "
-        "markets. The top three sources – %s – supplied %s (%s of the total "
-        "import bill)."
-        % (fmt_b(imp_t), period, monthly_txt,
-           ", ".join(_mkt(x[0]) for x in im3),
-           fmt_b(sum(x[1] for x in im3)), pct_s(sum(x[2] for x in im3))),
-        "The top five suppliers accounted for %s of imports and the top ten "
-        "for %s, leaving all other countries with less than an eighth of "
-        "the market. This concentration shows how dependent Kenya is on a "
-        "narrow group of supply markets, particularly in Asia and the Gulf."
-        % (pct_s(a.cum_share(a1, 5)), pct_s(a.cum_share(a1, 10))),
-    ]
-    third_parts = []
-    if west_items:
-        wp = ("Traditional Western trading partners – %s – together supplied "
-              "%s of imports"
-              % (", ".join(_mkt(x[0]) for x in west_items[:9]),
-                 pct_s(west_s)))
-        singles = ["%s %s" % (_mkt(x[0]), pct_s(x[2]))
-                   for x in west_items if x[2] >= 0.005][:6]
-        if singles:
-            wp += ", with individual shares now modest (%s)" \
-                  % ", ".join(singles)
-        wp += ". Import sourcing has therefore shifted decisively towards "
-        if asia_s:
-            wp += ("Asia, with China, India, Malaysia, Japan and others "
-                   "accounting for %s of the bill" % pct_s(asia_s))
-            if gulf_s:
-                wp += ", while the Gulf states contribute a further %s" \
-                      % pct_s(gulf_s)
-            wp += "."
-        elif gulf_s:
-            wp += "the Gulf states, which contribute a further %s." \
-                  % pct_s(gulf_s)
-        else:
-            wp += "markets outside the traditional Western bloc."
-        third_parts.append(wp)
+    annex1 = []
+    if comp:
+        movers = a.top_movers(a1, topn=6, min_abs=1.0)
+        lead_name = (a1["items"][0]["name"].strip().upper()
+                     if a1["items"] else None)
+        for d in movers:
+            drv_txt = _driver_clause(
+                a.partner_drivers("imports", d["name"], topn=3),
+                Yp, Y, maxn=3)
+            if d["name"].strip().upper() == lead_name:
+                annex1.append(
+                    "In the reviewed period, %s remains the leading source "
+                    "of imports, with imports %s (%+.1f%%, from %s to %s) "
+                    "due to %s in import of %s."
+                    % (_mkt(d["name"]),
+                       _chg_phrase(d["totals"][0], d["totals"][1], Yp, Y),
+                       (d["pct"] or 0) * 100, fmt_b(d["totals"][0]),
+                       fmt_b(d["totals"][1]),
+                       "an increase" if d["change"] >= 0 else "a decline",
+                       drv_txt))
+            else:
+                annex1.append(
+                    "In the reviewed period, %s's imports %s (%+.1f%%, "
+                    "from %s to %s), driven by %s in import of %s."
+                    % (_mkt(d["name"]),
+                       _chg_phrase(d["totals"][0], d["totals"][1], Yp, Y),
+                       (d["pct"] or 0) * 100, fmt_b(d["totals"][0]),
+                       fmt_b(d["totals"][1]),
+                       "an increase" if d["change"] >= 0 else "a decline",
+                       drv_txt))
+        annex1.append(
+            "Total imports to Kenya %s by %+.1f%% (from %s to %s) over "
+            "the review period."
+            % ("grew" if yoy_i >= 0 else "contracted", yoy_i * 100,
+               fmt_b(a.imp_total_prev), fmt_b(imp_t)))
     else:
-        if asia_s or gulf_s:
-            third_parts.append("Import sourcing is dominated by Asia and "
-                               "the Gulf, together accounting for %s "
-                               "of the bill."
-                               % pct_s(asia_s + gulf_s))
-    if africa_items:
-        third_parts.append("Intra-African supply remains limited – %s "
-                           "together provide only %s of imports, "
-                           "pointing to room for greater regional sourcing "
-                           "under the AfCFTA."
-                           % (", ".join("%s (%s)" % (_mkt(x[0]), pct_s(x[2]))
-                                        for x in africa_items[:5]),
-                              pct_s(africa_s)))
-    if third_parts:
-        annex1.append(" ".join(third_parts))
+        annex1.append(
+            "Kenya imported goods worth %s in the %s quarter (%s to %s "
+            "%d). Import sourcing is concentrated in a small group of "
+            "partners: the top three sources \u2013 %s \u2013 supplied %s "
+            "(%s of the total import bill)."
+            % (fmt_b(imp_t), q, m_first, m_last, Y,
+               ", ".join(_mkt(x[0]) for x in imp_mkts[:3]),
+               fmt_b(sum(x[1] for x in imp_mkts[:3])),
+               pct_s(sum(x[2] for x in imp_mkts[:3]))))
+        annex1.append(
+            "The top five suppliers accounted for %s of imports and the "
+            "top ten for %s. This concentration shows how dependent Kenya "
+            "is on a narrow group of supply markets, particularly in Asia "
+            "and the Gulf."
+            % (pct_s(a.cum_share(a1, 5)), pct_s(a.cum_share(a1, 10))))
+        annex1.append(
+            "The leading suppliers were %s. %s alone accounted for %s of "
+            "the import bill."
+            % (", ".join("%s (%s)" % (_mkt(x[0]), fmt_b(x[1]))
+                         for x in imp_mkts[:6]),
+               _mkt(imp_mkts[0][0]), pct_s(imp_mkts[0][2])))
     n["annex1"] = annex1
 
     # ---- Annex 2: imports by products ---------------------------------------
-    monthly_avg = imp_t / max(1, len(a.month_names))
-    a2p1 = ("The total import bill for the quarter was %s (monthly average "
-            "%s). Four broad forces drive the bill. First, fuel products are "
-            "the single largest component"
-            % (fmt_b(imp_t), fmt_b(monthly_avg)))
-    if petro_imp:
-        a2p1 += " – petroleum oils alone were worth %s (%s)" \
-                % (fmt_b(petro_imp[1]), pct_s(petro_imp[2]))
-    staples = [x for x in (wheat, palm, rice, maize) if x]
-    if staples:
-        a2p1 += (". Second, recurring imports of %s reflect domestic "
-                 "production shortfalls."
-                 % ", ".join(_staple_name(x[0]) for x in staples))
+    annex2 = []
+    if comp:
+        movers_p = a.top_movers(a2, topn=6, min_abs=0.5)
+        if movers_p:
+            annex2.append(
+                "During the reviewed period, %s."
+                % ", ".join(
+                    "%s %s by %+.1f%% (from %s to %s)"
+                    % (short_prod(d["name"], 36),
+                       "grew" if d["change"] >= 0 else "declined",
+                       (d["pct"] or 0) * 100, fmt_b(d["totals"][0]),
+                       fmt_b(d["totals"][1]))
+                    for d in movers_p[:5]))
+        annex2.append(
+            "Total imports to Kenya %s by %+.1f%% (from %s to %s), "
+            "representing %s during this period."
+            % ("grew" if yoy_i >= 0 else "contracted", yoy_i * 100,
+               fmt_b(a.imp_total_prev), fmt_b(imp_t),
+               fmt_b(imp_t - (a.imp_total_prev or 0))))
     else:
-        a2p1 += (". Second, recurring food imports reflect domestic "
-                 "production shortfalls.")
-    a2p1 += (" Third, machinery, vehicles and equipment linked to "
-             "construction, ICT, transport and investment activity. Fourth, "
-             "consumables and industrial inputs such as medicaments, plastic "
-             "polymers and electronic materials, which support manufacturing "
-             "and health services.")
-    pm = next((d for d in a2["items"]
-               if re.search(r"petroleum oils", str(d["name"]), re.I)), None)
-    if pm and pm["totals"][0]:
-        a2p1 += (" In the short run, oil price movements are one of the "
-                 "main sources of monthly volatility, as seen in the "
-                 "sharp swing in petroleum oils between %s and %s."
-                 % (a.month_names[0], a.month_names[-1]))
-    n["annex2"] = [a2p1]
+        annex2.append(
+            "During the reviewed period, the leading import products were "
+            "%s."
+            % ", ".join("%s (%s; %s of the bill)"
+                        % (short_prod(x[0], 30), fmt_b(x[1]), pct_s(x[2]))
+                        for x in imp_prods[:6]))
+        annex2.append(
+            "The top ten import products accounted for %s of the total "
+            "import bill of %s."
+            % (pct_s(a.cum_share(a2, 10)), fmt_b(imp_t)))
+    n["annex2"] = annex2
     return n
-# ---------------------------------------------------------------------------
+
+
 # Charts (matplotlib, house style shared with the other report generators)
 # ---------------------------------------------------------------------------
 PIE_PALETTE = list(THEME_ACCENTS) + [lighten(c, 0.45) for c in THEME_ACCENTS]
@@ -1302,18 +1909,47 @@ DEFAULT_ORG = "KENYA EXPORT PROMOTION & BRANDING AGENCY"
 DEFAULT_DIRECTORATE = "Research and Innovation Directorate (RID)"
 
 
+def _q_short(a):
+    """'Apr-Jun' style abbreviated quarter label (reference-report style)."""
+    ms = a.month_names
+    if len(ms) == 1:
+        return ms[0][:3].capitalize()
+    return "%s-%s" % (ms[0][:3].capitalize(), ms[-1][:3].capitalize())
+
+
+def _table_image(b: ReportBuilder, parsed, tmp_dir, name, item_header,
+                 caption=None, source=SRC_KRA):
+    """Caption + full-width table image + source, reference-report style.
+
+    The big rank tables are embedded as images (like the pasted Excel
+    tables in the reference report) so each table always occupies a single
+    page with its Century Gothic 12 formatting intact.
+    """
+    if caption:
+        b.add_table_caption(caption)
+    img = render_table_image(parsed, os.path.join(tmp_dir, name),
+                             item_header=item_header, year=b.year)
+    b.add_figure(img, width_in=6.27)
+    if source:
+        b.add_source(source)
+
+
 def build_quarterly_report(excel_dir, out_path, tmp_dir,
                            year=None, org=DEFAULT_ORG,
                            directorate=DEFAULT_DIRECTORATE,
                            month_year=None):
     os.makedirs(tmp_dir, exist_ok=True)
     a = QuarterAnalysis(year=year).load(excel_dir)
+    a.load_crosstabs(excel_dir)
     narr = build_narratives(a)
 
     Y = a.year
     y_prev = Y - 1
     q_up = a.quarter.upper()
-    q_t = a.quarter
+    qs = _q_short(a)
+    qs_up = qs.upper()
+    comp = a.has_comparison
+    y_span = "(%d-%d)" % (y_prev, Y) if comp else "(%d)" % Y
 
     cfg = {
         "country": {"name": "Kenya", "short": "Kenya",
@@ -1322,20 +1958,13 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
     }
     b = ReportBuilder(cfg, narr)
     b.year = Y
-    b.has_comparison = a.has_comparison
-
-    # dynamic table numbering (exhibits shift the sequence when present)
-    t_counter = [0]
-
-    def tno():
-        t_counter[0] += 1
-        return t_counter[0]
+    b.has_comparison = comp
 
     # ============================== TITLE PAGE ==============================
     b.add_letterhead()
     b.add_para("KENYA", size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER,
                space_after=0)
-    b.add_para("EXPORT PERFORMANCE IN %s %d-%d" % (q_up, y_prev, Y),
+    b.add_para("EXPORT PERFORMANCE IN %s %s" % (q_up, y_span),
                size=24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER,
                space_after=24)
     b.add_para("")
@@ -1348,8 +1977,6 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
     b.add_para("By", size=16, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER,
                space_after=14)
     b.add_para(org, size=22, bold=True, italic=True,
-               align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6)
-    b.add_para(directorate, size=22, bold=True, italic=True,
                align=WD_ALIGN_PARAGRAPH.CENTER, space_after=28)
     if not month_year:
         month_year = date.today().strftime("%B %Y")
@@ -1357,81 +1984,68 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
                align=WD_ALIGN_PARAGRAPH.CENTER)
     b.page_break()
 
-    # ==================== TOC / LISTS (unnumbered pages) ====================
-    b.add_toc()
-    b.page_break()
+    # ============ LIST OF TABLES / LIST OF FIGURES (one page) ===============
     b.add_list_placeholder("List of Tables", "table")
-    b.page_break()
+    b.add_para("")
     b.add_list_placeholder("List of Figures", "figure")
-    # page numbers start at 1 from here (title/TOC/lists carry none)
+    # page numbers start at 1 from here (title/lists carry none)
     b.start_body_section()
 
     # ============================== SECTION 1 ===============================
     p = b.doc.add_paragraph()
-    r = p.add_run("KENYA\u2019S TRADE PERFORMANCE IN %s (%d AND %d)"
-                  % (q_up, y_prev, Y))
+    r = p.add_run("KENYA\u2019S TRADE PERFORMANCE IN %s %s"
+                  % (qs_up, ("(%d & %d)" % (y_prev, Y)) if comp
+                     else ("(%d)" % Y)))
     b._style_run(r, bold=True)
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    b.add_heading("1. Overview")
-    for key in ("overview_p1", "overview_p2", "overview_p3"):
-        b.add_para(narr[key])
-    # uncaptioned editable balance chart, as in the reference report
-    if a.balance_months():
-        b.add_word_chart(
-            "bar", "Kenya Balance of Trade %s %d" % (a.quarter, a.year),
-            list(a.month_names),
-            [("Exports", list(a.exp_months())),
-             ("Imports", list(a.imp_months())),
-             ("Balance of Trade", list(a.balance_months()))],
-            width_in=6.3, height_in=3.6,
-            name="Balance of Trade %s %d" % (a.quarter, a.year),
-            colors=[lighten(THEME_ACCENTS[0], 0.30).lstrip("#"),
-                    lighten(THEME_ACCENTS[1], 0.30).lstrip("#"),
-                    lighten(THEME_ACCENTS[2], 0.30).lstrip("#")])
-    b.add_source(SRC_KRA)
+    for para in narr["overview"]:
+        b.add_para(para)
     b.page_break()
 
     # ============================== SECTION 2 ===============================
-    b.add_heading("2. Comparative Perspectives of Kenya\u2019s Trade in "
-                  "%s (%d/%d)" % (q_t, y_prev, Y))
-    b.add_para("")
+    if comp:
+        b.add_heading("Comparative Perspectives of Kenya\u2019s Trade in "
+                      "%s (%d/%d)" % (qs, y_prev, Y))
+    else:
+        b.add_heading("Comparative Perspectives of Kenya\u2019s Trade in "
+                      "%s %d" % (qs, Y))
+    b.add_source(SRC_KRA)
     for line in narr["s2"]:
-        b.add_para(line, style="List Bullet")
+        b.add_para(line)
     b.page_break()
 
     # ============================== SECTION 3 ===============================
-    cmp_span = ("(%d-%d)" % (y_prev, Y) if a.has_comparison
-                else "(%d)" % Y)
-    b.add_heading("3. Lead Destination Markets %s %s" % (q_t, cmp_span))
-    b.add_table_caption("Table %d: Top Destination Markets in %s %s"
-                        % (tno(), q_t, cmp_span))
-    add_q_table(b, a.t1, "PARTNER")
-    b.add_source(SRC_KRA)
-
-    if a.has_comparison:
+    b.add_heading("Lead Destination Markets %s %s" % (qs, y_span))
+    _table_image(b, a.t1, tmp_dir, "table1_markets.png", "PARTNER",
+                 caption="Table 1: Top Destination Markets in %s %s"
+                         % (qs, y_span))
+    if comp:
         # exhibit: markets that grew vs declined by over Ksh 1 billion
         g_mkt, d_mkt = a.growth_decline(a.t1, threshold=1.0)
-        b.add_table_caption(
-            "Table %d: Export Markets that Registered Growth / Decline of "
-            "Over Ksh. 1 Billion in %s %s" % (tno(), q_t, cmp_span))
-        add_growth_decline_table(
-            b, g_mkt, d_mkt,
-            "Export markets that registered growth (by more than Ksh. 1 "
-            "billion)",
-            "Economies whose exports declined (by more than Ksh. 1 "
-            "billion)")
-        b.add_source(SRC_KRA)
+        if g_mkt or d_mkt:
+            add_growth_decline_table(
+                b, g_mkt, d_mkt,
+                "Export markets that Registered Growth (by more than 1 "
+                "billion)",
+                "Economies whose imports from Kenya Declined (by more "
+                "than Kshs 1 billion)")
+            b.add_source(SRC_KRA)
+        b.add_para(narr["markets_note"])
+    for bullet in narr["market_bullets"]:
+        b.add_bullet(bullet)
 
-    b.add_heading("3.1 Comparative Perspectives on Shares of Lead Export "
-                  "Markets %s %s" % (q_t, cmp_span), level=2)
-    b.add_table_caption("Figure 1: Share of Exports by Market, %s %s"
-                        % (q_t, cmp_span))
+    b.add_heading("Comparative Perspective on Shares of Lead Export "
+                  "Markets %s %s"
+                  % (qs, ("(%d & %d)" % (y_prev, Y)) if comp
+                     else ("(%d)" % Y)), level=2)
+    b.add_table_caption("Figure 1: Share of Exports by Markets, %s %s"
+                        % (qs, y_span))
     for _yr in (a.year, a.year_prev):
         if _yr is None:
             continue
         _cur = (_yr == a.year)
-        if not _cur and not a.has_comparison:
+        if not _cur and not comp:
             break
         _labels, _values = _share_doughnut_data(a, a.t1, "Other markets",
                                                 year=("cur" if _cur else "prev"))
@@ -1440,7 +2054,7 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
                        color=RGBColor(0x9A, 0x1F, 0x1F))
             break
         b.add_word_chart(
-            "doughnut", "Share of Exports by Market: %d" % _yr,
+            "doughnut", "Share of Exports by Markets: %d" % _yr,
             [short_prod(l, 42) for l in _labels], list(_values),
             width_in=6.3, height_in=(4.6 if _cur else 3.6),
             name="Figure 1 - Export Shares %d" % _yr,
@@ -1449,35 +2063,35 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
     b.page_break()
 
     # ============================== SECTION 4 ===============================
-    b.add_heading("4. Composition of Kenya\u2019s Export Commodities")
-    b.add_table_caption("Table %d: Top Export Products in %s %s"
-                        % (tno(), q_t, cmp_span))
-    add_q_table(b, a.t2, "Product label")
-    b.add_source(SRC_KRA)
-
-    if a.has_comparison:
+    b.add_heading("Composition of Kenya\u2019s Export Commodities")
+    _table_image(b, a.t2, tmp_dir, "table2_products.png", "Product label",
+                 caption="Table 2: Top Export Products in %s %s"
+                         % (qs, y_span))
+    if comp:
         # exhibit: products that grew vs declined by over Ksh 1 billion
         g_prd, d_prd = a.growth_decline(a.t2, threshold=1.0)
-        b.add_table_caption(
-            "Table %d: Export Products that Registered Growth / Decline of "
-            "Over Ksh. 1 Billion in %s %s" % (tno(), q_t, cmp_span))
-        add_growth_decline_table(
-            b, g_prd, d_prd,
-            "Export products that registered growth (by over Ksh. 1 "
-            "billion)",
-            "Export products that registered decline (by over Ksh. 1 "
-            "billion)")
-        b.add_source(SRC_KRA)
+        if g_prd or d_prd:
+            add_growth_decline_table(
+                b, g_prd, d_prd,
+                "Higher Performing Products / (Growth by over Ksh. 1 "
+                "billion)",
+                "Weaker Performing Products (Decline by over Ksh. 1 "
+                "billion)")
+            b.add_source(SRC_KRA)
+        b.add_para(narr["products_note"])
+    for para in narr["product_paras"]:
+        b.add_para(para)
 
-    b.add_heading("4.1 Share of Lead Export Products %s %s"
-                  % (q_t, cmp_span), level=2)
-    b.add_table_caption("Figure 2: Share of Top Exports by Products, %s "
-                        "%s" % (q_t, cmp_span))
+    b.add_heading("Share of Lead Export Products in %s %s"
+                  % (qs, ("(%d & %d)" % (y_prev, Y)) if comp
+                     else ("(%d)" % Y)), level=2)
+    b.add_table_caption("Figure 2: Share of Top Exports by Products, %s %s"
+                        % (qs, y_span))
     for _yr in (a.year, a.year_prev):
         if _yr is None:
             continue
         _cur = (_yr == a.year)
-        if not _cur and not a.has_comparison:
+        if not _cur and not comp:
             break
         _labels, _values = _share_doughnut_data(a, a.t2, "All others products",
                                                 year=("cur" if _cur else "prev"))
@@ -1495,31 +2109,34 @@ def build_quarterly_report(excel_dir, out_path, tmp_dir,
     b.page_break()
 
     # ============================== SECTION 5 ===============================
-    b.add_heading("5. Deduction from Quarter Performance %s to %s %d"
-                  % (a.month_names[0], a.month_names[-1], Y))
+    b.add_heading("Deduction from the Quarter performance %s %d." % (qs, Y))
     for para in narr["deduction"]:
         b.add_para(para)
+    b.add_heading("Implication for the country", level=2)
+    for para in narr["implication"]:
+        b.add_para(para)
+    b.add_para("To respond to the reported declines in exports to "
+               "strategic markets and reinforce overall export "
+               "competitiveness, a coordinated raft of interventions is "
+               "proposed across the following areas.")
+    for bullet in narr["interventions"]:
+        b.add_bullet(bullet)
     b.page_break()
 
     # ============================== SECTION 6 ===============================
-    b.add_heading("6. Annex")
-    b.add_heading("Annex 1: Kenya\u2019s Imports by Supplying Countries.",
-                  level=2)
-    b.add_table_caption("Table %d: Kenya\u2019s Imports by Supplying "
-                        "Countries, %s %s" % (tno(), q_t, cmp_span))
-    add_q_table(b, a.a1, "PARTNER")
-    b.add_source(SRC_KRA)
+    b.add_heading("Annex")
+    b.add_heading("Annex 1: Kenya\u2019s imports by supplying countries.",
+                  level=1)
+    _table_image(b, a.a1, tmp_dir, "annex1_import_partners.png", "PARTNER")
     for para in narr["annex1"]:
-        b.add_para(para)
+        b.add_bullet(para)
     b.page_break()
 
-    b.add_heading("Annex 2: Kenya\u2019s Imports by Products.", level=2)
-    b.add_table_caption("Table %d: Kenya\u2019s Imports by Products, %s "
-                        "%s" % (tno(), q_t, cmp_span))
-    add_q_table(b, a.a2, "Product Label")
-    b.add_source(SRC_KRA)
+    b.add_heading("Annex 2: Kenya\u2019s imports by products.", level=1)
+    _table_image(b, a.a2, tmp_dir, "annex2_import_products.png",
+                 "Product Label")
     for para in narr["annex2"]:
-        b.add_para(para)
+        b.add_bullet(para)
 
     b.add_footer()
     return a, b.doc

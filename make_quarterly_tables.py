@@ -122,7 +122,7 @@ def find_kra_files(excel_dir):
         if not low.endswith((".xls", ".xlsx", ".xlsm")):
             continue
         path = os.path.join(excel_dir, fname)
-        if "export" in low and "destination" in low:
+        if "export" in low and "destin" in low:
             found["exports"].append(path)
         elif "import" in low and "origin" in low:
             found["imports"].append(path)
@@ -131,7 +131,7 @@ def find_kra_files(excel_dir):
         names = ", ".join(sorted(os.listdir(excel_dir)))
         hints = "\n".join(
             "  - %s: filename(s) containing '%s'"
-            % (k, "Exports by HS Destination" if k == "exports"
+            % (k, "Exports by HS Destination/Destin" if k == "exports"
                else "Imports by HS Origin")
             for k in missing)
         raise PipelineError("[ERROR] Missing KRA raw file(s) in '%s'.\n"

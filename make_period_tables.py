@@ -123,15 +123,22 @@ class PeriodTables:
     def __init__(self, df, spec):
         self.df = df
         self.spec = spec
+        # value() is called hundreds of times per build; filtering the full
+        # frame on each call dominated the runtime. Pre-aggregate once into
+        # lookup dicts keyed by the same dimensions the SUMIFS uses.
+        self._tot = (df.groupby(["Year", "Side", "Month"], dropna=False)
+                     ["Value"].sum().to_dict())
+        self._partner = (df.groupby(["Year", "Side", "Partner", "Month"],
+                                    dropna=False)["Value"].sum().to_dict())
+        self._group = (df.groupby(["Year", "Side", "GroupLabel", "Month"],
+                                  dropna=False)["Value"].sum().to_dict())
 
     # -- cached aggregation matching a SUMIFS -----------------------------
     def value(self, yr, ms, side, key=None, key_kind=None):
-        d = self.df[(self.df["Year"] == yr) & (self.df["Side"] == side)
-                    & (self.df["Month"].isin(ms))]
-        if key is not None:
-            col = "GroupLabel" if key_kind == "group" else "Partner"
-            d = d[d[col] == key]
-        return float(d["Value"].sum())
+        if key is None:
+            return float(sum(self._tot.get((yr, side, m), 0.0) for m in ms))
+        lookup = self._group if key_kind == "group" else self._partner
+        return float(sum(lookup.get((yr, side, key, m), 0.0) for m in ms))
 
     def items(self, side, label_col, code_col=None):
         spec = self.spec
@@ -345,11 +352,45 @@ class PeriodTables:
             ws = book.sheet(name)
             for j, col in enumerate(df.columns, start=1):
                 book.plain(ws, 1, j, col, bold=True, align=CENTER)
+            # Backend aggregate sheet: only the values feed the SUMIFS, so
+            # write cells bare. Per-cell border/font/alignment styling here
+            # cost more than the rest of the build combined (~40k cells).
             for i, rec in enumerate(df.itertuples(index=False), start=2):
                 for j, col in enumerate(df.columns, start=1):
-                    book.plain(ws, i, j, getattr(rec, col))
+                    ws.cell(i, j, getattr(rec, col))
             for j in range(1, len(df.columns) + 1):
                 ws.column_dimensions[get_column_letter(j)].width = 15
+            ws.freeze_panes = "A2"
+
+    def write_xtab(self, book):
+        """Partner x product totals for both years (drives the narrative).
+
+        The report explains each market's change by the products behind it
+        (and each product's change by the markets behind it), so the
+        partner/product pairing has to survive into the workbook: the
+        summary sheets keep the two dimensions apart.
+        """
+        spec = self.spec
+        d = self.df[self.df["Month"].isin(spec["months"])]
+        for side, name in (("Exports", "XTAB EXP"), ("Imports", "XTAB IMP")):
+            ws = book.sheet(name)
+            for j, col in enumerate(("Year", "Partner", "Product", "Value"),
+                                    start=1):
+                book.plain(ws, 1, j, col, bold=True, align=CENTER)
+            g = (d[d["Side"] == side]
+                 .groupby(["Year", "Partner", "GroupLabel"], dropna=False)
+                 ["Value"].sum().reset_index())
+            g = g.sort_values(["Year", "Partner", "Value"],
+                              ascending=[True, True, False])
+            for i, rec in enumerate(g.itertuples(index=False), start=2):
+                ws.cell(i, 1, int(rec.Year))
+                ws.cell(i, 2, rec.Partner)
+                ws.cell(i, 3, rec.GroupLabel)
+                ws.cell(i, 4, float(rec.Value))
+            ws.column_dimensions["A"].width = 8
+            ws.column_dimensions["B"].width = 26
+            ws.column_dimensions["C"].width = 44
+            ws.column_dimensions["D"].width = 14
             ws.freeze_panes = "A2"
 
 
@@ -374,6 +415,7 @@ def build(data_dir, out_dir, period, year=None, half=1, quarter=1,
     book = Book()
     pt.write_meta(book)
     pt.write_data(book, data_sheets(df))
+    pt.write_xtab(book)
 
     yr = spec["year"]
     pt.write_rank_sheet(

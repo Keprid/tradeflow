@@ -2093,11 +2093,13 @@ class ReportBuilder:
                 w = gc.get(qn("w:w"))
                 col_tw.append(int(w) if w else 0)
         rows = []
-        for row in table.rows:
+        ncols = table._column_count
+        all_cells = table._cells
+        for ri, row in enumerate(table.rows):
             cells = []
             seen = set()
             gi = 0
-            for cell in row.cells:
+            for cell in all_cells[ri * ncols:(ri + 1) * ncols]:
                 if id(cell._tc) in seen:
                     gi += 1
                     continue
@@ -2152,9 +2154,11 @@ class ReportBuilder:
         the first run's formatting and cuts at a whole word -- no trailing
         ellipsis.
         """
-        for row in table.rows:
+        ncols = table._column_count
+        all_cells = table._cells
+        for ri, row in enumerate(table.rows):
             seen = set()
-            for cell in row.cells:
+            for cell in all_cells[ri * ncols:(ri + 1) * ncols]:
                 if id(cell._tc) in seen:
                     continue
                 seen.add(id(cell._tc))
@@ -2207,9 +2211,11 @@ class ReportBuilder:
             trH.set(qn("w:hRule"), "atLeast")
             trPr.append(trH)
 
+        ncols = table._column_count
+        all_cells = table._cells
         for ri, row in enumerate(table.rows):
             rsize = hdr_size if ri < 2 else size_pt
-            for cell in row.cells:
+            for cell in all_cells[ri * ncols:(ri + 1) * ncols]:
                 for p in cell.paragraphs:
                     p.paragraph_format.space_before = Pt(1)
                     p.paragraph_format.space_after = Pt(1)
