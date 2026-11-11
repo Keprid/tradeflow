@@ -280,7 +280,10 @@ class PeriodTables:
         cur = book.cached(ws, r, t1)
         book.formula(ws, r, chg, "=%s-%s" % (b, a), cur - prev,
                      numfmt=FMT_CHANGE, bold=bold)
-        pct = (cur - prev) / prev if prev else 0.0
+        # a zero previous-year base leaves the % change undefined; the
+        # formula below yields blank, so cache blank rather than a
+        # meaningless 0.0 for the report reader
+        pct = (cur - prev) / prev if prev else None
         book.formula(ws, r, chg + 1,
                      '=IF(%s=0,"",(%s-%s)/%s)' % (a, b, a, a), pct,
                      numfmt=FMT_PCT, bold=bold)

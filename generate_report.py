@@ -1898,7 +1898,11 @@ class ReportBuilder:
         field_piece(fld_type="begin")
         field_piece(instr=instr)
         field_piece(fld_type="separate")
-        field_piece(text=placeholder)
+        if isinstance(placeholder, (list, tuple)):
+            for line in placeholder:
+                field_piece(text=line)
+        else:
+            field_piece(text=placeholder)
         field_piece(fld_type="end")
 
     def add_toc(self):
@@ -1910,11 +1914,13 @@ class ReportBuilder:
                         "Right-click and select 'Update Field' to generate "
                         "the Table of Contents.")
 
-    def add_list_placeholder(self, title, kind):
+    def add_list_placeholder(self, title, kind, entries=None):
         """Front-matter page: 'List of Tables' / 'List of Figures'.
 
         A real Word TOC field scoped to the caption style, so right-click ->
         'Update Field' fills in every entry with its exact page number.
+        ``entries`` pre-fills the field's cached result with the known
+        captions, so the page reads correctly even before any field update.
         """
         p = self.doc.add_paragraph()
         r = p.add_run(title)
@@ -1924,9 +1930,10 @@ class ReportBuilder:
             instr = r'TOC \h \z \t "Caption Table,1"'
         else:
             instr = r'TOC \h \z \t "Caption Figure,1"'
-        self._toc_field(instr,
-                        f"Right-click and select 'Update Field' to generate "
-                        f"the {title}.")
+        if not entries:
+            entries = [f"Right-click and select 'Update Field' to generate "
+                       f"the {title}."]
+        self._toc_field(instr, entries)
 
     def start_body_section(self):
         """Begin the report body as a new document section.

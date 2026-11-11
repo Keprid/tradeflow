@@ -826,7 +826,7 @@ def _write_quarterly_body_row(ws, d, body, col_rank, col_name,
 
 
 def _write_quarterly_table(ws, table, title,
-                           flow_label="Value in Ksh. Billion", cur_year=None):
+                           flow_label="Value in Kshs Billion", cur_year=None):
     """Write one parsed quarterly rank table (current vs previous-year quarter).
 
     Quarterly items carry per-month values for both years, a current/previous
@@ -1066,7 +1066,7 @@ def _add_quarterly_balance(wb, a):
     chart = BarChart()
     chart.type = "col"
     chart.grouping = "clustered"
-    chart.title = "Kenya %s %s Balance of Trade (Ksh. Billion)" % (
+    chart.title = "Kenya %s %s Balance of Trade (Kshs Billion)" % (
         a.quarter.title(), str(a.year))
     chart.height = 9
     chart.width = 18

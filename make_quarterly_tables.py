@@ -20,7 +20,7 @@ plus Apr-Jun 2025). When the previous year is missing it can be synthesised
 for testing with ``--synthesize-prev-year`` (random variation around the
 current year, fixed seed).
 
-Output workbooks (all values in Ksh. Billion):
+Output workbooks (all values in Kshs Billion):
 
   Exports.xlsx   Data | By Partner <Y> | By Partner <Y-1> |
                  By Product <Y> | By Product <Y-1> |
@@ -43,7 +43,7 @@ Data rules replicated from the manual process:
     excluded from exports;
   * records without a product description become ``All others
     (non-defined)`` (exports) / ``All others`` (imports);
-  * every value is converted from KES to Ksh. Billion (/1e9).
+  * every value is converted from KES to Kshs Billion (/1e9).
 
 Derived cells (change, %, All-other rows, totals) are live Excel formulas
 carrying cached results, so the workbooks recalculate in Excel while the
@@ -103,7 +103,7 @@ FMT_VALUE = "#,##0.0"
 FMT_CHANGE = '[Color10]"▲ "#,##0.0;[Red]"▼ "#,##0.0;"— "#,##0.0'
 FMT_PCT = '[Color10]"▲ "0.0%;[Red]"▼ "0.0%;"— "0.0%'
 
-KSH_BILLION = "Value in Ksh. Billion"
+KSH_BILLION = "Value in Kshs Billion"
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ def load_kra(path, side):
     """Read one raw KRA extract into a normalised DataFrame.
 
     Returns columns: Year (int), Month (int), Partner (str),
-    Product (str), Value (float, Ksh. Billion).
+    Product (str), Value (float, Kshs Billion).
     """
     df = pd.read_excel(path)
     df.columns = [str(c).strip() for c in df.columns]
